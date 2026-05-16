@@ -110,7 +110,7 @@ export function Navbar() {
           <IconButton onClick={toggleDrawer} sx={{ color: 'text.primary' }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
+          <Typography noWrap variant="h6" sx={{ fontWeight: 700, color: 'primary.main', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
             Finance Tracker
           </Typography>
           <IconButton onClick={handleMenu} sx={{ color: 'text.primary' }}>

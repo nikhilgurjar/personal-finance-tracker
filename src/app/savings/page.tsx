@@ -197,12 +197,12 @@ export default function SavingsPage() {
         <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh' }}>
           <Container maxWidth="lg">
             {/* Header */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2, mb: 4 }}>
               <Box>
-                <Typography variant="h4" fontWeight={800}>Savings & Investments</Typography>
+                <Typography variant="h4" sx={{ fontSize: { xs: '1.75rem', md: '2.125rem' }, fontWeight: 800 }}>Savings & Investments</Typography>
                 <Typography variant="body2" color="text.secondary">FDs, stocks, mutual funds, and more</Typography>
               </Box>
-              <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+              <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)} sx={{ width: { xs: '100%', sm: 'auto' } }}>
                 Add Instrument
               </Button>
             </Box>
@@ -239,7 +239,7 @@ export default function SavingsPage() {
             </Grid>
 
             {/* Tabs */}
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }} variant="scrollable" scrollButtons="auto">
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile>
               <Tab label="All" value="all" />
               <Tab label="Active" value="active" />
               <Tab label="Closed" value="closed" />
