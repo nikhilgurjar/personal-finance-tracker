@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import { AccountBalanceWallet } from '@mui/icons-material';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface TabPanelProps {
@@ -50,6 +50,16 @@ export default function HomePage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const hasRedirected = useRef(false);
+
+  const goToDashboard = useCallback(() => {
+    if (hasRedirected.current) {
+      return;
+    }
+
+    hasRedirected.current = true;
+    router.replace('/dashboard');
+  }, [router]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -60,7 +70,7 @@ export default function HomePage() {
     try {
       setError('');
       await signInWithGoogle();
-      router.push('/dashboard');
+      goToDashboard();
     } catch (error: any) {
       setError(error.message);
     }
@@ -70,7 +80,7 @@ export default function HomePage() {
     try {
       setError('');
       await signInWithEmail(email, password);
-      router.push('/dashboard');
+      goToDashboard();
     } catch (error: any) {
       setError(error.message);
     }
@@ -80,7 +90,7 @@ export default function HomePage() {
     try {
       setError('');
       await signUpWithEmail(email, password);
-      router.push('/dashboard');
+      goToDashboard();
     } catch (error: any) {
       setError(error.message);
     }
@@ -89,9 +99,9 @@ export default function HomePage() {
   // Redirect authenticated users to dashboard (must be in effect, not render body)
   useEffect(() => {
     if (user) {
-      router.push('/dashboard');
+      goToDashboard();
     }
-  }, [user, router]);
+  }, [user, goToDashboard]);
 
   if (user) {
     return null;
@@ -146,8 +156,9 @@ export default function HomePage() {
             </Box>
 
             <TabPanel value={tabValue} index={0}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box component="form" onSubmit={(event) => { event.preventDefault(); handleEmailSignIn(); }} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Button
+                  type="button"
                   variant="outlined"
                   fullWidth
                   onClick={handleGoogleSignIn}
@@ -170,9 +181,9 @@ export default function HomePage() {
                   fullWidth
                 />
                 <Button
+                  type="submit"
                   variant="contained"
                   fullWidth
-                  onClick={handleEmailSignIn}
                 >
                   Sign In
                 </Button>
@@ -180,8 +191,9 @@ export default function HomePage() {
             </TabPanel>
 
             <TabPanel value={tabValue} index={1}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box component="form" onSubmit={(event) => { event.preventDefault(); handleEmailSignUp(); }} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <Button
+                  type="button"
                   variant="outlined"
                   fullWidth
                   onClick={handleGoogleSignIn}
@@ -204,9 +216,9 @@ export default function HomePage() {
                   fullWidth
                 />
                 <Button
+                  type="submit"
                   variant="contained"
                   fullWidth
-                  onClick={handleEmailSignUp}
                 >
                   Sign Up
                 </Button>

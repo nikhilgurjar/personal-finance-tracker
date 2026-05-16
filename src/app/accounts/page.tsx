@@ -119,10 +119,6 @@ export default function AccountsPage() {
     }
   }, [loading, user, router]);
 
-  if (loading || !user) {
-    return null;
-  }
-
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
       const token = await getIdToken(user);
@@ -169,6 +165,10 @@ export default function AccountsPage() {
       setMenuAnchor(null);
     },
   });
+
+  if (loading || !user) {
+    return null;
+  }
 
   const handleDeleteAccount = (account: Account) => {
     setAccountToDelete(account);
