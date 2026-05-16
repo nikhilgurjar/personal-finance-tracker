@@ -66,13 +66,20 @@ export default function LoansPage() {
   });
 
   const repaymentMutation = useMutation({
-    mutationFn: async ({ loanId, repayment }: { loanId: string, repayment: any }) => {
-      return authedJson(user, `/api/loans/${loanId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ repayment }),
+    mutationFn: async ({ repayment }: { repayment: any }) => {
+      return authedJson(user, '/api/people/repayments', {
+        method: 'POST',
+        body: JSON.stringify(repayment),
       });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['loans'] }); setRepaymentFormOpen(false); setToast('Repayment recorded!'); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['people'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      setRepaymentFormOpen(false);
+      setToast('Person repayment recorded!');
+    },
   });
 
   if (!user) return null;
@@ -84,6 +91,16 @@ export default function LoansPage() {
     borrowed: loans.filter((l: Loan) => l.loanType === 'borrowed' && l.status === 'active').reduce((s: number, l: Loan) => s + l.outstandingAmount, 0),
     payable: loans.filter((l: Loan) => l.loanType === 'payable' && l.status === 'active').reduce((s: number, l: Loan) => s + l.outstandingAmount, 0),
   };
+
+  const selectedPersonOutstanding = selectedLoan
+    ? loans
+        .filter((loan: Loan) =>
+          loan.status === 'active' &&
+          loan.loanType === selectedLoan.loanType &&
+          loan.personName.trim().toLowerCase() === selectedLoan.personName.trim().toLowerCase()
+        )
+        .reduce((sum: number, loan: Loan) => sum + loan.outstandingAmount, 0)
+    : 0;
 
   return (
     <ResponsiveLayout>
@@ -194,7 +211,7 @@ export default function LoansPage() {
                               onClick={(e) => { e.stopPropagation(); setSelectedLoan(loan); setRepaymentFormOpen(true); }}
                               sx={{ mt: 1, borderRadius: 2 }}
                             >
-                              Record Repayment
+                              Repay Person
                             </Button>
                           )}
                         </Box>
@@ -226,7 +243,7 @@ export default function LoansPage() {
       {/* Actions Menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
         <MenuItem onClick={() => { setRepaymentFormOpen(true); setMenuAnchor(null); }} disabled={selectedLoan?.status === 'settled'}>
-          <Payment sx={{ mr: 1 }} fontSize="small" /> Record Repayment
+          <Payment sx={{ mr: 1 }} fontSize="small" /> Repay Person
         </MenuItem>
         <MenuItem onClick={() => { setEditingLoan(selectedLoan); setFormOpen(true); setMenuAnchor(null); }}>
           <Edit sx={{ mr: 1 }} fontSize="small" /> Edit
@@ -250,8 +267,9 @@ export default function LoansPage() {
       <RepaymentForm
         open={repaymentFormOpen}
         onClose={() => setRepaymentFormOpen(false)}
-        onSubmit={async (data) => { if (selectedLoan) await repaymentMutation.mutateAsync({ loanId: selectedLoan.id, repayment: data.repayment }); }}
+        onSubmit={async (data) => { if (selectedLoan) await repaymentMutation.mutateAsync({ repayment: data.repayment }); }}
         loan={selectedLoan}
+        outstandingAmount={selectedPersonOutstanding}
       />
 
       <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />

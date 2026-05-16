@@ -10,6 +10,11 @@ const AccountSchema = z.object({
   institution: z.string().optional(),
   currency: z.string().default('INR'),
   currentBalance: z.number().optional(),
+  creditLimit: z.number().optional(),
+  interestRate: z.number().optional(),
+  dueDate: z.number().optional(),
+  minimumPayment: z.number().optional(),
+  billingCycleDay: z.number().min(1).max(31).optional(),
 });
 
 export async function POST(req: NextRequest) {

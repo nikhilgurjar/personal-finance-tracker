@@ -4,10 +4,13 @@ import { useState } from 'react';
 import { useAuthContext } from '@/components/AuthProvider';
 import { ResponsiveLayout } from '@/components/ResponsiveLayout';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { RepaymentForm } from '@/components/RepaymentForm';
+import { authedJson } from '@/lib/apiClient';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Container, Typography, Card, CardContent, Grid,
   Avatar, Chip, Dialog, DialogTitle, DialogContent, IconButton,
-  Divider, Skeleton
+  Divider, Skeleton, Button, Snackbar
 } from '@mui/material';
 import { Close, Receipt, TrendingDown, Handshake, AccountBalanceWallet } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
@@ -19,7 +22,17 @@ const TYPE_CONFIG = {
   payable: { label: 'Payable', color: '#f97316', icon: <Receipt fontSize="small" /> },
 };
 
-function LedgerDialog({ person, open, onClose }: { person: any, open: boolean, onClose: () => void }) {
+function LedgerDialog({
+  person,
+  open,
+  onClose,
+  onRecordRepayment,
+}: {
+  person: any,
+  open: boolean,
+  onClose: () => void,
+  onRecordRepayment: (person: any, loanType: 'lent' | 'borrowed' | 'payable') => void,
+}) {
   if (!person) return null;
 
   return (
@@ -39,6 +52,23 @@ function LedgerDialog({ person, open, onClose }: { person: any, open: boolean, o
         <IconButton onClick={onClose}><Close /></IconButton>
       </DialogTitle>
       <DialogContent dividers sx={{ p: 0 }}>
+        <Box sx={{ p: 2, display: 'flex', gap: 1, flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider' }}>
+          {person.totalLent > 0 && (
+            <Button size="small" variant="outlined" color="success" onClick={() => onRecordRepayment(person, 'lent')}>
+              Receive Lent Repayment
+            </Button>
+          )}
+          {person.totalBorrowed > 0 && (
+            <Button size="small" variant="outlined" color="error" onClick={() => onRecordRepayment(person, 'borrowed')}>
+              Pay Borrowed Amount
+            </Button>
+          )}
+          {person.totalPayable > 0 && (
+            <Button size="small" variant="outlined" color="warning" onClick={() => onRecordRepayment(person, 'payable')}>
+              Pay Payable Amount
+            </Button>
+          )}
+        </Box>
         {person.loans.sort((a: any, b: any) => b.startDate - a.startDate).map((loan: any) => {
           const cfg = TYPE_CONFIG[loan.loanType as keyof typeof TYPE_CONFIG];
           return (
@@ -89,11 +119,28 @@ function LedgerDialog({ person, open, onClose }: { person: any, open: boolean, o
 export default function PeoplePage() {
   const { user, loading } = useAuthContext();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [repaymentContext, setRepaymentContext] = useState<any | null>(null);
+  const [toast, setToast] = useState('');
 
   useEffect(() => { if (!loading && !user) router.push('/'); }, [loading, user, router]);
 
   const { data: people = [], isLoading } = useAuthedQuery(user, ['people', user?.uid], '/api/people');
+
+  const repaymentMutation = useMutation({
+    mutationFn: async (repayment: any) => authedJson(user, '/api/people/repayments', {
+      method: 'POST',
+      body: JSON.stringify(repayment),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['people'] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      setRepaymentContext(null);
+      setToast('Person repayment recorded');
+    },
+  });
 
   if (!user) return null;
 
@@ -162,7 +209,32 @@ export default function PeoplePage() {
           )}
         </Container>
       </Box>
-      <LedgerDialog person={selectedPerson} open={!!selectedPerson} onClose={() => setSelectedPerson(null)} />
+      <LedgerDialog
+        person={selectedPerson}
+        open={!!selectedPerson}
+        onClose={() => setSelectedPerson(null)}
+        onRecordRepayment={(person, loanType) => {
+          setRepaymentContext({
+            personName: person.name,
+            loanType,
+            outstandingAmount: loanType === 'lent'
+              ? person.totalLent
+              : loanType === 'borrowed'
+                ? person.totalBorrowed
+                : person.totalPayable,
+          });
+        }}
+      />
+      <RepaymentForm
+        open={!!repaymentContext}
+        onClose={() => setRepaymentContext(null)}
+        onSubmit={async (data) => repaymentMutation.mutateAsync(data.repayment)}
+        personName={repaymentContext?.personName}
+        loanType={repaymentContext?.loanType}
+        outstandingAmount={repaymentContext?.outstandingAmount}
+        currency="INR"
+      />
+      <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />
     </ResponsiveLayout>
   );
 }

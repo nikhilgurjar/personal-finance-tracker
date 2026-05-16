@@ -156,8 +156,25 @@ export function AccountForm({
         minimumPayment: editingAccount.minimumPayment,
         billingCycleDay: editingAccount.billingCycleDay,
       });
+      return;
     }
-  }, [editingAccount, reset]);
+
+    if (open) {
+      reset({
+        type: 'expense',
+        subtype: '',
+        name: '',
+        institution: '',
+        currency: 'INR',
+        currentBalance: undefined,
+        creditLimit: undefined,
+        interestRate: undefined,
+        dueDate: undefined,
+        minimumPayment: undefined,
+        billingCycleDay: undefined,
+      });
+    }
+  }, [editingAccount, open, reset]);
 
   const handleFormSubmit = async (data: AccountFormData) => {
     try {
@@ -307,7 +324,7 @@ export function AccountForm({
                         type="number"
                         label="Credit Limit"
                         fullWidth
-                        value={value || ''}
+                        value={value ?? ''}
                         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                         error={!!errors.creditLimit}
                         helperText={errors.creditLimit?.message}
@@ -325,7 +342,7 @@ export function AccountForm({
                         type="number"
                         label="Interest Rate (%)"
                         fullWidth
-                        value={value || ''}
+                        value={value ?? ''}
                         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                         error={!!errors.interestRate}
                         helperText={errors.interestRate?.message}
@@ -344,7 +361,7 @@ export function AccountForm({
                         label="Billing Cycle Day"
                         fullWidth
                         inputProps={{ min: 1, max: 31 }}
-                        value={value || ''}
+                        value={value ?? ''}
                         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                         error={!!errors.billingCycleDay}
                         helperText={errors.billingCycleDay?.message}
@@ -362,7 +379,7 @@ export function AccountForm({
                         type="number"
                         label="Minimum Payment"
                         fullWidth
-                        value={value || ''}
+                        value={value ?? ''}
                         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                         error={!!errors.minimumPayment}
                         helperText={errors.minimumPayment?.message}
@@ -385,7 +402,7 @@ export function AccountForm({
                         type="number"
                         label="Interest Rate (%)"
                         fullWidth
-                        value={value || ''}
+                        value={value ?? ''}
                         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                         error={!!errors.interestRate}
                         helperText={errors.interestRate?.message}
@@ -403,7 +420,7 @@ export function AccountForm({
                         type="number"
                         label="Monthly Payment"
                         fullWidth
-                        value={value || ''}
+                        value={value ?? ''}
                         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                         error={!!errors.minimumPayment}
                         helperText={errors.minimumPayment?.message}
@@ -425,7 +442,7 @@ export function AccountForm({
                       type="number"
                       label="Interest Rate (%)"
                       fullWidth
-                      value={value || ''}
+                      value={value ?? ''}
                       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
                       error={!!errors.interestRate}
                       helperText={errors.interestRate?.message}

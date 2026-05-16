@@ -19,6 +19,8 @@ import {
 import {
   AccountBalance,
   AccountBalanceWallet,
+  AutoAwesome,
+  AutoGraph,
   Flag,
   Schedule,
   Dashboard,
@@ -28,6 +30,7 @@ import {
   Handshake,
   TrendingDown,
   Savings,
+  SavingsOutlined,
   History,
 } from '@mui/icons-material';
 import Link from 'next/link';
@@ -74,6 +77,9 @@ export function Navbar() {
     { label: 'Dashboard', href: '/dashboard', icon: <Dashboard /> },
     { label: 'Expenses', href: '/expenses', icon: <TrendingDown /> },
     { label: 'Incomes', href: '/incomes', icon: <AccountBalanceWallet /> },
+    { label: 'AI Insights', href: '/ai', icon: <AutoAwesome /> },
+    { label: 'Forecast', href: '/forecast', icon: <AutoGraph /> },
+    { label: 'Budgets', href: '/budgets', icon: <SavingsOutlined /> },
     { label: 'Savings', href: '/savings', icon: <Savings /> },
     { label: 'Loans', href: '/loans', icon: <Handshake /> },
     { label: 'Accounts', href: '/accounts', icon: <AccountBalance /> },

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -15,6 +16,8 @@ import {
   TextField,
 } from '@mui/material';
 import { Account } from '@/lib/types';
+import { authedJson } from '@/lib/apiClient';
+import { useAuthContext } from '@/components/AuthProvider';
 
 interface ExpenseFormFullProps {
   open: boolean;
@@ -44,8 +47,11 @@ export function ExpenseFormFull({
   categories,
   editingExpense,
 }: ExpenseFormFullProps) {
+  const { user } = useAuthContext();
   const [form, setForm] = useState(defaultForm);
   const [submitting, setSubmitting] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestion, setSuggestion] = useState<any>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +92,26 @@ export function ExpenseFormFull({
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAiSuggest = async () => {
+    setSuggesting(true);
+    try {
+      const result = await authedJson<any>(user, '/api/ai/categorize-expense', {
+        method: 'POST',
+        body: JSON.stringify({ note: form.note, amount: Number(form.amount || 0) }),
+      });
+
+      setSuggestion(result);
+      setForm((current) => ({
+        ...current,
+        category: result.category || current.category,
+        expenseNature: result.expenseNature || current.expenseNature,
+        note: result.note || current.note,
+      }));
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -171,6 +197,20 @@ export function ExpenseFormFull({
                 multiline
                 minRows={2}
               />
+            </Grid>
+            <Grid item xs={12}>
+              <Button
+                variant="outlined"
+                onClick={handleAiSuggest}
+                disabled={suggesting || (!form.note && !form.amount)}
+              >
+                {suggesting ? 'Suggesting...' : 'AI Suggest Category'}
+              </Button>
+              {suggestion && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  {suggestion.reason || `Suggested ${suggestion.category} as ${suggestion.expenseNature}.`}
+                </Alert>
+              )}
             </Grid>
             <Grid item xs={12}>
               <TextField

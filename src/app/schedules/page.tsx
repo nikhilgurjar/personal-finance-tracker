@@ -38,6 +38,7 @@ import {
   InputLabel,
   Select,
   SelectChangeEvent,
+  Snackbar,
 } from '@mui/material';
 import { 
   MoreVert, Add, Edit, Delete, Schedule, PlayArrow, Pause,
@@ -97,6 +98,7 @@ export default function SchedulesPage() {
   const [formError, setFormError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [scheduleToDelete, setScheduleToDelete] = useState<ScheduleType | null>(null);
+  const [automationToast, setAutomationToast] = useState('');
 
   const TransactionForm = transactionForms[transactionType];
 
@@ -175,6 +177,45 @@ export default function SchedulesPage() {
       return response.json();
     },
     enabled: !!user,
+  });
+
+  const {
+    data: scheduleSuggestions = [],
+    isLoading: suggestionsLoading,
+  } = useQuery({
+    queryKey: ['schedule-suggestions', user?.uid],
+    queryFn: async () => {
+      const token = await getIdToken(user);
+      const response = await fetch('/api/schedule-suggestions', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch schedule suggestions');
+      return response.json();
+    },
+    enabled: !!user,
+  });
+
+  const applySuggestionMutation = useMutation({
+    mutationFn: async ({ scheduleId, action }: { scheduleId: string; action: 'approve' | 'skip' }) => {
+      const token = await getIdToken(user);
+      const response = await fetch('/api/schedule-suggestions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ scheduleId, action }),
+      });
+      if (!response.ok) throw new Error('Failed to apply schedule suggestion');
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['schedule-suggestions'] });
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['incomes'] });
+      setAutomationToast(variables.action === 'skip' ? 'Schedule skipped' : 'Transaction created from schedule');
+    },
   });
 
   // Update schedule status mutation
@@ -302,6 +343,64 @@ export default function SchedulesPage() {
                 {showForm ? 'Hide Form' : 'New Schedule'}
               </Button>
             </Box>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Paper elevation={1} sx={{ p: 3, mb: 1 }}>
+              <Typography variant="h6" fontWeight={700} gutterBottom>
+                Suggested Transactions
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Review due or upcoming schedules before creating transactions.
+              </Typography>
+              {suggestionsLoading ? (
+                <CircularProgress size={24} />
+              ) : scheduleSuggestions.length === 0 ? (
+                <Alert severity="success">No schedules are due in the next 7 days.</Alert>
+              ) : (
+                <Grid container spacing={2}>
+                  {scheduleSuggestions.map((suggestion: any) => (
+                    <Grid item xs={12} md={6} key={suggestion.id}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 1 }}>
+                            <Box>
+                              <Typography variant="subtitle1" fontWeight={700}>{suggestion.name}</Typography>
+                              <Typography variant="caption" color={suggestion.overdue ? 'error.main' : 'text.secondary'}>
+                                {suggestion.overdue ? 'Overdue: ' : 'Due: '}
+                                {new Date(suggestion.dueAt).toLocaleDateString('en-IN')}
+                              </Typography>
+                            </Box>
+                            <Chip label={suggestion.template.type} size="small" />
+                          </Box>
+                          <Typography variant="h6" fontWeight={800}>
+                            {suggestion.template.amount.toLocaleString('en-IN', { style: 'currency', currency: suggestion.template.currency || 'INR' })}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => applySuggestionMutation.mutate({ scheduleId: suggestion.scheduleId, action: 'approve' })}
+                              disabled={applySuggestionMutation.isPending}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => applySuggestionMutation.mutate({ scheduleId: suggestion.scheduleId, action: 'skip' })}
+                              disabled={applySuggestionMutation.isPending}
+                            >
+                              Skip
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Paper>
           </Grid>
 
           {/* Schedule Form */}
@@ -733,6 +832,7 @@ export default function SchedulesPage() {
           onCancel={() => setConfirmOpen(false)}
           loading={deleteScheduleMutation.isPending}
         />
+        <Snackbar open={!!automationToast} autoHideDuration={3000} onClose={() => setAutomationToast('')} message={automationToast} />
       </Container>
     </ResponsiveLayout>
   );
