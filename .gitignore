@@ -7,6 +7,7 @@ node_modules
 /.next/
 /out/
 
+
 # Environment variables (keep .env.example committed)
 .env
 .env.local
@@ -38,4 +39,4 @@ Thumbs.db
 .idea/
 
 # Misc
-.cache
+.cache
