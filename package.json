@@ -25,7 +25,8 @@
     "react-hook-form": "^7.47.0",
     "recharts": "^2.8.0",
     "rrule": "^2.8.0",
-    "zod": "^3.22.0"
+    "zod": "^3.22.0",
+    "@ducanh2912/next-pwa": "^10.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.8.0",
