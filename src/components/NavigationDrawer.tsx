@@ -30,6 +30,7 @@ import {
   Savings,
   Handshake,
   People,
+  TrendingDown,
   History,
   Settings,
 } from '@mui/icons-material';
