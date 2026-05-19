@@ -8,7 +8,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Grid, FormControl, InputLabel, Select, MenuItem,
   Box, Typography, Divider, ToggleButton, ToggleButtonGroup,
-  Autocomplete, Snackbar
+  Autocomplete, Snackbar, Stepper, Step, StepLabel
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -74,7 +74,7 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
 
   const { data: people = [] } = useAuthedQuery(user, ['people', user?.uid], '/api/people');
 
-  const { control, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<LoanSchema>({
+  const { control, handleSubmit, reset, watch, setValue, trigger, formState: { errors, isSubmitting } } = useForm<LoanSchema>({
     resolver: zodResolver(LoanSchema),
     defaultValues: {
       loanType: 'lent',
@@ -87,6 +87,28 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
   });
 
   const watchedType = watch('loanType');
+  const [activeStep, setActiveStep] = useState(0);
+  const steps = ['Type & Person', 'Details', 'Payment & Notes'];
+
+  useEffect(() => {
+    if (open) {
+      setActiveStep(0);
+    }
+  }, [open]);
+
+  const handleNext = async () => {
+    let isValid = false;
+    if (activeStep === 0) {
+      isValid = await trigger(['loanType', 'personId']);
+    } else if (activeStep === 1) {
+      isValid = await trigger(['principalAmount', 'startDate', 'dueDate', 'interestRate']);
+    }
+    if (isValid) {
+      setActiveStep((prev) => prev + 1);
+    }
+  };
+
+  const handleBack = () => setActiveStep((prev) => prev - 1);
 
   useEffect(() => {
     if (editingLoan) {
@@ -151,9 +173,18 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
         <DialogTitle sx={{ pb: 1 }}>
           {editingLoan ? 'Edit Loan' : 'Add Loan / Due'}
         </DialogTitle>
+        <Stepper activeStep={activeStep} sx={{ px: 3, py: 2 }}>
+          {steps.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
         <form onSubmit={handleSubmit(handleFormSubmit)}>
           <DialogContent>
             <Grid container spacing={2}>
+              {activeStep === 0 && (
+                <>
               {/* Loan Type */}
               <Grid item xs={12}>
                 <Controller
@@ -229,6 +260,11 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
                 />
               </Grid>
 
+                </>
+              )}
+
+              {activeStep === 1 && (
+                <>
               {/* Amount */}
               <Grid item xs={12} sm={6}>
                 <Controller
@@ -299,6 +335,11 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
                 />
               </Grid>
 
+                </>
+              )}
+
+              {activeStep === 2 && (
+                <>
               {/* Linked Account */}
               {(watchedType === 'lent' || watchedType === 'payable') && (
                 <Grid item xs={12} sm={6}>
@@ -350,13 +391,21 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
                   )}
                 />
               </Grid>
+                </>
+              )}
             </Grid>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-            <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : editingLoan ? 'Update' : 'Add Loan'}
+            <Button onClick={activeStep === 0 ? onClose : handleBack} disabled={isSubmitting}>
+              {activeStep === 0 ? 'Cancel' : 'Back'}
             </Button>
+            {activeStep < steps.length - 1 ? (
+              <Button variant="contained" onClick={handleNext}>Next</Button>
+            ) : (
+              <Button type="submit" variant="contained" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving...' : editingLoan ? 'Update' : 'Add Loan'}
+              </Button>
+            )}
           </DialogActions>
         </form>
       </Dialog>

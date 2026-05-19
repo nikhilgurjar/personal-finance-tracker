@@ -18,6 +18,11 @@ import {
   BottomNavigation,
   BottomNavigationAction,
   Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  Grid,
+  Button,
 } from '@mui/material';
 import {
   AccountBalance,
@@ -36,6 +41,9 @@ import {
   SavingsOutlined,
   History,
   People,
+  Analytics as AnalyticsIcon,
+  AddCircle,
+  Settings,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { useAuthContext } from './AuthProvider';
@@ -78,6 +86,12 @@ const navigationGroups = [
       { title: 'AI Insights', path: '/ai', icon: <AutoAwesome /> },
       { title: 'Forecast', path: '/forecast', icon: <AutoGraph /> },
     ]
+  },
+  {
+    subheader: 'Settings',
+    items: [
+      { title: 'Settings', path: '/settings', icon: <Settings /> },
+    ]
   }
 ];
 
@@ -88,6 +102,7 @@ export function Navbar() {
   const pathname = usePathname();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -149,10 +164,38 @@ export function Navbar() {
           onClose={() => setDrawerOpen(false)} 
         />
 
+        <Dialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} fullWidth maxWidth="xs">
+          <DialogTitle sx={{ fontWeight: 'bold', textAlign: 'center' }}>Quick Add</DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={6}>
+                <Button fullWidth variant="outlined" component={Link} href="/expenses" onClick={() => setQuickAddOpen(false)} startIcon={<TrendingDown />}>
+                  Expense
+                </Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button fullWidth variant="outlined" component={Link} href="/incomes" onClick={() => setQuickAddOpen(false)} startIcon={<AccountBalanceWallet />}>
+                  Income
+                </Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button fullWidth variant="outlined" component={Link} href="/loans" onClick={() => setQuickAddOpen(false)} startIcon={<Handshake />}>
+                  Loan / Due
+                </Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button fullWidth variant="outlined" component={Link} href="/savings" onClick={() => setQuickAddOpen(false)} startIcon={<Savings />}>
+                  Savings
+                </Button>
+              </Grid>
+            </Grid>
+          </DialogContent>
+        </Dialog>
+
         {/* Bottom Navigation on Mobile */}
         <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1100, borderTop: 1, borderColor: 'divider' }} elevation={3}>
           <BottomNavigation
-            value={pathname === '/dashboard' ? 0 : pathname === '/expenses' ? 1 : pathname === '/incomes' ? 2 : pathname === '/ai' ? 3 : -1}
+            value={pathname === '/dashboard' ? 0 : pathname === '/expenses' ? 2 : pathname === '/incomes' ? 3 : -1}
             showLabels
             sx={{ height: 60 }}
           >
@@ -161,6 +204,11 @@ export function Navbar() {
               icon={<Dashboard />}
               component={Link}
               href="/dashboard"
+            />
+            <BottomNavigationAction
+              label="Add"
+              icon={<AddCircle fontSize="large" sx={{ color: 'primary.main' }} />}
+              onClick={() => setQuickAddOpen(true)}
             />
             <BottomNavigationAction
               label="Expenses"
@@ -173,12 +221,6 @@ export function Navbar() {
               icon={<AccountBalanceWallet />}
               component={Link}
               href="/incomes"
-            />
-            <BottomNavigationAction
-              label="AI Insights"
-              icon={<AutoAwesome />}
-              component={Link}
-              href="/ai"
             />
             <BottomNavigationAction
               label="More"

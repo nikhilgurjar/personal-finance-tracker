@@ -27,11 +27,11 @@ import {
   Schedule,
   Close,
   Menu,
-  TrendingDown,
   Savings,
   Handshake,
   People,
   History,
+  Settings,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -74,6 +74,12 @@ const navigationGroups = [
       { title: 'Analytics', path: '/analytics', icon: <AnalyticsIcon /> },
       { title: 'AI Insights', path: '/ai', icon: <AutoAwesome /> },
       { title: 'Forecast', path: '/forecast', icon: <AutoGraph /> },
+    ]
+  },
+  {
+    subheader: 'Settings',
+    items: [
+      { title: 'Settings', path: '/settings', icon: <Settings /> },
     ]
   }
 ];

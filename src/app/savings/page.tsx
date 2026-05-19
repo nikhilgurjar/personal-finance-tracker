@@ -11,7 +11,8 @@ import {
   Box, Container, Typography, Button, Grid, Card, CardContent, Chip,
   IconButton, Menu, MenuItem, Alert, Skeleton, Tabs, Tab, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Snackbar,
-  Select, FormControl, InputLabel, Autocomplete, useMediaQuery, useTheme
+  Select, FormControl, InputLabel, Autocomplete, useMediaQuery, useTheme, Fab,
+  Stepper, Step, StepLabel
 } from '@mui/material';
 import {
   Add, MoreVert, Delete, Savings, TrendingUp, Close, AccountBalanceWallet, Update
@@ -82,6 +83,8 @@ export default function SavingsPage() {
 
   const [tab, setTab] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+  const steps = ['Identity', 'Terms', 'Ownership'];
   const [eventOpen, setEventOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sipOpen, setSipOpen] = useState(false);
@@ -136,6 +139,7 @@ export default function SavingsPage() {
       queryClient.invalidateQueries({ queryKey: ['savings-instruments'] });
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       setCreateOpen(false);
+      setActiveStep(0);
       setCreateForm({ name: '', type: 'fd', provider: '', platform: '', personId: '', ownerName: '', goalIds: [], accountNumber: '', openedAt: new Date(), maturityDate: null, interestRate: '', principalAmount: '' });
       setToast('Savings instrument created!');
     },
@@ -398,10 +402,19 @@ export default function SavingsPage() {
         </Box>
 
         {/* Create Instrument Dialog */}
-        <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
+        <Dialog open={createOpen} onClose={() => { setCreateOpen(false); setActiveStep(0); }} maxWidth="sm" fullWidth fullScreen={isMobile}>
           <DialogTitle>Add Savings Instrument</DialogTitle>
+          <Stepper activeStep={activeStep} sx={{ px: 3, py: 2 }}>
+            {steps.map((label) => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
           <DialogContent>
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              {activeStep === 0 && (
+                <>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth size="small">
                   <InputLabel>Type</InputLabel>
@@ -422,6 +435,41 @@ export default function SavingsPage() {
                   renderInput={(params) => <TextField {...params} size="small" label="Provider / Bank / AMC" placeholder="e.g. HDFC, Mirae Asset" />}
                 />
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField size="small" fullWidth label="Account Number (optional)" value={createForm.accountNumber} onChange={e => setCreateForm(f => ({ ...f, accountNumber: e.target.value }))} />
+              </Grid>
+                </>
+              )}
+
+              {activeStep === 1 && (
+                <>
+              <Grid item xs={12} sm={6}>
+                <TextField size="small" fullWidth label="Principal Amount (₹)" type="number" value={createForm.principalAmount} onChange={e => setCreateForm(f => ({ ...f, principalAmount: e.target.value }))} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField size="small" fullWidth label="Interest Rate % p.a. (optional)" type="number" value={createForm.interestRate} onChange={e => setCreateForm(f => ({ ...f, interestRate: e.target.value }))} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DatePicker
+                  label="Opened On"
+                  value={createForm.openedAt ? dayjs(createForm.openedAt) : null}
+                  onChange={val => setCreateForm(f => ({ ...f, openedAt: val?.toDate() || null }))}
+                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <DatePicker
+                  label="Maturity Date (optional)"
+                  value={createForm.maturityDate ? dayjs(createForm.maturityDate) : null}
+                  onChange={val => setCreateForm(f => ({ ...f, maturityDate: val?.toDate() || null }))}
+                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                />
+              </Grid>
+                </>
+              )}
+
+              {activeStep === 2 && (
+                <>
               <Grid item xs={12} sm={6}>
                 <Autocomplete
                   freeSolo
@@ -472,34 +520,29 @@ export default function SavingsPage() {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField size="small" fullWidth label="Principal Amount (₹)" type="number" value={createForm.principalAmount} onChange={e => setCreateForm(f => ({ ...f, principalAmount: e.target.value }))} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField size="small" fullWidth label="Interest Rate % p.a. (optional)" type="number" value={createForm.interestRate} onChange={e => setCreateForm(f => ({ ...f, interestRate: e.target.value }))} />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <DatePicker
-                  label="Opened On"
-                  value={createForm.openedAt ? dayjs(createForm.openedAt) : null}
-                  onChange={val => setCreateForm(f => ({ ...f, openedAt: val?.toDate() || null }))}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                <Autocomplete
+                  freeSolo
+                  options={Array.from(new Set([...metadata.platforms, ...popularPlatforms]))}
+                  value={createForm.platform}
+                  onInputChange={(_, value) => setCreateForm(f => ({ ...f, platform: value }))}
+                  renderInput={(params) => <TextField {...params} size="small" label="Platform / App" placeholder="e.g. Groww, PhonePe" />}
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <DatePicker
-                  label="Maturity Date (optional)"
-                  value={createForm.maturityDate ? dayjs(createForm.maturityDate) : null}
-                  onChange={val => setCreateForm(f => ({ ...f, maturityDate: val?.toDate() || null }))}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </Grid>
+                </>
+              )}
             </Grid>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={() => createMutation.mutate()} disabled={!createForm.name || !createForm.provider || !createForm.principalAmount || createMutation.isPending}>
-              {createMutation.isPending ? 'Creating...' : 'Create Instrument'}
+            <Button onClick={() => { activeStep === 0 ? setCreateOpen(false) : setActiveStep(p => p - 1) }}>
+              {activeStep === 0 ? 'Cancel' : 'Back'}
             </Button>
+            {activeStep < steps.length - 1 ? (
+              <Button variant="contained" onClick={() => setActiveStep(p => p + 1)}>Next</Button>
+            ) : (
+              <Button variant="contained" onClick={() => createMutation.mutate()} disabled={!createForm.name || !createForm.provider || !createForm.principalAmount || createMutation.isPending}>
+                {createMutation.isPending ? 'Creating...' : 'Create'}
+              </Button>
+            )}
           </DialogActions>
         </Dialog>
 
@@ -672,6 +715,16 @@ export default function SavingsPage() {
         </Dialog>
 
         <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />
+        {isMobile && (
+          <Fab 
+            color="primary" 
+            aria-label="add" 
+            sx={{ position: 'fixed', bottom: 76, right: 16, zIndex: 1000 }}
+            onClick={() => setCreateOpen(true)}
+          >
+            <Add />
+          </Fab>
+        )}
       </ResponsiveLayout>
     </LocalizationProvider>
   );

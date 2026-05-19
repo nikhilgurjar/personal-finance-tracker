@@ -73,11 +73,16 @@ export async function GET(req: NextRequest) {
         .map(([category, amount]) => ({ category, amount })),
     };
 
-    const aiText = await generateGeminiText(`
+    let aiText = '';
+    try {
+      aiText = await generateGeminiText(`
 Write a concise monthly personal finance review in 5 bullets.
 Use plain language, mention risks and one practical next action.
 Data: ${JSON.stringify(summary)}
 `);
+    } catch (err) {
+      console.warn('Gemini API failed, using fallback:', err);
+    }
 
     const fallback = [
       `Income: INR ${summary.income.toLocaleString('en-IN')}; expenses: INR ${summary.expenses.toLocaleString('en-IN')}.`,
