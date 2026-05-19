@@ -188,7 +188,8 @@ export default function GoalsPage() {
     goal.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getAccountName = (accountId: string) => {
+  const getAccountName = (accountId?: string) => {
+    if (!accountId) return 'Linked Instrument';
     const account = accounts.find((acc: Account) => acc.id === accountId);
     return account?.name || 'Unknown Account';
   };
