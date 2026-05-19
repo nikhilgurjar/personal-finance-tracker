@@ -26,7 +26,8 @@ import dayjs from 'dayjs';
 import { GoalFormData, Account, Goal } from '@/lib/types';
 
 const AllocationSchema = z.object({
-  accountId: z.string(),
+  accountId: z.string().optional(),
+  instrumentId: z.string().optional(),
   amount: z.number().positive(),
 });
 
@@ -53,7 +54,7 @@ export function GoalForm({
   accounts,
   editingGoal,
 }: GoalFormProps) {
-  const [allocations, setAllocations] = useState<{ accountId: string; amount: number }[]>([]);
+  const [allocations, setAllocations] = useState<{ accountId?: string; instrumentId?: string; amount: number }[]>([]);
 
   const {
     control,

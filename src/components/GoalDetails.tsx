@@ -35,7 +35,8 @@ export function GoalDetails({ goal, open, onClose, onEdit, onDelete, accounts }:
   const progress = Math.min((totalAllocated / goal.targetAmount) * 100, 100);
   const priority = goal.priority ?? 1;
 
-  const getAccountName = (accountId: string) => {
+  const getAccountName = (accountId?: string) => {
+    if (!accountId) return 'Linked Instrument';
     const account = accounts.find(acc => acc.id === accountId);
     return account?.name || 'Unknown Account';
   };

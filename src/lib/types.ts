@@ -342,7 +342,7 @@ export interface GoalFormData {
   targetAmount: number;
   targetDate?: Date;
   priority: number;
-  allocations: { accountId: string; amount: number }[];
+  allocations: { accountId?: string; instrumentId?: string; amount: number }[];
 }
 
 export interface ScheduleFormData {

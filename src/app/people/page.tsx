@@ -9,7 +9,7 @@ import { authedJson } from '@/lib/apiClient';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Container, Typography, Card, CardContent, Grid,
-  Avatar, Chip, Dialog, DialogTitle, DialogContent, IconButton,
+  Avatar, Chip, Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
   Divider, Skeleton, Button, Snackbar, TextField
 } from '@mui/material';
 import { Close, Receipt, TrendingDown, Handshake, AccountBalanceWallet, Add } from '@mui/icons-material';
