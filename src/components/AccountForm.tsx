@@ -50,12 +50,7 @@ const expenseSubtypes = [
 const savingsSubtypes = [
   { value: 'savings_account', label: 'Savings Account' },
   { value: 'checking_account', label: 'Checking Account' },
-  { value: 'stock', label: 'Stock' },
-  { value: 'equity_mf', label: 'Equity Mutual Fund' },
-  { value: 'etf', label: 'ETF' },
-  { value: 'debt_mf', label: 'Debt Mutual Fund' },
   { value: 'fd', label: 'Fixed Deposit' },
-  { value: 'commodity', label: 'Commodity' },
   { value: 'wallet', label: 'Wallet' },
   { value: 'bank', label: 'Bank' },
 ];
@@ -79,6 +74,7 @@ const AccountSchema = z.object({
   dueDate: z.number().optional(),
   minimumPayment: z.number().optional(),
   billingCycleDay: z.number().min(1).max(31).optional(),
+  metadata: z.record(z.any()).optional(),
 });
 
 type AccountFormData = z.infer<typeof AccountSchema>;
@@ -116,12 +112,14 @@ export function AccountForm({
       dueDate: editingAccount.dueDate,
       minimumPayment: editingAccount.minimumPayment,
       billingCycleDay: editingAccount.billingCycleDay,
+      metadata: editingAccount.metadata || {},
     } : {
       type: 'expense',
       subtype: '',
       name: '',
       institution: '',
       currency: 'INR',
+      metadata: {},
     },
   });
 
@@ -155,6 +153,7 @@ export function AccountForm({
         dueDate: editingAccount.dueDate,
         minimumPayment: editingAccount.minimumPayment,
         billingCycleDay: editingAccount.billingCycleDay,
+        metadata: editingAccount.metadata || {},
       });
       return;
     }
@@ -172,6 +171,7 @@ export function AccountForm({
         dueDate: undefined,
         minimumPayment: undefined,
         billingCycleDay: undefined,
+        metadata: {},
       });
     }
   }, [editingAccount, open, reset]);
@@ -451,6 +451,58 @@ export function AccountForm({
                 />
               </Grid>
             )}
+
+            {watchedType === 'savings' && ['fd', 'rd'].includes(watchedSubtype) && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <Controller
+                    name="metadata.platform"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        label="Platform / App"
+                        placeholder="e.g. HDFC App, SBI"
+                        fullWidth
+                        value={field.value || ''}
+                      />
+                    )}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Controller
+                    name="metadata.ownerName"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        label="Owner Name"
+                        placeholder="e.g. Myself, Mother, Father"
+                        fullWidth
+                        value={field.value || ''}
+                      />
+                    )}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Controller
+                    name="metadata.maturityDate"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        type="date"
+                        label="Maturity Date"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                        value={field.value || ''}
+                      />
+                    )}
+                  />
+                </Grid>
+              </>
+            )}
+
           </Grid>
         </DialogContent>
         <DialogActions>

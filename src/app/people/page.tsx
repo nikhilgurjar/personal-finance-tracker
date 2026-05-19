@@ -10,9 +10,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Container, Typography, Card, CardContent, Grid,
   Avatar, Chip, Dialog, DialogTitle, DialogContent, IconButton,
-  Divider, Skeleton, Button, Snackbar
+  Divider, Skeleton, Button, Snackbar, TextField
 } from '@mui/material';
-import { Close, Receipt, TrendingDown, Handshake, AccountBalanceWallet } from '@mui/icons-material';
+import { Close, Receipt, TrendingDown, Handshake, AccountBalanceWallet, Add } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -123,6 +123,8 @@ export default function PeoplePage() {
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [repaymentContext, setRepaymentContext] = useState<any | null>(null);
   const [toast, setToast] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
 
   useEffect(() => { if (!loading && !user) router.push('/'); }, [loading, user, router]);
 
@@ -142,15 +144,33 @@ export default function PeoplePage() {
     },
   });
 
+  const createMutation = useMutation({
+    mutationFn: async (name: string) => authedJson(user, '/api/people', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['people'] });
+      setCreateOpen(false);
+      setNewPersonName('');
+      setToast('Person created successfully');
+    },
+  });
+
   if (!user) return null;
 
   return (
     <ResponsiveLayout>
       <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', bgcolor: 'background.default' }}>
         <Container maxWidth="lg">
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h4" fontWeight={800} color="text.primary">People & Ledger</Typography>
-            <Typography variant="body2" color="text.secondary">View all money interactions grouped by person</Typography>
+          <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="h4" fontWeight={800} color="text.primary">People & Ledger</Typography>
+              <Typography variant="body2" color="text.secondary">View all money interactions grouped by person</Typography>
+            </Box>
+            <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
+              Add Person
+            </Button>
           </Box>
 
           {isLoading ? (
@@ -234,6 +254,33 @@ export default function PeoplePage() {
         outstandingAmount={repaymentContext?.outstandingAmount}
         currency="INR"
       />
+
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Add New Person</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Person Name"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newPersonName}
+            onChange={(e) => setNewPersonName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={() => createMutation.mutate(newPersonName)} 
+            variant="contained" 
+            disabled={!newPersonName.trim() || createMutation.isPending}
+          >
+            {createMutation.isPending ? 'Saving...' : 'Add'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />
     </ResponsiveLayout>
   );

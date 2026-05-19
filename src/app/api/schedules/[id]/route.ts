@@ -2,8 +2,29 @@ import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+const AccountTypeSchema = z.enum(['income', 'expense', 'savings']);
+
+const ScheduleTemplateSchema = z.object({
+  amount: z.number().positive(),
+  currency: z.string().default('INR'),
+  fromAccountId: z.string(),
+  toAccountId: z.string(),
+  fromAccountType: AccountTypeSchema,
+  toAccountType: AccountTypeSchema,
+  type: z.enum(['income', 'expense', 'transfer', 'savings']),
+  category: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  note: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
 const UpdateScheduleSchema = z.object({
-  status: z.enum(['active', 'paused']),
+  status: z.enum(['active', 'paused']).optional(),
+  name: z.string().min(1).optional(),
+  rrule: z.string().optional(),
+  nextRunAt: z.number().optional(),
+  priority: z.number().min(1).optional(),
+  template: ScheduleTemplateSchema.optional(),
 });
 
 export async function PATCH(
@@ -29,27 +50,28 @@ export async function PATCH(
       return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
     }
 
-    const batch = db.batch();
-    
-    // Update schedule
-    batch.update(scheduleRef, {
-      status: data.status,
-      updatedAt: Date.now(),
-    });
+    const updatePayload: Record<string, any> = { updatedAt: Date.now() };
+    if (data.status !== undefined) updatePayload.status = data.status;
+    if (data.name !== undefined) updatePayload.name = data.name;
+    if (data.rrule !== undefined) updatePayload.rrule = data.rrule;
+    if (data.nextRunAt !== undefined) updatePayload.nextRunAt = data.nextRunAt;
+    if (data.priority !== undefined) updatePayload.priority = data.priority;
+    if (data.template !== undefined) updatePayload.template = data.template;
 
-    // Create audit log
+    const batch = db.batch();
+    batch.update(scheduleRef, updatePayload);
+
     const auditRef = db.collection('users').doc(userId).collection('auditLogs').doc();
     batch.set(auditRef, {
       id: auditRef.id,
-      system: 'schedules',
+      entity: 'schedule',
       entityId: params.id,
       action: 'update',
-      payload: {
-        status: data.status,
-        updatedAt: Date.now(),
-      },
-      timestamp: Date.now(),
-      userId,
+      before: scheduleDoc.data(),
+      after: updatePayload,
+      by: userId,
+      at: Date.now(),
+      reason: 'manual',
     });
 
     await batch.commit();
@@ -81,11 +103,8 @@ export async function DELETE(
     }
 
     const batch = db.batch();
-    
-    // Delete schedule
     batch.delete(scheduleRef);
 
-    // Create audit log
     const auditRef = db.collection('users').doc(userId).collection('audit').doc();
     batch.set(auditRef, {
       entity: 'schedule',

@@ -41,6 +41,10 @@ export interface BaseTransactionFormProps {
   error?: Error | null;
   editingTransaction?: any;
   initialValues?: InitialFormFields;
+  /** Override accounts shown in the "From Account" selector */
+  fromAccounts?: Account[];
+  /** Override accounts shown in the "To Account" selector */
+  toAccounts?: Account[];
 }
 
 export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
@@ -49,9 +53,13 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
   initialValues?: InitialFormFields;
   hideFromAccount?: boolean;
   hideToAccount?: boolean;
+  fromAccounts?: Account[];
+  toAccounts?: Account[];
 }> = ({
   title,
   accounts,
+  fromAccounts,
+  toAccounts,
   onSubmit,
   isLoading,
   error,
@@ -74,19 +82,16 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    // Validate amount
     if (!formData.amount) {
       newErrors.amount = 'Amount is required';
     } else if (isNaN(Number(formData.amount)) || Number(formData.amount) <= 0) {
       newErrors.amount = 'Amount must be a positive number';
     }
 
-    // Validate date
     if (!formData.date) {
       newErrors.date = 'Date is required';
     }
 
-    // Validate accounts if required
     if (!hideFromAccount && !formData.fromAccountId) {
       newErrors.fromAccountId = 'From Account is required';
     }
@@ -101,16 +106,15 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
-      // Convert tags string to array if it exists
-      const tagsArray = formData.tags ? 
-        formData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean) : 
-        [];
+      const tagsArray = formData.tags
+        ? formData.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean)
+        : [];
 
       const submissionData = {
         ...formData,
-        date: formData.date?.toDate(), // Convert Dayjs to JavaScript Date
+        date: formData.date?.toDate(),
         tags: tagsArray,
-        currency: 'INR'
+        currency: 'INR',
       };
       onSubmit(submissionData);
     }
@@ -122,6 +126,9 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
       [field]: event.target.value,
     }));
   };
+
+  const resolvedFromAccounts = fromAccounts ?? accounts;
+  const resolvedToAccounts = toAccounts ?? accounts;
 
   return (
     <Paper elevation={0} sx={{ p: 3, mb: 3, backgroundColor: 'transparent' }}>
@@ -170,8 +177,9 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
                   onChange={handleChange('fromAccountId')}
                   required
                   error={!!errors.fromAccountId}
+                  label="From Account"
                 >
-                  {accounts.map((account) => (
+                  {resolvedFromAccounts.map((account) => (
                     <MenuItem key={account.id} value={account.id}>
                       {account.name}
                     </MenuItem>
@@ -194,8 +202,9 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
                   onChange={handleChange('toAccountId')}
                   required
                   error={!!errors.toAccountId}
+                  label="To Account"
                 >
-                  {accounts.map((account) => (
+                  {resolvedToAccounts.map((account) => (
                     <MenuItem key={account.id} value={account.id}>
                       {account.name}
                     </MenuItem>

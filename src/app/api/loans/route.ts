@@ -13,6 +13,7 @@ const LoanSchema = z.object({
   note: z.string().optional(),
   fromAccountId: z.string().optional(),
   toAccountId: z.string().optional(),
+  personId: z.string().optional(),
 });
 
 async function getUserId(req: NextRequest) {

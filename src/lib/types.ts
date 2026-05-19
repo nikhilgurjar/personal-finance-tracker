@@ -128,10 +128,20 @@ export interface Goal {
   targetDate?: number;
   priority?: number;
   allocations: Array<{
-    accountId: string;
+    accountId?: string;
+    instrumentId?: string;
     amount: number;
   }>;
   createdAt: number;
+}
+
+// ─── People ──────────────────────────────────────────────────────────────────
+
+export interface Person {
+  id: string;
+  name: string;
+  createdAt: number;
+  userId: string;
 }
 
 // ─── Loan Types ────────────────────────────────────────────────────────────────
@@ -139,7 +149,8 @@ export interface Goal {
 export interface Loan {
   id: string;
   loanType: LoanType; // lent = you gave to someone, borrowed = someone gave you, payable = you owe someone
-  personName: string; // who you lent to / who lent you / who you owe
+  personName: string; // fallback or denormalized name
+  personId?: string; // reference to a Person entity
   principalAmount: number;
   outstandingAmount: number; // reduces with each repayment
   currency: string;
@@ -187,6 +198,10 @@ export interface SavingsInstrument {
   name: string; // e.g. "HDFC Savings A/C", "Suryoday FD 7.5%", "HDFC Midcap MF"
   type: SavingsInstrumentType;
   provider: string; // HDFC, Zerodha, SBI, etc.
+  platform?: string; // app/platform used: Groww, Zerodha Kite, PhonePe, etc.
+  ownerName?: string; // whose money: "Myself", "Mother", "Father", etc.
+  goalIds?: string[]; // linked financial goals
+  sipScheduleId?: string; // linked SIP recurring schedule
   accountNumber?: string; // optional reference number
   currency: string;
   openedAt: number; // epoch ms when instrument was created/opened
@@ -347,12 +362,17 @@ export interface LoanFormData {
   note?: string;
   fromAccountId?: string;
   toAccountId?: string;
+  personId?: string;
 }
 
 export interface SavingsInstrumentFormData {
   name: string;
   type: SavingsInstrumentType;
   provider: string;
+  platform?: string;
+  ownerName?: string;
+  personId?: string;
+  goalIds?: string[];
   accountNumber?: string;
   currency: string;
   openedAt: Date;

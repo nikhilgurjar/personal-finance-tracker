@@ -11,19 +11,25 @@ const EXPENSE_CATEGORIES = [
   'Entertainment',
   'Health & Fitness',
   'Travel',
+  'Groceries',
+  'Education',
+  'EMI / Loan Payment',
   'Other',
 ];
 
 export const ExpenseForm: React.FC<BaseTransactionFormProps> = ({ accounts, ...props }) => {
-  // Filter only expense accounts for the "to" account selection
-  const expenseAccounts = accounts.filter(account => account.type === 'expense');
+  // Debit FROM: any non-expense account (bank, savings, wallet, income)
+  const sourceAccounts = accounts.filter(a => a.type !== 'expense');
+  // Categorize TO: expense-type accounts (category buckets)
+  const categoryAccounts = accounts.filter(a => a.type === 'expense');
 
   return (
     <BaseTransactionForm
       {...props}
-      accounts={expenseAccounts}
+      accounts={accounts}
+      fromAccounts={sourceAccounts}
+      toAccounts={categoryAccounts.length > 0 ? categoryAccounts : accounts}
       title="New Expense"
-      hideFromAccount
       additionalFields={
         <>
           <Grid item xs={12} sm={6}>
@@ -32,7 +38,7 @@ export const ExpenseForm: React.FC<BaseTransactionFormProps> = ({ accounts, ...p
               <Select
                 defaultValue=""
                 name="category"
-                required
+                label="Category"
               >
                 {EXPENSE_CATEGORIES.map((category) => (
                   <MenuItem key={category} value={category}>

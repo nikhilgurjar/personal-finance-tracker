@@ -24,6 +24,7 @@ import {
   AutoGraph,
   CalendarMonth,
   Flag,
+  Refresh,
   Savings,
   WarningAmber,
 } from '@mui/icons-material';
@@ -41,7 +42,7 @@ import { ResponsiveLayout } from '@/components/ResponsiveLayout';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
 
 function formatCurrency(value = 0) {
-  return `INR ${Math.round(value).toLocaleString('en-IN')}`;
+  return `₹${Math.round(value).toLocaleString('en-IN')}`;
 }
 
 function formatDate(value: number | string) {
@@ -96,13 +97,20 @@ export default function ForecastPage() {
     return params.toString();
   }, [days, extraSavings, earlyRepayment, whatIfAccountId]);
 
-  const { data, isLoading, error } = useAuthedQuery<any>(
+  const { data, isLoading, error, refetch } = useAuthedQuery<any>(
     user,
     ['forecast', user?.uid, queryString],
     `/api/forecast?${queryString}`
   );
 
   if (!user) return null;
+
+  // Safe destructure with defaults
+  const accounts: any[] = data?.accounts ?? [];
+  const daily: any[] = data?.daily ?? [];
+  const upcoming: any[] = data?.upcoming ?? [];
+  const alerts: any[] = data?.alerts ?? [];
+  const goalImpact: any[] = data?.goalImpact ?? [];
 
   return (
     <ResponsiveLayout>
@@ -111,7 +119,7 @@ export default function ForecastPage() {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 4 }}>
             <Box>
               <Typography variant="h4" fontWeight={800} color="text.primary">
-                Forecast
+                AI Forecast
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Project balances, upcoming obligations, goal timing, and what-if decisions.
@@ -132,11 +140,30 @@ export default function ForecastPage() {
             </Box>
           </Box>
 
-          {error && <Alert severity="error" sx={{ mb: 3 }}>Failed to load forecast.</Alert>}
+          {error && (
+            <Alert
+              severity="error"
+              sx={{ mb: 3 }}
+              action={
+                <Button color="inherit" size="small" startIcon={<Refresh />} onClick={() => refetch()}>
+                  Retry
+                </Button>
+              }
+            >
+              Failed to load forecast: {(error as any)?.message || 'Unknown error. Check your internet connection.'}
+            </Alert>
+          )}
 
-          {isLoading || !data ? (
-            <Skeleton variant="rounded" height={520} />
-          ) : (
+          {isLoading || (!data && !error) ? (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
+              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
+              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
+              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
+              <Grid item xs={12} lg={8}><Skeleton variant="rounded" height={400} /></Grid>
+              <Grid item xs={12} lg={4}><Skeleton variant="rounded" height={400} /></Grid>
+            </Grid>
+          ) : data ? (
             <>
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={3}>
@@ -160,20 +187,26 @@ export default function ForecastPage() {
                       <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
                         Balance Projection
                       </Typography>
-                      <Box sx={{ height: 360 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={data.daily}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" tickFormatter={formatDate} minTickGap={28} />
-                            <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
-                            <Tooltip
-                              labelFormatter={(label) => formatDate(label)}
-                              formatter={(value) => [formatCurrency(Number(value)), 'Balance']}
-                            />
-                            <Line type="monotone" dataKey="totalBalance" stroke="#2563eb" strokeWidth={3} dot={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </Box>
+                      {daily.length > 0 ? (
+                        <Box sx={{ height: 360 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={daily}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="date" tickFormatter={formatDate} minTickGap={28} />
+                              <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
+                              <Tooltip
+                                labelFormatter={(label) => formatDate(label)}
+                                formatter={(value) => [formatCurrency(Number(value)), 'Balance']}
+                              />
+                              <Line type="monotone" dataKey="totalBalance" stroke="#2563eb" strokeWidth={3} dot={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </Box>
+                      ) : (
+                        <Box sx={{ textAlign: 'center', py: 6 }}>
+                          <Typography color="text.secondary">No projection data available. Add accounts and schedules to see forecasts.</Typography>
+                        </Box>
+                      )}
                     </CardContent>
                   </Card>
                 </Grid>
@@ -194,7 +227,7 @@ export default function ForecastPage() {
                         sx={{ mb: 2 }}
                       >
                         <MenuItem value="">No account selected</MenuItem>
-                        {data.accounts.map((account: any) => (
+                        {accounts.map((account: any) => (
                           <MenuItem key={account.id} value={account.id}>
                             {account.name} ({formatCurrency(account.balance)})
                           </MenuItem>
@@ -237,11 +270,11 @@ export default function ForecastPage() {
                       <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
                         Risk Alerts
                       </Typography>
-                      {data.alerts.length === 0 ? (
+                      {alerts.length === 0 ? (
                         <Alert severity="success">No major forecast risks in this horizon.</Alert>
                       ) : (
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                          {data.alerts.map((alert: any, index: number) => (
+                          {alerts.map((alert: any, index: number) => (
                             <Alert
                               key={`${alert.title}-${index}`}
                               severity={alert.severity === 'critical' ? 'error' : alert.severity}
@@ -264,8 +297,8 @@ export default function ForecastPage() {
                         Upcoming Forecast Events
                       </Typography>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        {data.upcoming.slice(0, 10).map((event: any) => (
-                          <Box key={event.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                        {upcoming.slice(0, 10).map((event: any, i: number) => (
+                          <Box key={event.id ?? i} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2 }}>
                             <Box>
                               <Typography variant="body2" fontWeight={800}>{event.title}</Typography>
                               <Typography variant="caption" color="text.secondary">{formatDate(event.date)}</Typography>
@@ -273,7 +306,12 @@ export default function ForecastPage() {
                             <Chip size="small" label={formatCurrency(event.amount)} color={event.type === 'income' ? 'success' : 'default'} />
                           </Box>
                         ))}
-                        {data.upcoming.length === 0 && <Typography color="text.secondary">No upcoming scheduled events.</Typography>}
+                        {upcoming.length === 0 && (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <CalendarMonth sx={{ color: 'text.disabled', fontSize: 40 }} />
+                            <Typography color="text.secondary" sx={{ mt: 1 }}>No upcoming scheduled events.</Typography>
+                          </Box>
+                        )}
                       </Box>
                     </CardContent>
                   </Card>
@@ -286,7 +324,7 @@ export default function ForecastPage() {
                         Goal Impact
                       </Typography>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {data.goalImpact.map((goal: any) => (
+                        {goalImpact.map((goal: any) => (
                           <Box key={goal.id}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 0.75 }}>
                               <Typography variant="body2" fontWeight={800}>{goal.name}</Typography>
@@ -299,10 +337,10 @@ export default function ForecastPage() {
                             </Typography>
                           </Box>
                         ))}
-                        {data.goalImpact.length === 0 && (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <CalendarMonth color="disabled" />
-                            <Typography color="text.secondary">No goals available for impact projection.</Typography>
+                        {goalImpact.length === 0 && (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Flag sx={{ color: 'text.disabled', fontSize: 40 }} />
+                            <Typography color="text.secondary" sx={{ mt: 1 }}>No goals available for impact projection.</Typography>
                           </Box>
                         )}
                       </Box>
@@ -311,7 +349,7 @@ export default function ForecastPage() {
                 </Grid>
               </Grid>
             </>
-          )}
+          ) : null}
         </Container>
       </Box>
     </ResponsiveLayout>

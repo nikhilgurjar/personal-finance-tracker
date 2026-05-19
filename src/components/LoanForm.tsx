@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,6 +8,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Grid, FormControl, InputLabel, Select, MenuItem,
   Box, Typography, Divider, ToggleButton, ToggleButtonGroup,
+  Autocomplete, Snackbar
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -15,10 +16,14 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import { Handshake, TrendingDown, Receipt } from '@mui/icons-material';
 import { LoanFormData, LoanType, Account } from '@/lib/types';
+import { useAuthContext } from '@/components/AuthProvider';
+import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { authedJson } from '@/lib/apiClient';
 
 const LoanSchema = z.object({
   loanType: z.enum(['lent', 'borrowed', 'payable']),
-  personName: z.string().min(1, 'Person/entity name is required'),
+  personId: z.string().min(1, 'Please select a person'),
   principalAmount: z.coerce.number().positive('Amount must be positive'),
   currency: z.string().default('INR'),
   startDate: z.date(),
@@ -61,11 +66,19 @@ interface LoanFormProps {
 }
 
 export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: LoanFormProps) {
-  const { control, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<LoanSchema>({
+  const { user } = useAuthContext();
+  const queryClient = useQueryClient();
+  const [createPersonOpen, setCreatePersonOpen] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [toast, setToast] = useState('');
+
+  const { data: people = [] } = useAuthedQuery(user, ['people', user?.uid], '/api/people');
+
+  const { control, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<LoanSchema>({
     resolver: zodResolver(LoanSchema),
     defaultValues: {
       loanType: 'lent',
-      personName: '',
+      personId: '',
       principalAmount: 0,
       currency: 'INR',
       startDate: new Date(),
@@ -77,9 +90,16 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
 
   useEffect(() => {
     if (editingLoan) {
+      // Find the person ID if it's a legacy loan that only had personName
+      let existingPersonId = editingLoan.personId;
+      if (!existingPersonId && editingLoan.personName) {
+        const match = people.find((p: any) => p.name === editingLoan.personName);
+        if (match) existingPersonId = match.id;
+      }
+
       reset({
         loanType: editingLoan.loanType,
-        personName: editingLoan.personName,
+        personId: existingPersonId || '',
         principalAmount: editingLoan.principalAmount,
         currency: editingLoan.currency || 'INR',
         startDate: new Date(editingLoan.startDate),
@@ -90,19 +110,38 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
         toAccountId: editingLoan.toAccountId || '',
       });
     } else {
-      reset({ loanType: 'lent', personName: '', principalAmount: 0, currency: 'INR', startDate: new Date() });
+      reset({ loanType: 'lent', personId: '', principalAmount: 0, currency: 'INR', startDate: new Date() });
     }
-  }, [editingLoan, open, reset]);
+  }, [editingLoan, open, reset, people]);
 
   const handleFormSubmit = async (data: LoanSchema) => {
     try {
-      await onSubmit(data as LoanFormData);
+      const person = people.find((p: any) => p.id === data.personId);
+      const submitData = {
+        ...data,
+        personName: person?.name || 'Unknown', // Keep for backward compatibility
+      };
+      await onSubmit(submitData as unknown as LoanFormData);
       reset();
       onClose();
     } catch (err) {
       console.error('Error submitting loan:', err);
     }
   };
+
+  const createPersonMutation = useMutation({
+    mutationFn: async (name: string) => authedJson(user, '/api/people', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+    onSuccess: (newPerson) => {
+      queryClient.invalidateQueries({ queryKey: ['people'] });
+      setCreatePersonOpen(false);
+      setNewPersonName('');
+      setValue('personId', newPerson.id); // Auto-select the newly created person
+      setToast('Person created successfully');
+    },
+  });
 
   const config = LOAN_TYPE_CONFIG[watchedType || 'lent'];
 
@@ -166,20 +205,26 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
                 <Divider />
               </Grid>
 
-              {/* Person Name */}
+              {/* Person Selector */}
               <Grid item xs={12} sm={6}>
                 <Controller
-                  name="personName"
+                  name="personId"
                   control={control}
                   render={({ field }) => (
-                    <TextField
-                      {...field}
-                      label={watchedType === 'lent' ? 'Lent To' : watchedType === 'borrowed' ? 'Borrowed From' : 'Payable To'}
-                      fullWidth
-                      error={!!errors.personName}
-                      helperText={errors.personName?.message}
-                      placeholder="Person or company name"
-                    />
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <FormControl fullWidth error={!!errors.personId}>
+                        <InputLabel>{watchedType === 'lent' ? 'Lent To' : watchedType === 'borrowed' ? 'Borrowed From' : 'Payable To'}</InputLabel>
+                        <Select {...field} label={watchedType === 'lent' ? 'Lent To' : watchedType === 'borrowed' ? 'Borrowed From' : 'Payable To'}>
+                          {people.map((p: any) => (
+                            <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                          ))}
+                        </Select>
+                        {errors.personId && <Typography variant="caption" color="error">{errors.personId.message}</Typography>}
+                      </FormControl>
+                      <Button variant="outlined" onClick={() => setCreatePersonOpen(true)} sx={{ minWidth: 'auto', px: 2 }}>
+                        +
+                      </Button>
+                    </Box>
                   )}
                 />
               </Grid>
@@ -315,6 +360,35 @@ export function LoanForm({ open, onClose, onSubmit, accounts, editingLoan }: Loa
           </DialogActions>
         </form>
       </Dialog>
+
+      {/* Quick Add Person Dialog */}
+      <Dialog open={createPersonOpen} onClose={() => setCreatePersonOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Add New Person</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Person Name"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newPersonName}
+            onChange={(e) => setNewPersonName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCreatePersonOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={() => createPersonMutation.mutate(newPersonName)} 
+            variant="contained" 
+            disabled={!newPersonName.trim() || createPersonMutation.isPending}
+          >
+            {createPersonMutation.isPending ? 'Saving...' : 'Add'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />
     </LocalizationProvider>
   );
 }
