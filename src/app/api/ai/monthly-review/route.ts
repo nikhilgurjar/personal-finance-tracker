@@ -36,19 +36,21 @@ export async function GET(req: NextRequest) {
     const { month, start, end } = monthRange(searchParams.get('month'));
     const userRef = db.collection('users').doc(userId);
 
-    const [expensesSnap, incomesSnap, loansSnap, goalsSnap, savingsSnap] = await Promise.all([
-      userRef.collection('expenses').where('date', '>=', start).where('date', '<=', end).get(),
-      userRef.collection('incomes').where('date', '>=', start).where('date', '<=', end).get(),
-      userRef.collection('loans').get(),
-      userRef.collection('goals').get(),
-      userRef.collection('savingsInstruments').where('status', '==', 'active').get(),
-    ]);
+    const safeGetDocs = async (query: FirebaseFirestore.Query) => {
+      try {
+        const snap = await query.get();
+        return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } catch (err) {
+        console.warn('Firestore query failed, defaulting to empty array:', err);
+        return [];
+      }
+    };
 
-    const expenses = expensesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    const incomes = incomesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    const loans = loansSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    const goals = goalsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    const savings = savingsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const expenses = await safeGetDocs(userRef.collection('expenses').where('date', '>=', start).where('date', '<=', end));
+    const incomes = await safeGetDocs(userRef.collection('incomes').where('date', '>=', start).where('date', '<=', end));
+    const loans = await safeGetDocs(userRef.collection('loans'));
+    const goals = await safeGetDocs(userRef.collection('goals'));
+    const savings = await safeGetDocs(userRef.collection('savingsInstruments').where('status', '==', 'active'));
 
     const categoryTotals = expenses.reduce((acc: Record<string, number>, expense: any) => {
       const category = expense.category || 'Uncategorized';

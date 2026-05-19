@@ -7,6 +7,7 @@ import { z } from 'zod';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Grid, FormControl, InputLabel, Select, MenuItem, Box, Typography,
+  useTheme, useMediaQuery,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -95,9 +96,12 @@ export function IncomeFormFull({ open, onClose, onSubmit, accounts, editingIncom
     watchedSourceType === 'business' ? 'Business / Client Name' :
     'Source Name (optional)';
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
         <DialogTitle>{editingIncome ? 'Edit Income' : 'Add Income'}</DialogTitle>
         <form onSubmit={handleSubmit(handleFormSubmit)}>
           <DialogContent>

@@ -22,7 +22,7 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
           flexDirection: 'column',
           minHeight: '100vh',
           backgroundColor: 'background.default',
-          ...(isMobile ? { pt: '72px' } : { marginLeft: '280px' }),
+          ...(isMobile ? { pt: '72px', pb: '72px' } : { marginLeft: '280px' }),
         }}
       >
         {children}

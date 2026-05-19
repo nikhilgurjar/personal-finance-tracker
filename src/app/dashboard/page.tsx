@@ -23,6 +23,7 @@ import { ResponsiveLayout } from '@/components/ResponsiveLayout';
 import { MonthPicker } from '@/components/dashboard/MonthPicker';
 import { getCurrentUser } from '@/lib/serverAuth';
 import { getDashboardData } from '@/lib/dashboardData';
+import { QuickAiAdd } from '@/components/dashboard/QuickAiAdd';
 
 export const dynamic = 'force-dynamic';
 
@@ -172,6 +173,8 @@ export default async function DashboardPage({
               </Avatar>
             </Box>
           </Box>
+
+          <QuickAiAdd />
 
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} sm={6} md={4}>

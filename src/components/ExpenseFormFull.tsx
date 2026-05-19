@@ -14,7 +14,12 @@ import {
   MenuItem,
   Select,
   TextField,
+  Typography,
+  Box,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
+import { AutoAwesome } from '@mui/icons-material';
 import { Account } from '@/lib/types';
 import { authedJson } from '@/lib/apiClient';
 import { useAuthContext } from '@/components/AuthProvider';
@@ -56,6 +61,8 @@ export function ExpenseFormFull({
   useEffect(() => {
     if (!open) return;
 
+    setSuggestion(null);
+
     if (editingExpense) {
       setForm({
         amount: String(editingExpense.amount || ''),
@@ -74,6 +81,31 @@ export function ExpenseFormFull({
 
     setForm(defaultForm);
   }, [editingExpense, open]);
+
+  useEffect(() => {
+    if (!open || editingExpense) return;
+    if (!form.note.trim()) return;
+
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const result = await authedJson<any>(user, '/api/ai/categorize-expense', {
+          method: 'POST',
+          body: JSON.stringify({ note: form.note, amount: Number(form.amount || 0) }),
+        });
+
+        setSuggestion(result);
+        setForm((current) => ({
+          ...current,
+          category: result.category || current.category,
+          expenseNature: result.expenseNature || current.expenseNature,
+        }));
+      } catch (err) {
+        console.warn('Background auto-categorization failed:', err);
+      }
+    }, 1200);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [form.note, form.amount, open, editingExpense, user]);
 
   const updateField = (field: string, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -115,8 +147,11 @@ export function ExpenseFormFull({
     }
   };
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
       <DialogTitle>{editingExpense ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent>
@@ -170,6 +205,12 @@ export function ExpenseFormFull({
                     </MenuItem>
                   ))}
                 </Select>
+                {suggestion && suggestion.confidence && (
+                  <Typography variant="caption" sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, pl: 1 }}>
+                    <AutoAwesome sx={{ fontSize: 12 }} />
+                    AI Auto-categorized ({Math.round(suggestion.confidence * 100)}% confidence)
+                  </Typography>
+                )}
               </FormControl>
             </Grid>
             <Grid item xs={12}>

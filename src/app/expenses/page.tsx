@@ -12,11 +12,12 @@ import {
   IconButton, Menu, MenuItem, Alert, Skeleton, Tabs, Tab,
   TextField, InputAdornment, Snackbar, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Select, FormControl, InputLabel,
+  useTheme, useMediaQuery, Fab,
 } from '@mui/material';
 import {
   Add, MoreVert, Edit, Delete, TrendingDown, Search, FilterList, PushPin,
 } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 async function apiFetch(path: string, user: any, opts: RequestInit = {}) {
   const token = await getIdToken(user);
@@ -26,7 +27,10 @@ async function apiFetch(path: string, user: any, opts: RequestInit = {}) {
 export default function ExpensesPage() {
   const { user, loading } = useAuthContext();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [tab, setTab] = useState<'all' | 'fixed' | 'dynamic'>('all');
   const [search, setSearch] = useState('');
@@ -39,6 +43,20 @@ export default function ExpensesPage() {
   const [toast, setToast] = useState('');
 
   useEffect(() => { if (!loading && !user) router.push('/'); }, [loading, user, router]);
+
+  const prefill = searchParams.get('prefill');
+  useEffect(() => {
+    if (prefill) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(prefill));
+        setEditingExpense(parsed);
+        setFormOpen(true);
+        router.replace('/expenses');
+      } catch (err) {
+        console.error('Failed to parse prefill:', err);
+      }
+    }
+  }, [prefill, router]);
 
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['expenses', user?.uid],
@@ -117,19 +135,21 @@ export default function ExpensesPage() {
               <Typography variant="h4" fontWeight={800}>Expenses</Typography>
               <Typography variant="body2" color="text.secondary">Track fixed and variable spending</Typography>
             </Box>
-            <Button variant="contained" color="error" startIcon={<Add />} onClick={() => { setEditingExpense(null); setFormOpen(true); }}>
-              Add Expense
-            </Button>
+            {!isMobile && (
+              <Button variant="contained" color="error" startIcon={<Add />} onClick={() => { setEditingExpense(null); setFormOpen(true); }}>
+                Add Expense
+              </Button>
+            )}
           </Box>
 
           {/* Summary cards */}
           <Grid container spacing={2} sx={{ mb: 4 }}>
             {[
-              { label: 'Total Expenses', value: totalAll, color: '#ef4444', bg: '#fee2e2' },
-              { label: 'Fixed', value: totalFixed, color: '#8b5cf6', bg: '#ede9fe', icon: <PushPin fontSize="small" /> },
-              { label: 'Dynamic', value: totalDynamic, color: '#f59e0b', bg: '#fef3c7' },
+              { label: 'Total Expenses', value: totalAll, color: '#ef4444', bg: '#fee2e2', xs: 12 },
+              { label: 'Fixed', value: totalFixed, color: '#8b5cf6', bg: '#ede9fe', icon: <PushPin fontSize="small" />, xs: 6 },
+              { label: 'Dynamic', value: totalDynamic, color: '#f59e0b', bg: '#fef3c7', xs: 6 },
             ].map(c => (
-              <Grid item xs={12} sm={4} key={c.label}>
+              <Grid item xs={c.xs} sm={4} key={c.label}>
                 <Card sx={{ borderTop: 4, borderTopColor: c.color, background: c.bg }}>
                   <CardContent>
                     <Typography variant="caption" color="text.secondary">{c.label}</Typography>
@@ -168,11 +188,10 @@ export default function ExpensesPage() {
             </CardContent>
           </Card>
 
-          {/* Nature tabs */}
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
-            <Tab label="All" value="all" />
-            <Tab label="📌 Fixed" value="fixed" />
-            <Tab label="🔄 Dynamic" value="dynamic" />
+            <Tab label={isMobile ? "All" : "All"} value="all" />
+            <Tab label={isMobile ? "📌 Fix" : "📌 Fixed"} value="fixed" />
+            <Tab label={isMobile ? "🔄 Dyn" : "🔄 Dynamic"} value="dynamic" />
           </Tabs>
 
           {isLoading ? (
@@ -186,6 +205,48 @@ export default function ExpensesPage() {
               <Button variant="contained" color="error" startIcon={<Add />} sx={{ mt: 2 }} onClick={() => setFormOpen(true)}>
                 Add First Expense
               </Button>
+            </Box>
+          ) : isMobile ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {filtered.map((expense: any) => (
+                <Card key={expense.id} variant="outlined" sx={{ borderRadius: 2 }}>
+                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Box>
+                        <Typography variant="subtitle2" fontWeight={700}>
+                          {expense.category || 'Uncategorized'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(expense.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Typography variant="subtitle1" fontWeight={700} color="error.main" sx={{ mr: 1 }}>
+                          ₹{expense.amount.toLocaleString('en-IN')}
+                        </Typography>
+                        <IconButton size="small" onClick={(e) => { setSelectedExpense(expense); setMenuAnchor(e.currentTarget); }}>
+                          <MoreVert fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Chip
+                        label={expense.expenseNature === 'fixed' ? 'Fixed' : 'Dynamic'}
+                        size="small"
+                        sx={{
+                          bgcolor: expense.expenseNature === 'fixed' ? '#ede9fe' : '#fef3c7',
+                          color: expense.expenseNature === 'fixed' ? '#8b5cf6' : '#b45309',
+                          fontSize: '0.7rem',
+                          height: 20
+                        }}
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {expense.note || '—'}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
             </Box>
           ) : (
             <TableContainer component={Paper} elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>
@@ -246,6 +307,23 @@ export default function ExpensesPage() {
           )}
         </Container>
       </Box>
+
+      {isMobile && (
+        <Fab
+          color="error"
+          aria-label="add"
+          onClick={() => { setEditingExpense(null); setFormOpen(true); }}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            zIndex: 1000,
+            boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          <Add />
+        </Fab>
+      )}
 
       <ExpenseFormFull
         open={formOpen}

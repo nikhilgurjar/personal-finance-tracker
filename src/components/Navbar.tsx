@@ -15,6 +15,9 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
+  BottomNavigation,
+  BottomNavigationAction,
+  Paper,
 } from '@mui/material';
 import {
   AccountBalance,
@@ -32,6 +35,7 @@ import {
   Savings,
   SavingsOutlined,
   History,
+  People,
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { useAuthContext } from './AuthProvider';
@@ -39,6 +43,43 @@ import { logout } from '@/lib/auth';
 import { useState } from 'react';
 import { NavigationDrawer } from './NavigationDrawer';
 import { usePathname } from 'next/navigation';
+
+const navigationGroups = [
+  {
+    subheader: 'Core',
+    items: [
+      { title: 'Dashboard', path: '/dashboard', icon: <Dashboard /> },
+      { title: 'Accounts', path: '/accounts', icon: <AccountBalance /> },
+      { title: 'History', path: '/history', icon: <History /> },
+    ]
+  },
+  {
+    subheader: 'Money In/Out',
+    items: [
+      { title: 'Expenses', path: '/expenses', icon: <TrendingDown /> },
+      { title: 'Incomes', path: '/incomes', icon: <AccountBalanceWallet /> },
+      { title: 'Loans', path: '/loans', icon: <Handshake /> },
+      { title: 'People Ledger', path: '/people', icon: <People /> },
+    ]
+  },
+  {
+    subheader: 'Planning',
+    items: [
+      { title: 'Budgets', path: '/budgets', icon: <SavingsOutlined /> },
+      { title: 'Savings', path: '/savings', icon: <Savings /> },
+      { title: 'Goals', path: '/goals', icon: <Flag /> },
+      { title: 'Schedules', path: '/schedules', icon: <Schedule /> },
+    ]
+  },
+  {
+    subheader: 'Tracking & Insights',
+    items: [
+      { title: 'Analytics', path: '/analytics', icon: <AnalyticsIcon /> },
+      { title: 'AI Insights', path: '/ai', icon: <AutoAwesome /> },
+      { title: 'Forecast', path: '/forecast', icon: <AutoGraph /> },
+    ]
+  }
+];
 
 export function Navbar() {
   const { user } = useAuthContext();
@@ -72,21 +113,6 @@ export function Navbar() {
   if (!user) {
     return null;
   }
-
-  const navigationItems = [
-    { label: 'Dashboard', href: '/dashboard', icon: <Dashboard /> },
-    { label: 'Expenses', href: '/expenses', icon: <TrendingDown /> },
-    { label: 'Incomes', href: '/incomes', icon: <AccountBalanceWallet /> },
-    { label: 'AI Insights', href: '/ai', icon: <AutoAwesome /> },
-    { label: 'Forecast', href: '/forecast', icon: <AutoGraph /> },
-    { label: 'Budgets', href: '/budgets', icon: <SavingsOutlined /> },
-    { label: 'Savings', href: '/savings', icon: <Savings /> },
-    { label: 'Loans', href: '/loans', icon: <Handshake /> },
-    { label: 'Accounts', href: '/accounts', icon: <AccountBalance /> },
-    { label: 'Goals', href: '/goals', icon: <Flag /> },
-    { label: 'Schedules', href: '/schedules', icon: <Schedule /> },
-    { label: 'History', href: '/history', icon: <History /> },
-  ];
 
   if (isMobile) {
     return (
@@ -122,6 +148,45 @@ export function Navbar() {
           open={drawerOpen} 
           onClose={() => setDrawerOpen(false)} 
         />
+
+        {/* Bottom Navigation on Mobile */}
+        <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1100, borderTop: 1, borderColor: 'divider' }} elevation={3}>
+          <BottomNavigation
+            value={pathname === '/dashboard' ? 0 : pathname === '/expenses' ? 1 : pathname === '/incomes' ? 2 : pathname === '/ai' ? 3 : -1}
+            showLabels
+            sx={{ height: 60 }}
+          >
+            <BottomNavigationAction
+              label="Dashboard"
+              icon={<Dashboard />}
+              component={Link}
+              href="/dashboard"
+            />
+            <BottomNavigationAction
+              label="Expenses"
+              icon={<TrendingDown />}
+              component={Link}
+              href="/expenses"
+            />
+            <BottomNavigationAction
+              label="Incomes"
+              icon={<AccountBalanceWallet />}
+              component={Link}
+              href="/incomes"
+            />
+            <BottomNavigationAction
+              label="AI Insights"
+              icon={<AutoAwesome />}
+              component={Link}
+              href="/ai"
+            />
+            <BottomNavigationAction
+              label="More"
+              icon={<MenuIcon />}
+              onClick={toggleDrawer}
+            />
+          </BottomNavigation>
+        </Paper>
 
         <Menu
           anchorEl={anchorEl}
@@ -175,40 +240,52 @@ export function Navbar() {
       </Box>
 
       {/* Navigation */}
-      <Box sx={{ flex: 1, py: 2 }}>
-        <List sx={{ px: 2 }}>
-          {navigationItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <ListItem key={item.href} disablePadding sx={{ mb: 0.5 }}>
-                <ListItemButton
-                  component={Link}
-                  href={item.href}
-                  sx={{
-                    borderRadius: 2,
-                    py: 1.5,
-                    px: 2,
-                    backgroundColor: isActive ? 'primary.lighter' : 'transparent',
-                    color: isActive ? 'primary.main' : 'text.primary',
-                    '&:hover': {
-                      backgroundColor: isActive ? 'primary.lighter' : 'grey.100',
-                    },
-                    '& .MuiListItemIcon-root': {
-                      color: isActive ? 'primary.main' : 'text.secondary',
-                      minWidth: 40,
-                    },
-                    '& .MuiListItemText-primary': {
-                      fontWeight: isActive ? 600 : 500,
-                    },
-                  }}
-                >
-                  <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.label} />
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
-        </List>
+      <Box sx={{ flex: 1, py: 2, overflowY: 'auto' }}>
+        {navigationGroups.map((group) => (
+          <Box key={group.subheader} sx={{ mb: 2 }}>
+            <Typography
+              variant="caption"
+              fontWeight={700}
+              sx={{ px: 4, py: 0.5, display: 'block', color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}
+            >
+              {group.subheader}
+            </Typography>
+            <List sx={{ px: 2, py: 0.5 }}>
+              {group.items.map((item) => {
+                const isActive = pathname === item.path;
+                return (
+                  <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      component={Link}
+                      href={item.path}
+                      sx={{
+                        borderRadius: 2,
+                        py: 0.75,
+                        px: 2,
+                        backgroundColor: isActive ? 'primary.lighter' : 'transparent',
+                        color: isActive ? 'primary.main' : 'text.primary',
+                        '&:hover': {
+                          backgroundColor: isActive ? 'primary.lighter' : 'grey.100',
+                        },
+                        '& .MuiListItemIcon-root': {
+                          color: isActive ? 'primary.main' : 'text.secondary',
+                          minWidth: 36,
+                        },
+                        '& .MuiListItemText-primary': {
+                          fontWeight: isActive ? 600 : 500,
+                          fontSize: '0.85rem',
+                        },
+                      }}
+                    >
+                      <ListItemIcon>{item.icon}</ListItemIcon>
+                      <ListItemText primary={item.title} />
+                    </ListItemButton>
+                  </ListItem>
+                );
+              })}
+            </List>
+          </Box>
+        ))}
       </Box>
 
       {/* User Profile */}

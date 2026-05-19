@@ -41,23 +41,42 @@ interface NavigationDrawerProps {
   onClose: () => void;
 }
 
-const navigationItems = [
-  { title: 'Dashboard', path: '/dashboard', icon: <Dashboard /> },
-  { title: 'Expenses', path: '/expenses', icon: <TrendingDown /> },
-  { title: 'Incomes', path: '/incomes', icon: <AccountBalanceWallet /> },
-  { title: 'Analytics', path: '/analytics', icon: <AnalyticsIcon /> },
-  { title: 'AI Insights', path: '/ai', icon: <AutoAwesome /> },
-  { title: 'Forecast', path: '/forecast', icon: <AutoGraph /> },
-  { title: 'Budgets', path: '/budgets', icon: <SavingsOutlined /> },
-  { title: 'Savings', path: '/savings', icon: <Savings /> },
-  { title: 'Loans', path: '/loans', icon: <Handshake /> },
-  { title: 'People Ledger', path: '/people', icon: <People /> },
-  { title: 'Accounts', path: '/accounts', icon: <AccountBalance /> },
-  { title: 'Goals', path: '/goals', icon: <Flag /> },
-  { title: 'Schedules', path: '/schedules', icon: <Schedule /> },
-  { title: 'History', path: '/history', icon: <History /> },
+const navigationGroups = [
+  {
+    subheader: 'Core',
+    items: [
+      { title: 'Dashboard', path: '/dashboard', icon: <Dashboard /> },
+      { title: 'Accounts', path: '/accounts', icon: <AccountBalance /> },
+      { title: 'History', path: '/history', icon: <History /> },
+    ]
+  },
+  {
+    subheader: 'Money In/Out',
+    items: [
+      { title: 'Expenses', path: '/expenses', icon: <TrendingDown /> },
+      { title: 'Incomes', path: '/incomes', icon: <AccountBalanceWallet /> },
+      { title: 'Loans', path: '/loans', icon: <Handshake /> },
+      { title: 'People Ledger', path: '/people', icon: <People /> },
+    ]
+  },
+  {
+    subheader: 'Planning',
+    items: [
+      { title: 'Budgets', path: '/budgets', icon: <SavingsOutlined /> },
+      { title: 'Savings', path: '/savings', icon: <Savings /> },
+      { title: 'Goals', path: '/goals', icon: <Flag /> },
+      { title: 'Schedules', path: '/schedules', icon: <Schedule /> },
+    ]
+  },
+  {
+    subheader: 'Tracking & Insights',
+    items: [
+      { title: 'Analytics', path: '/analytics', icon: <AnalyticsIcon /> },
+      { title: 'AI Insights', path: '/ai', icon: <AutoAwesome /> },
+      { title: 'Forecast', path: '/forecast', icon: <AutoGraph /> },
+    ]
+  }
 ];
-
 
 export function NavigationDrawer({ open, onClose }: NavigationDrawerProps) {
   const theme = useTheme();
@@ -89,51 +108,63 @@ export function NavigationDrawer({ open, onClose }: NavigationDrawerProps) {
       </Box>
 
       {/* Navigation Items */}
-      <List sx={{ px: 1, py: 2 }}>
-        {navigationItems.map((item) => {
-          const isActive = pathname === item.path;
-          return (
-            <ListItem key={item.title} disablePadding>
-              <ListItemButton
-                component={Link}
-                href={item.path}
-                onClick={onClose}
-                selected={isActive}
-                sx={{
-                  borderRadius: 2,
-                  mx: 1,
-                  mb: 0.5,
-                  '&.Mui-selected': {
-                    backgroundColor: theme.palette.primary.main,
-                    color: 'white',
-                    '&:hover': {
-                      backgroundColor: theme.palette.primary.dark,
-                    },
-                    '& .MuiListItemIcon-root': {
-                      color: 'white',
-                    },
-                  },
-                }}
-              >
-                <ListItemIcon
-                  sx={{
-                    minWidth: 40,
-                    color: isActive ? 'white' : theme.palette.text.secondary,
-                  }}
-                >
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.title}
-                  primaryTypographyProps={{
-                    fontWeight: isActive ? 600 : 500,
-                    fontSize: '0.875rem',
-                  }}
-                />
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
+      <List sx={{ px: 1, py: 1 }}>
+        {navigationGroups.map((group) => (
+          <Box key={group.subheader} sx={{ mb: 1.5 }}>
+            <Typography
+              variant="caption"
+              fontWeight={700}
+              sx={{ px: 3, py: 0.5, display: 'block', color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}
+            >
+              {group.subheader}
+            </Typography>
+            {group.items.map((item) => {
+              const isActive = pathname === item.path;
+              return (
+                <ListItem key={item.title} disablePadding>
+                  <ListItemButton
+                    component={Link}
+                    href={item.path}
+                    onClick={onClose}
+                    selected={isActive}
+                    sx={{
+                      borderRadius: 2,
+                      mx: 1,
+                      mb: 0.5,
+                      py: 0.5,
+                      '&.Mui-selected': {
+                        backgroundColor: theme.palette.primary.main,
+                        color: 'white',
+                        '&:hover': {
+                          backgroundColor: theme.palette.primary.dark,
+                        },
+                        '& .MuiListItemIcon-root': {
+                          color: 'white',
+                        },
+                      },
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 36,
+                        color: isActive ? 'white' : theme.palette.text.secondary,
+                      }}
+                    >
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.title}
+                      primaryTypographyProps={{
+                        fontWeight: isActive ? 600 : 500,
+                        fontSize: '0.85rem',
+                      }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })}
+          </Box>
+        ))}
       </List>
 
       <Divider sx={{ mx: 2 }} />

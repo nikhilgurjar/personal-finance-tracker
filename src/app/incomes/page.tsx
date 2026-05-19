@@ -12,9 +12,10 @@ import {
   IconButton, Menu, MenuItem, Alert, Skeleton, Tabs, Tab,
   TextField, InputAdornment, Snackbar, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, FormControl, InputLabel, Select,
+  useTheme, useMediaQuery, Fab,
 } from '@mui/material';
 import { Add, MoreVert, Edit, Delete, TrendingUp, Search } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 async function apiFetch(path: string, user: any, opts: RequestInit = {}) {
   const token = await getIdToken(user);
@@ -31,6 +32,16 @@ const SOURCE_LABELS: Record<string, string> = {
   other: '📦 Other',
 };
 
+const SOURCE_LABELS_SHORT: Record<string, string> = {
+  salary: '💼 Sal',
+  freelance: '💻 Free',
+  from_person: '🤝 Pers',
+  business: '🏪 Biz',
+  rental: '🏠 Rent',
+  investment: '📈 Inv',
+  other: '📦 Oth',
+};
+
 const SOURCE_COLORS: Record<string, { bg: string; color: string }> = {
   salary: { bg: '#dbeafe', color: '#1d4ed8' },
   freelance: { bg: '#dcfce7', color: '#166534' },
@@ -44,7 +55,10 @@ const SOURCE_COLORS: Record<string, { bg: string; color: string }> = {
 export default function IncomesPage() {
   const { user, loading } = useAuthContext();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
@@ -56,6 +70,20 @@ export default function IncomesPage() {
   const [toast, setToast] = useState('');
 
   useEffect(() => { if (!loading && !user) router.push('/'); }, [loading, user, router]);
+
+  const prefill = searchParams.get('prefill');
+  useEffect(() => {
+    if (prefill) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(prefill));
+        setEditingIncome(parsed);
+        setFormOpen(true);
+        router.replace('/incomes');
+      } catch (err) {
+        console.error('Failed to parse prefill:', err);
+      }
+    }
+  }, [prefill, router]);
 
   const { data: incomes = [], isLoading } = useQuery({
     queryKey: ['incomes', user?.uid],
@@ -136,9 +164,11 @@ export default function IncomesPage() {
               <Typography variant="h4" fontWeight={800}>Incomes</Typography>
               <Typography variant="body2" color="text.secondary">Track all your income sources</Typography>
             </Box>
-            <Button variant="contained" color="success" startIcon={<Add />} onClick={() => { setEditingIncome(null); setFormOpen(true); }}>
-              Add Income
-            </Button>
+            {!isMobile && (
+              <Button variant="contained" color="success" startIcon={<Add />} onClick={() => { setEditingIncome(null); setFormOpen(true); }}>
+                Add Income
+              </Button>
+            )}
           </Box>
 
           {/* Total + breakdown cards */}
@@ -156,7 +186,7 @@ export default function IncomesPage() {
             {Object.entries(totalBySource).slice(0, 2).map(([src, amount]) => {
               const cfg = SOURCE_COLORS[src] || SOURCE_COLORS.other;
               return (
-                <Grid item xs={12} sm={4} key={src}>
+                <Grid item xs={6} sm={4} key={src}>
                   <Card sx={{ borderTop: 4, borderTopColor: cfg.color, background: cfg.bg }}>
                     <CardContent>
                       <Typography variant="caption" color="text.secondary">{SOURCE_LABELS[src] || src}</Typography>
@@ -187,7 +217,7 @@ export default function IncomesPage() {
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }} variant="scrollable" scrollButtons="auto">
             <Tab label="All" value="all" />
             {Object.entries(SOURCE_LABELS).map(([val, label]) => (
-              <Tab key={val} label={label} value={val} />
+              <Tab key={val} label={isMobile ? (SOURCE_LABELS_SHORT[val] || label) : label} value={val} />
             ))}
           </Tabs>
 
@@ -202,6 +232,51 @@ export default function IncomesPage() {
               <Button variant="contained" color="success" startIcon={<Add />} sx={{ mt: 2 }} onClick={() => setFormOpen(true)}>
                 Add First Income
               </Button>
+            </Box>
+          ) : isMobile ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {filtered.map((income: any) => {
+                const cfg = SOURCE_COLORS[income.sourceType] || SOURCE_COLORS.other;
+                return (
+                  <Card key={income.id} variant="outlined" sx={{ borderRadius: 2 }}>
+                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight={700}>
+                            {income.sourceName || 'Unknown'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(income.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Typography variant="subtitle1" fontWeight={700} color="success.dark" sx={{ mr: 1 }}>
+                            +₹{income.amount.toLocaleString('en-IN')}
+                          </Typography>
+                          <IconButton size="small" onClick={(e) => { setSelectedIncome(income); setMenuAnchor(e.currentTarget); }}>
+                            <MoreVert fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Chip
+                          label={SOURCE_LABELS[income.sourceType] || income.sourceType}
+                          size="small"
+                          sx={{
+                            bgcolor: cfg.bg,
+                            color: cfg.color,
+                            fontSize: '0.7rem',
+                            height: 20
+                          }}
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {income.note || '—'}
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </Box>
           ) : (
             <TableContainer component={Paper} elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>
@@ -260,6 +335,27 @@ export default function IncomesPage() {
           )}
         </Container>
       </Box>
+
+      {isMobile && (
+        <Fab
+          color="success"
+          aria-label="add"
+          onClick={() => { setEditingIncome(null); setFormOpen(true); }}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            zIndex: 1000,
+            boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)',
+            bgcolor: '#10b981',
+            '&:hover': {
+              bgcolor: '#059669',
+            }
+          }}
+        >
+          <Add sx={{ color: 'white' }} />
+        </Fab>
+      )}
 
       <IncomeFormFull
         open={formOpen}
