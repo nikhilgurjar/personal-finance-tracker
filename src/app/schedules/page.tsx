@@ -1,839 +1,481 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuthContext } from '@/components/AuthProvider';
-import { ResponsiveLayout } from '@/components/ResponsiveLayout';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getIdToken } from '@/lib/auth';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
+import AppLayout from '@/components/layout/AppLayout';
+import PageHeader from '@/components/layout/PageHeader';
+import { fetcher } from '@/lib/swr';
+import { formatCurrency } from '@/lib/utils/currency';
+import { formatIndianDate } from '@/lib/utils/date';
+import { scheduleLabel } from '@/lib/utils/schedule';
 import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  Card,
-  CardContent,
-  Grid,
-  Chip,
-  IconButton,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  CircularProgress,
-  TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Switch,
-  FormControlLabel,
-  FormControl,
-  InputLabel,
-  Select,
-  SelectChangeEvent,
-  Snackbar,
-} from '@mui/material';
-import { 
-  MoreVert, Add, Edit, Delete, Schedule, PlayArrow, Pause,
-  Savings, ArrowUpward, ArrowDownward, SwapHoriz, RemoveRedEye,
-} from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Schedule as ScheduleType, Account } from '@/lib/types';
-import { RRule } from 'rrule';
+  Plus,
+  Trash2,
+  Calendar,
+  X,
+  Play,
+  Pause,
+  AlertCircle,
+  TrendingDown,
+  TrendingUp,
+  RefreshCw,
+  Clock,
+  ArrowRight,
+} from 'lucide-react';
 
-import { ExpenseForm } from '@/components/forms/ExpenseForm';
-import { IncomeForm } from '@/components/forms/IncomeForm';
-import { TransferForm } from '@/components/forms/TransferForm';
-import { SavingsForm } from '@/components/forms/SavingsForm';
-const formatRRule = (rule: string) => {
-  try {
-    const rrule = RRule.fromString(rule);
-    return rrule.toText();
-  } catch (e) {
-    return 'Invalid frequency';
-  }
-};
+const TRANSACTION_TYPES = ['expense', 'income', 'transfer', 'savings'];
 
-const getNextRunDate = (nextRunAt: number) => {
-  const date = new Date(nextRunAt);
-  const now = new Date();
-  return {
-    date,
-    isOverdue: date < now
-  };
-};
-
-type ScheduleTransactionType = 'expense' | 'income' | 'transfer' | 'savings';
-
-function isScheduleTransactionType(type: string): type is ScheduleTransactionType {
-  return type === 'expense' || type === 'income' || type === 'transfer' || type === 'savings';
-}
+const FREQ_OPTIONS = [
+  { value: 'FREQ=DAILY', label: 'Daily' },
+  { value: 'FREQ=WEEKLY;BYDAY=MO', label: 'Weekly on Monday' },
+  { value: 'FREQ=MONTHLY;BYMONTHDAY=5', label: 'Monthly on the 5th' },
+  { value: 'FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=1', label: 'Annually on April 1st' },
+];
 
 export default function SchedulesPage() {
-  // Map of transaction types to their forms
-  const transactionForms = {
-    expense: ExpenseForm,
-    income: IncomeForm,
-    transfer: TransferForm,
-    savings: SavingsForm,
-  } as const;
-  const { user } = useAuthContext();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [selectedSchedule, setSelectedSchedule] = useState<ScheduleType | null>(null);
-  const [transactionType, setTransactionType] = useState<keyof typeof transactionForms>('expense');
   const [showForm, setShowForm] = useState(false);
-  const [frequency, setFrequency] = useState('FREQ=MONTHLY');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loadingAction, setLoadingAction] = useState(false);
+
+  // Form states
   const [scheduleName, setScheduleName] = useState('');
-  const [formError, setFormError] = useState('');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [scheduleToDelete, setScheduleToDelete] = useState<ScheduleType | null>(null);
-  const [automationToast, setAutomationToast] = useState('');
+  const [frequency, setFrequency] = useState('FREQ=MONTHLY;BYMONTHDAY=5');
+  const [txType, setTxType] = useState<'expense' | 'income' | 'transfer' | 'savings'>('expense');
+  const [amount, setAmount] = useState('');
+  const [nextRun, setNextRun] = useState(new Date().toISOString().split('T')[0]);
+  const [fromAccountId, setFromAccountId] = useState('');
+  const [toAccountId, setToAccountId] = useState('');
+  const [category, setCategory] = useState('');
+  const [note, setNote] = useState('');
 
-  const TransactionForm = transactionForms[transactionType];
+  // SWR queries
+  const { data: schedules = [], mutate: mutateSchedules, error } = useSWR('/api/schedules', fetcher);
+  const { data: accounts = [] } = useSWR('/api/accounts', fetcher);
+  const { data: suggestions = [], mutate: mutateSuggestions } = useSWR('/api/schedule-suggestions', fetcher);
 
-  const handleTransactionTypeChange = (event: SelectChangeEvent<string>) => {
-    setTransactionType(event.target.value as keyof typeof transactionForms);
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter((s: any) => {
+      const nameMatch = !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return nameMatch;
+    });
+  }, [schedules, searchTerm]);
+
+  const getAccountName = (id?: string) => {
+    if (!id) return '';
+    const acc = accounts.find((a: any) => a.id === id);
+    return acc ? acc.name : 'Unknown';
   };
 
-  // Add schedule mutation
-  const addScheduleMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const token = await getIdToken(user);
-      const response = await fetch('/api/schedules', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
+  const handleToggleStatus = async (s: any) => {
+    try {
+      const nextStatus = s.status === 'active' ? 'paused' : 'active';
+      const res = await fetch(`/api/schedules/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
       });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create schedule');
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+      if (!res.ok) throw new Error('Failed to toggle status');
+      mutateSchedules();
+    } catch (err: any) {
+      alert(err.message || 'Error updating schedule status');
+    }
+  };
+
+  const handleApproveSuggestion = async (suggestion: any) => {
+    try {
+      setLoadingAction(true);
+      const res = await fetch('/api/schedule-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduleId: suggestion.scheduleId, action: 'approve' }),
+      });
+      if (!res.ok) throw new Error('Failed to approve suggestion');
+      
+      mutateSuggestions();
+      mutateSchedules();
+    } catch (err: any) {
+      alert(err.message || 'Error executing schedule');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleSkipSuggestion = async (suggestion: any) => {
+    try {
+      setLoadingAction(true);
+      const res = await fetch('/api/schedule-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduleId: suggestion.scheduleId, action: 'skip' }),
+      });
+      if (!res.ok) throw new Error('Failed to skip suggestion');
+      mutateSuggestions();
+    } catch (err: any) {
+      alert(err.message || 'Error skipping schedule');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scheduleName.trim() || !amount || Number(amount) <= 0) {
+      return alert('Enter valid name and amount');
+    }
+
+    setLoadingAction(true);
+    try {
+      const payload: any = {
+        name: scheduleName.trim(),
+        rrule: frequency,
+        template: {
+          amount: Number(amount),
+          type: txType,
+          fromAccountId: txType === 'income' ? 'income' : fromAccountId,
+          toAccountId: txType === 'expense' ? 'expense' : toAccountId,
+          currency: 'INR',
+          note: note.trim() || undefined,
+          category: category || undefined,
+        },
+        nextRunAt: new Date(nextRun).getTime(),
+        status: 'active',
+        priority: 1,
+      };
+
+      const res = await fetch('/api/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Failed to create schedule');
+
+      mutateSchedules();
       setShowForm(false);
       setScheduleName('');
-      setFrequency('FREQ=MONTHLY');
-      setFormError('');
-    },
-    onError: (error: Error) => {
-      setFormError(error.message);
-    },
-  });
-
-  // Fetch schedules
-  const { 
-    data: schedules = [], 
-    isLoading: schedulesLoading,
-    error: schedulesError,
-  } = useQuery({
-    queryKey: ['schedules'],
-    queryFn: async () => {
-      const token = await getIdToken(user);
-      const response = await fetch('/api/schedules', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch schedules');
-      }
-      return response.json();
-    },
-    enabled: !!user
-  });
-
-  // Fetch accounts
-  const { 
-    data: accounts = [], 
-    isLoading: accountsLoading 
-  } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: async () => {
-      const token = await getIdToken(user);
-      const response = await fetch('/api/accounts', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch accounts');
-      }
-      return response.json();
-    },
-    enabled: !!user,
-  });
-
-  const {
-    data: scheduleSuggestions = [],
-    isLoading: suggestionsLoading,
-  } = useQuery({
-    queryKey: ['schedule-suggestions', user?.uid],
-    queryFn: async () => {
-      const token = await getIdToken(user);
-      const response = await fetch('/api/schedule-suggestions', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch schedule suggestions');
-      return response.json();
-    },
-    enabled: !!user,
-  });
-
-  const applySuggestionMutation = useMutation({
-    mutationFn: async ({ scheduleId, action }: { scheduleId: string; action: 'approve' | 'skip' }) => {
-      const token = await getIdToken(user);
-      const response = await fetch('/api/schedule-suggestions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ scheduleId, action }),
-      });
-      if (!response.ok) throw new Error('Failed to apply schedule suggestion');
-      return response.json();
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['schedule-suggestions'] });
-      queryClient.invalidateQueries({ queryKey: ['schedules'] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['incomes'] });
-      setAutomationToast(variables.action === 'skip' ? 'Schedule skipped' : 'Transaction created from schedule');
-    },
-  });
-
-  // Update schedule status mutation
-  const updateStatusMutation = useMutation<
-    ScheduleType, 
-    Error, 
-    ScheduleType
-  >({
-    mutationFn: async (schedule) => {
-      const token = await getIdToken(user);
-      const response = await fetch(`/api/schedules/${schedule.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: schedule.status === 'active' ? 'paused' : 'active',
-        }),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to update schedule status');
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['schedules'] });
-    },
-  });
-
-  // Filter schedules based on search term
-  const filteredSchedules = Array.isArray(schedules) ? schedules.filter((schedule: ScheduleType) => {
-    if (!searchTerm) return true;
-    
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      schedule.name?.toLowerCase().includes(searchLower) ||
-      schedule.template.note?.toLowerCase().includes(searchLower) ||
-      schedule.template.tags?.some(tag => tag.toLowerCase().includes(searchLower)) ||
-      schedule.template.type.toLowerCase() === searchLower
-    );
-  }) : [];
-
-  // Helper functions
-  const getAccountName = (accountId: string | undefined) => {
-    if (!accountId) return 'Unknown Account';
-    const account = accounts.find((a: Account) => a.id === accountId);
-    return account?.name || 'Unknown Account';
-  };
-
-  const handleToggleStatus = (schedule: ScheduleType) => {
-    updateStatusMutation.mutate(schedule);
-  };
-
-  const [viewingSchedule, setViewingSchedule] = useState<ScheduleType | null>(null);
-  const [editingSchedule, setEditingSchedule] = useState<ScheduleType | null>(null);
-
-  const handleViewSchedule = (schedule: ScheduleType) => {
-    setMenuAnchor(null);
-    setViewingSchedule(schedule);
-  };
-
-  const handleEditSchedule = (schedule: ScheduleType) => {
-    setMenuAnchor(null);
-    setEditingSchedule(schedule);
-    setShowForm(true);
-    if (isScheduleTransactionType(schedule.template.type)) {
-      setTransactionType(schedule.template.type);
+      setAmount('');
+      setNote('');
+      setCategory('');
+    } catch (err: any) {
+      alert(err.message || 'Error saving schedule');
+    } finally {
+      setLoadingAction(false);
     }
-    setScheduleName(schedule.name);
-    setFrequency(schedule.rrule);
-    
-    // Reset any existing form error
-    setFormError('');
   };
 
-  const handleDeleteSchedule = (schedule: ScheduleType) => {
-    setMenuAnchor(null);
-    setScheduleToDelete(schedule);
-    setConfirmOpen(true);
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this schedule?')) return;
+    try {
+      const res = await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Deletion failed');
+      mutateSchedules();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting schedule');
+    }
   };
-
-  // Delete schedule mutation
-  const deleteScheduleMutation = useMutation({
-    mutationFn: async (scheduleId: string) => {
-      const token = await getIdToken(user);
-      const response = await fetch(`/api/schedules/${scheduleId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to delete schedule');
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['schedules'] });
-    },
-  });
-
-  const frequencyOptions = [
-    { value: 'FREQ=DAILY', label: 'Daily' },
-    { value: 'FREQ=WEEKLY', label: 'Weekly' },
-    { value: 'FREQ=MONTHLY', label: 'Monthly' },
-    { value: 'FREQ=YEARLY', label: 'Yearly' },
-  ];
-
-  if (!user) return null;
 
   return (
-    <ResponsiveLayout>
-      <Container maxWidth="lg" sx={{ mt: 4, pb: 4 }}>
-        <Grid container spacing={3}>
-          {/* Header */}
-          <Grid item xs={12}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-              <Typography variant="h4">Schedules</Typography>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<Add />}
-                onClick={() => setShowForm(!showForm)}
-              >
-                {showForm ? 'Hide Form' : 'New Schedule'}
-              </Button>
-            </Box>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Paper elevation={1} sx={{ p: 3, mb: 1 }}>
-              <Typography variant="h6" fontWeight={700} gutterBottom>
-                Suggested Transactions
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Review due or upcoming schedules before creating transactions.
-              </Typography>
-              {suggestionsLoading ? (
-                <CircularProgress size={24} />
-              ) : scheduleSuggestions.length === 0 ? (
-                <Alert severity="success">No schedules are due in the next 7 days.</Alert>
-              ) : (
-                <Grid container spacing={2}>
-                  {scheduleSuggestions.map((suggestion: any) => (
-                    <Grid item xs={12} md={6} key={suggestion.id}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 1 }}>
-                            <Box>
-                              <Typography variant="subtitle1" fontWeight={700}>{suggestion.name}</Typography>
-                              <Typography variant="caption" color={suggestion.overdue ? 'error.main' : 'text.secondary'}>
-                                {suggestion.overdue ? 'Overdue: ' : 'Due: '}
-                                {new Date(suggestion.dueAt).toLocaleDateString('en-IN')}
-                              </Typography>
-                            </Box>
-                            <Chip label={suggestion.template.type} size="small" />
-                          </Box>
-                          <Typography variant="h6" fontWeight={800}>
-                            {suggestion.template.amount.toLocaleString('en-IN', { style: 'currency', currency: suggestion.template.currency || 'INR' })}
-                          </Typography>
-                          <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              onClick={() => applySuggestionMutation.mutate({ scheduleId: suggestion.scheduleId, action: 'approve' })}
-                              disabled={applySuggestionMutation.isPending}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={() => applySuggestionMutation.mutate({ scheduleId: suggestion.scheduleId, action: 'skip' })}
-                              disabled={applySuggestionMutation.isPending}
-                            >
-                              Skip
-                            </Button>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              )}
-            </Paper>
-          </Grid>
-
-          {/* Schedule Form */}
-          {showForm && (
-            <Grid item xs={12}>
-              <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-                <Grid container spacing={3}>
-                  {/* Transaction Type Selection */}
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth>
-                      <InputLabel>Transaction Type</InputLabel>
-                      <Select
-                        value={transactionType}
-                        onChange={handleTransactionTypeChange}
-                        label="Transaction Type"
-                      >
-                        {Object.keys(transactionForms).map((type) => (
-                          <MenuItem key={type} value={type}>
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  {/* Frequency Selection */}
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth>
-                      <InputLabel>Frequency</InputLabel>
-                      <Select
-                        value={frequency}
-                        onChange={(e) => setFrequency(e.target.value)}
-                        label="Frequency"
-                      >
-                        {frequencyOptions.map((option) => (
-                          <MenuItem key={option.value} value={option.value}>
-                            {option.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  {/* Schedule Name */}
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Schedule Name"
-                      placeholder="Enter a name for this scheduled transaction"
-                      required
-                      value={scheduleName}
-                      onChange={(e) => setScheduleName(e.target.value)}
-                      error={formError.includes('name')}
-                      helperText={formError.includes('name') ? formError : ''}
-                    />
-                  </Grid>
-
-                  {/* Error Display */}
-                  {formError && !formError.includes('name') && (
-                    <Grid item xs={12}>
-                      <Alert severity="error">{formError}</Alert>
-                    </Grid>
-                  )}
-
-                  {/* Transaction Form */}
-                  <Grid item xs={12}>
-                    <TransactionForm
-                      accounts={accounts}
-                      initialValues={editingSchedule ? {
-                        amount: editingSchedule.template.amount.toString(),
-                        date: new Date(editingSchedule.nextRunAt),
-                        note: editingSchedule.template.note || '',
-                        fromAccountId: editingSchedule.template.fromAccountId,
-                        toAccountId: editingSchedule.template.toAccountId,
-                        category: editingSchedule.template.category || '',
-                        tags: editingSchedule.template.tags || [],
-                      } : undefined}
-                      onSubmit={(data) => {
-                        if (!scheduleName.trim()) {
-                          setFormError('Schedule name is required');
-                          return;
-                        }
-
-                          // Validate and prepare account data based on transaction type
-                        let fromAccount: Account | undefined;
-                        let toAccount: Account | undefined;
-                        let fromAccountType: 'income' | 'expense' | 'savings';
-                        let toAccountType: 'income' | 'expense' | 'savings';
-
-                        switch(transactionType) {
-                          case 'income':
-                            // For income, we only need the target account
-                            if (!data.toAccountId) {
-                              setFormError('Please select the account to receive the income');
-                              return;
-                            }
-                            toAccount = accounts.find((a: Account) => a.id === data.toAccountId);
-                            if (!toAccount) {
-                              setFormError('Invalid target account selection');
-                              return;
-                            }
-                            fromAccountType = 'income';
-                            toAccountType = toAccount.type;
-                            break;
-
-                          case 'expense':
-                            // For expense, we need the source account
-                            if (!data.fromAccountId) {
-                              setFormError('Please select the account to pay from');
-                              return;
-                            }
-                            fromAccount = accounts.find((a: Account) => a.id === data.fromAccountId);
-                            if (!fromAccount) {
-                              setFormError('Invalid source account selection');
-                              return;
-                            }
-                            fromAccountType = fromAccount.type;
-                            toAccountType = 'expense';
-                            break;
-
-                          case 'transfer':
-                          case 'savings':
-                            // For transfers and savings, we need both accounts
-                            if (!data.fromAccountId || !data.toAccountId) {
-                              setFormError('Please select both source and destination accounts');
-                              return;
-                            }
-                            fromAccount = accounts.find((a: Account) => a.id === data.fromAccountId);
-                            toAccount = accounts.find((a: Account) => a.id === data.toAccountId);
-                            if (!fromAccount || !toAccount) {
-                              setFormError('Invalid account selection');
-                              return;
-                            }
-                            fromAccountType = fromAccount.type;
-                            toAccountType = toAccount.type;
-                            // Validate savings transactions
-                            if (transactionType === 'savings' && toAccountType !== 'savings') {
-                              setFormError('Target account must be a savings account for savings transactions');
-                              return;
-                            }
-                            break;
-
-                          default:
-                            setFormError('Invalid transaction type');
-                            return;
-                        }
-
-                        // Convert date to timestamp for nextRunAt
-                        const nextRunAt = data.date instanceof Date 
-                          ? data.date.getTime() 
-                          : new Date(data.date).getTime();
-
-                        const scheduleData = {
-                          name: scheduleName,
-                          rrule: frequency,
-                          template: {
-                            amount: Number(data.amount),
-                            type: transactionType,
-                            fromAccountId: fromAccount?.id || 'income',
-                            toAccountId: toAccount?.id || 'expense',
-                            fromAccountType,
-                            toAccountType,
-                            currency: 'INR',
-                            note: data.note,
-                            category: data.category,
-                            tags: data.tags || [],
-                          },
-                          nextRunAt,
-                          status: 'active' as const,
-                          priority: 1,
-                        };                        addScheduleMutation.mutate(scheduleData);
-                      }}
-                    />
-                  </Grid>
-                </Grid>
-              </Paper>
-            </Grid>
-          )}
-
-          {/* Search and Filters */}
-          <Grid item xs={12}>
-            <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-              <TextField
-                fullWidth
-                label="Search Schedules"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by name, type, or tags..."
-              />
-            </Paper>
-          </Grid>
-
-          {/* Schedules List */}
-          <Grid item xs={12}>
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Frequency</TableCell>
-                    <TableCell>Next Run</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredSchedules.map((schedule: ScheduleType) => {
-                    const { date: nextRunDate, isOverdue } = getNextRunDate(schedule.nextRunAt);
-                    return (
-                      <TableRow key={schedule.id}>
-                        <TableCell>{schedule.name}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={schedule.template.type}
-                            color={
-                              schedule.template.type === 'expense' ? 'error' :
-                              schedule.template.type === 'income' ? 'success' :
-                              schedule.template.type === 'transfer' ? 'info' :
-                              schedule.template.type === 'savings' ? 'secondary' :
-                              'default'
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {typeof schedule.template.amount === 'number'
-                            ? schedule.template.amount.toLocaleString('en-US', {
-                                style: 'currency',
-                                currency: 'USD',
-                              })
-                            : schedule.template.amount}
-                        </TableCell>
-                        <TableCell>{formatRRule(schedule.rrule)}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={nextRunDate.toLocaleDateString()}
-                            color={isOverdue ? 'error' : 'default'}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <FormControlLabel
-                            control={
-                              <Switch
-                                checked={schedule.status === 'active'}
-                                onChange={() => handleToggleStatus(schedule)}
-                                color="primary"
-                              />
-                            }
-                            label={schedule.status === 'active' ? 'Active' : 'Paused'}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              setSelectedSchedule(schedule);
-                              setMenuAnchor(e.currentTarget);
-                            }}
-                          >
-                            <MoreVert />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Grid>
-        </Grid>
-
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={menuAnchor}
-          open={Boolean(menuAnchor)}
-          onClose={() => setMenuAnchor(null)}
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <PageHeader title="Recurring Payments & Bills" />
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all active:scale-[0.98] text-sm shrink-0"
         >
-          <MenuItem onClick={() => selectedSchedule && handleViewSchedule(selectedSchedule)}>
-            <RemoveRedEye sx={{ mr: 1 }} /> View Details
-          </MenuItem>
-          <MenuItem onClick={() => selectedSchedule && handleEditSchedule(selectedSchedule)}>
-            <Edit sx={{ mr: 1 }} /> Edit
-          </MenuItem>
-          <MenuItem onClick={() => selectedSchedule && handleDeleteSchedule(selectedSchedule)}>
-            <Delete sx={{ mr: 1 }} /> Delete
-          </MenuItem>
-        </Menu>
+          <Plus className="w-4.5 h-4.5" /> New Schedule
+        </button>
+      </div>
 
-        {/* View Schedule Dialog */}
-        <Dialog 
-          open={!!viewingSchedule} 
-          onClose={() => setViewingSchedule(null)}
-          maxWidth="md"
-          fullWidth
-        >
-          {viewingSchedule && (
-            <>
-              <DialogTitle>
-                Schedule Details
-              </DialogTitle>
-              <DialogContent>
-                <Grid container spacing={3} sx={{ mt: 1 }}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Name
-                    </Typography>
-                    <Typography variant="body1">
-                      {viewingSchedule.name}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Type
-                    </Typography>
-                    <Chip
-                      label={viewingSchedule.template.type}
-                      color={
-                        viewingSchedule.template.type === 'expense' ? 'error' :
-                        viewingSchedule.template.type === 'income' ? 'success' :
-                        viewingSchedule.template.type === 'transfer' ? 'info' :
-                        viewingSchedule.template.type === 'savings' ? 'secondary' :
-                        'default'
-                      }
-                      size="small"
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Amount
-                    </Typography>
-                    <Typography variant="body1">
-                      {viewingSchedule.template.amount.toLocaleString('en-IN', {
-                        style: 'currency',
-                        currency: viewingSchedule.template.currency || 'INR'
-                      })}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Frequency
-                    </Typography>
-                    <Typography variant="body1">
-                      {formatRRule(viewingSchedule.rrule)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      From Account
-                    </Typography>
-                    <Typography variant="body1">
-                      {viewingSchedule.template.type === 'income' ? 'Income' : getAccountName(viewingSchedule.template.fromAccountId)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      To Account
-                    </Typography>
-                    <Typography variant="body1">
-                      {viewingSchedule.template.type === 'expense' ? 'Expense' : getAccountName(viewingSchedule.template.toAccountId)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Next Run
-                    </Typography>
-                    <Typography variant="body1">
-                      {new Date(viewingSchedule.nextRunAt).toLocaleDateString('en-IN', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </Typography>
-                  </Grid>
-                  {viewingSchedule.template.note && (
-                    <Grid item xs={12}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Note
-                      </Typography>
-                      <Typography variant="body1">
-                        {viewingSchedule.template.note}
-                      </Typography>
-                    </Grid>
-                  )}
-                </Grid>
-              </DialogContent>
-              <DialogActions>
-                <Button onClick={() => setViewingSchedule(null)}>Close</Button>
-                <Button 
-                  variant="contained" 
-                  onClick={() => {
-                    handleEditSchedule(viewingSchedule);
-                    setViewingSchedule(null);
-                  }}
+      {/* Suggested due bills panel */}
+      <section className="bg-card border border-border rounded-xl p-5 mb-6">
+        <h3 className="font-syne text-sm font-bold text-white mb-2 flex items-center gap-2">
+          <Clock className="w-4.5 h-4.5 text-cyan animate-pulse" /> Suggested Transactions
+        </h3>
+        <p className="text-text-muted text-xs mb-4">
+          Review upcoming recurring rules and approve them to record money flows instantly.
+        </p>
+
+        {suggestions.length === 0 ? (
+          <div className="text-xs text-green bg-green/5 border border-green/10 p-3 rounded-lg flex items-center gap-2">
+            ✅ No schedules are due for approval in the next 7 days.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {suggestions.map((suggestion: any) => {
+              const isOverdue = new Date(suggestion.dueAt) < new Date();
+              return (
+                <div
+                  key={suggestion.id}
+                  className="p-4 bg-[#0a0f1c] border border-border rounded-lg flex flex-col justify-between"
                 >
-                  Edit
-                </Button>
-              </DialogActions>
-            </>
-          )}
-        </Dialog>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h4 className="font-semibold text-white text-xs leading-none mb-1">
+                        {suggestion.name}
+                      </h4>
+                      <span className={`text-[9px] font-bold font-mono ${
+                        isOverdue ? 'text-red' : 'text-text-muted'
+                      }`}>
+                        {isOverdue ? 'Overdue: ' : 'Due: '} {formatIndianDate(suggestion.dueAt)}
+                      </span>
+                    </div>
+                    <span className="text-[10px] bg-white/5 border border-border px-2 py-0.5 rounded uppercase font-bold text-text-muted">
+                      {suggestion.template.type}
+                    </span>
+                  </div>
 
-        {/* Loading State */}
-        {(schedulesLoading || accountsLoading) && (
-          <Box display="flex" justifyContent="center" mt={4}>
-            <CircularProgress />
-          </Box>
+                  <div className="font-syne text-md font-bold text-cyan mb-3">
+                    {formatCurrency(suggestion.template.amount)}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApproveSuggestion(suggestion)}
+                      disabled={loadingAction}
+                      className="text-[10px] bg-cyan hover:bg-cyan/95 text-bg font-bold py-1.5 px-3 rounded transition-all active:scale-[0.98]"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleSkipSuggestion(suggestion)}
+                      disabled={loadingAction}
+                      className="text-[10px] border border-border hover:bg-white/5 text-text-muted hover:text-text font-bold py-1.5 px-3 rounded transition-all"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
+      </section>
 
-        {/* Error State */}
-        {schedulesError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {schedulesError.message}
-          </Alert>
+      {/* New Schedule Editor */}
+      {showForm && (
+        <div className="bg-card border border-border rounded-xl p-5 mb-6 animate-in slide-in-from-top duration-200">
+          <h3 className="font-syne text-md font-bold text-white mb-4">New Recurring Schedule</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Schedule Name</label>
+                <input
+                  type="text"
+                  required
+                  value={scheduleName}
+                  onChange={(e) => setScheduleName(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="e.g. Broadband Bill"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Frequency</label>
+                <select
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                >
+                  {FREQ_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">First Execution Date</label>
+                <input
+                  type="date"
+                  required
+                  value={nextRun}
+                  onChange={(e) => setNextRun(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Amount (INR)</label>
+                <input
+                  type="number"
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Flow Type</label>
+                <select
+                  value={txType}
+                  onChange={(e) => setTxType(e.target.value as any)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan capitalize"
+                >
+                  {TRANSACTION_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              {txType !== 'income' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Source Account</label>
+                  <select
+                    required
+                    value={fromAccountId}
+                    onChange={(e) => setFromAccountId(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  >
+                    <option value="">Select Account</option>
+                    {accounts.map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {txType !== 'expense' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Destination Account</label>
+                  <select
+                    required
+                    value={toAccountId}
+                    onChange={(e) => setToAccountId(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  >
+                    <option value="">Select Account</option>
+                    {accounts.map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Category</label>
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="e.g. Bills"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Notes</label>
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="Memo..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loadingAction}
+                className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2 px-5 rounded-lg text-sm transition-all"
+              >
+                {loadingAction ? 'Saving...' : 'Create Schedule'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Schedules list */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-12 px-5 py-3 border-b border-border bg-[#0a0f1c] text-[10px] font-bold text-text-dim uppercase tracking-wider text-left">
+          <div className="col-span-3">Schedule Name</div>
+          <div className="col-span-2">Type</div>
+          <div className="col-span-2">Amount</div>
+          <div className="col-span-2">Frequency</div>
+          <div className="col-span-2">Next Date</div>
+          <div className="col-span-1 text-right">Actions</div>
+        </div>
+
+        {filteredSchedules.length === 0 ? (
+          <div className="text-center py-12 text-text-muted text-sm">
+            No active schedules found. Configure one above!
+          </div>
+        ) : (
+          <div className="divide-y divide-border/60">
+            {filteredSchedules.map((s: any) => {
+              const isOverdue = new Date(s.nextRunAt) < new Date();
+              const label = scheduleLabel(s.rrule);
+              
+              return (
+                <div
+                  key={s.id}
+                  className="grid grid-cols-12 px-5 py-3 items-center text-xs text-text hover:bg-white/[0.01] transition-colors group"
+                >
+                  <div className="col-span-3 font-semibold text-white truncate pr-2">
+                    {s.name}
+                  </div>
+
+                  <div className="col-span-2">
+                    <span className={`inline-block px-2.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                      s.template.type === 'expense'
+                        ? 'bg-red/10 border-red/20 text-red'
+                        : 'bg-green/10 border-green/20 text-green'
+                    }`}>
+                      {s.template.type}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 font-mono font-bold text-white">
+                    {formatCurrency(s.template.amount)}
+                  </div>
+
+                  <div className="col-span-2 text-text-muted truncate pr-2">
+                    {label}
+                  </div>
+
+                  <div className="col-span-2 flex flex-col">
+                    <span className={`font-semibold ${isOverdue ? 'text-red' : 'text-text-muted'}`}>
+                      {formatIndianDate(s.nextRunAt)}
+                    </span>
+                    {isOverdue && <span className="text-[9px] text-red font-bold font-mono uppercase mt-0.5">Overdue</span>}
+                  </div>
+
+                  <div className="col-span-1 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => handleToggleStatus(s)}
+                      className={`p-1 rounded text-text-muted hover:text-text hover:bg-white/5 transition-all`}
+                      title={s.status === 'active' ? 'Pause Schedule' : 'Activate Schedule'}
+                    >
+                      {s.status === 'active' ? <Pause className="w-4 h-4 text-cyan" /> : <Play className="w-4 h-4 text-text-muted" />}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(s.id)}
+                      className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red p-1 rounded hover:bg-red/5 transition-all"
+                      title="Delete Schedule"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
-
-        <ConfirmDialog
-          open={confirmOpen}
-          title="Delete Schedule"
-          message={`Are you sure you want to delete this schedule?`}
-          onConfirm={() => {
-            if (scheduleToDelete) {
-              deleteScheduleMutation.mutate(scheduleToDelete.id);
-            }
-            setConfirmOpen(false);
-          }}
-          onCancel={() => setConfirmOpen(false)}
-          loading={deleteScheduleMutation.isPending}
-        />
-        <Snackbar open={!!automationToast} autoHideDuration={3000} onClose={() => setAutomationToast('')} message={automationToast} />
-      </Container>
-    </ResponsiveLayout>
+      </div>
+    </AppLayout>
   );
 }

@@ -1,689 +1,599 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuthContext } from '@/components/AuthProvider';
-import { ResponsiveLayout } from '@/components/ResponsiveLayout';
-import dayjs from 'dayjs';
-import { ExpenseForm } from '@/components/forms/ExpenseForm';
-import { IncomeForm } from '@/components/forms/IncomeForm';
-import { TransferForm } from '@/components/forms/TransferForm';
-import { SavingsForm } from '@/components/forms/SavingsForm';
-import { SalaryForm } from '@/components/forms/SalaryForm';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getIdToken } from '@/lib/auth';
+import { useState, useRef, useMemo } from 'react';
+import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import AppLayout from '@/components/layout/AppLayout';
+import PageHeader from '@/components/layout/PageHeader';
+import { fetcher } from '@/lib/swr';
+import { formatCurrency } from '@/lib/utils/currency';
+import { formatIndianDate } from '@/lib/utils/date';
 import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  IconButton,
-  Menu,
-  MenuItem,
-  Alert,
-  CircularProgress,
-  TextField,
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem as SelectMenuItem,
-} from '@mui/material';
-import { MoreVert, Add, Edit, Delete, AccountBalance } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Transaction, Account, TransactionType, AccountType } from '@/lib/types';
+  Plus,
+  Search,
+  Filter,
+  Trash2,
+  Calendar,
+  Wallet,
+  ArrowRight,
+  TrendingDown,
+  TrendingUp,
+  RefreshCw,
+} from 'lucide-react';
 
-async function fetchTransactions(user: any) {
-  try {
-    const token = await getIdToken(user);
-    if (!token) throw new Error('No authentication token available');
-    
-    const response = await fetch('/api/transactions?limit=100', {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store', // Disable caching to always get fresh data
-    });
-    
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to fetch transactions: ${error}`);
-    }
-    
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    console.error('Error fetching transactions:', error);
-    throw error;
-  }
-}
-
-async function fetchAccounts(user: any) {
-  const token = await getIdToken(user);
-  if (!token) throw new Error('No authentication token available');
-  
-  const response = await fetch('/api/accounts', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error('Failed to fetch accounts');
-  return response.json();
-}
-
-interface CreateTransactionData {
-  amount: string | number;
-  date: Date;
-  fromAccountId?: string;
-  toAccountId: string;
-  note?: string;
-  tags?: string[];
-  type: TransactionType;
-  currency: string;
-  toAccountType: AccountType;
-  fromAccountType?: AccountType;
-}
-
-async function createTransaction(data: CreateTransactionData, user: any) {
-  const token = await getIdToken(user);
-  if (!token) throw new Error('No authentication token available');
-  
-  // Convert amount to number if it's a string
-  const processedData = {
-    ...data,
-    amount: typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount
-  };
-  
-  const response = await fetch('/api/transactions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(processedData),
-  });
-  if (!response.ok) throw new Error('Failed to create transaction');
-  return response.json();
-}
-
-const transactionForms = {
-  expense: ExpenseForm,
-  income: IncomeForm,
-  transfer: TransferForm,
-  savings: SavingsForm,
-  salary: SalaryForm,
-};
+const TRANSACTION_TYPES = ['expense', 'income', 'transfer', 'savings', 'salary'];
+const PAYMENT_METHODS = ['upi', 'neft', 'imps', 'rtgs', 'cash', 'card', 'cheque'];
+const CATEGORIES = [
+  'Food & Dining',
+  'Rent & Home',
+  'Utilities',
+  'Shopping',
+  'Travel & Transport',
+  'Entertainment',
+  'Medical & Health',
+  'Education',
+  'Investment',
+  'Salary',
+  'Others',
+];
 
 export default function TransactionsPage() {
-  const { user, loading } = useAuthContext();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [filters, setFilters] = useState({
-    search: '',
-    account: '',
-    type: '',
-  });
-  const [transactionType, setTransactionType] = useState<keyof typeof transactionForms>('expense');
-  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState('');
+  const [loadingAction, setLoadingAction] = useState(false);
 
-  const { data: transactions = [], isLoading: transactionsLoading, error: transactionsError, refetch: refetchTransactions } = useQuery({
-    queryKey: ['transactions', user?.uid],
-    queryFn: () => fetchTransactions(user),
-    enabled: !!user,
-    staleTime: 0, // Always consider data stale
-    refetchOnWindowFocus: true, // Refetch when window regains focus
-    retry: 2, // Retry failed requests twice
-  });
+  // Form states (controlled React state)
+  const [txType, setTxType] = useState<'expense' | 'income' | 'transfer' | 'savings' | 'salary'>('expense');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [fromAccountId, setFromAccountId] = useState('');
+  const [toAccountId, setToAccountId] = useState('');
+  const [category, setCategory] = useState('');
+  const [note, setNote] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('upi');
+  const [upiRefId, setUpiRefId] = useState('');
+  
+  // Salary details
+  const [netTakeHome, setNetTakeHome] = useState('');
+  const [employeePf, setEmployeePf] = useState('');
 
-  const { data: accounts = [], isLoading: accountsLoading, refetch: refetchAccounts } = useQuery({
-    queryKey: ['accounts', user?.uid],
-    queryFn: () => fetchAccounts(user),
-    enabled: !!user,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-    retry: 2,
-  });
+  // Fetch accounts list
+  const { data: accounts = [], mutate: mutateAccounts } = useSWR('/api/accounts', fetcher);
 
-  const createMutation = useMutation({
-    mutationFn: (data: any) => createTransaction(data, user),
-    onSuccess: async () => {
-      // Invalidate and refetch both queries
-      await Promise.all([
-        refetchTransactions(),
-        refetchAccounts()
-      ]);
-      setFormOpen(false);
-      setShowForm(false);
+  // Infinite Scroll SWR setup for transactions
+  const {
+    data: pagesData,
+    size,
+    setSize,
+    mutate: mutateTransactions,
+    isValidating,
+  } = useSWRInfinite(
+    (pageIndex, previousPageData) => {
+      if (previousPageData && !previousPageData.nextCursor) return null;
+      const cursor = previousPageData ? previousPageData.nextCursor : '';
+      let url = `/api/transactions?limit=25&after=${cursor}`;
+      if (selectedTypeFilter) url += `&type=${selectedTypeFilter}`;
+      return url;
     },
-    onError: (error) => {
-      console.error('Transaction creation failed:', error);
-    },
+    fetcher,
+    { revalidateOnFocus: true }
+  );
+
+  // Flatten all transactions from all pages
+  const allTransactions = useMemo(() => {
+    if (!pagesData) return [];
+    return pagesData.flatMap((page) => page.data || []);
+  }, [pagesData]);
+
+  // Client-side search filtering
+  const filteredTransactions = useMemo(() => {
+    return allTransactions.filter((tx: any) => {
+      const matchesSearch =
+        !searchQuery ||
+        tx.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        tx.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        tx.upiRefId?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesSearch;
+    });
+  }, [allTransactions, searchQuery]);
+
+  // Virtualizer setup
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filteredTransactions.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
   });
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/');
-    }
-  }, [loading, user, router]);
+  const getAccountName = (id?: string) => {
+    if (!id) return '';
+    const acc = accounts.find((a: any) => a.id === id);
+    return acc ? acc.name : 'Unknown';
+  };
 
-  if (loading || !user) {
-    return null;
-  }
+  const handleAddTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!amount || Number(amount) <= 0) return alert('Enter valid amount');
 
-  const handleCreateTransaction = async (data: any) => {
+    setLoadingAction(true);
     try {
-      const transactionData = {
-        ...data,
-        type: transactionType,
-        currency: 'INR',
-        date: data.date instanceof Date ? data.date.getTime() : new Date(data.date).getTime(),
-        toAccountType: getAccountType(data.toAccountId),
-        fromAccountType: data.fromAccountId ? getAccountType(data.fromAccountId) : undefined,
-        userId: user.uid, // Add user ID to transaction data
+      const payload: any = {
+        type: txType,
+        amount: Number(amount),
+        date: new Date(date).getTime(),
+        note: note.trim(),
+        paymentMethod,
+      };
+
+      if (txType === 'expense') {
+        payload.fromAccountId = fromAccountId;
+        payload.category = category || 'Others';
+      } else if (txType === 'income') {
+        payload.toAccountId = toAccountId;
+        payload.category = category || 'Salary';
+      } else if (txType === 'salary') {
+        payload.toAccountId = toAccountId;
+        payload.category = 'Salary';
+        payload.salaryComponents = {
+          netTakeHome: Number(netTakeHome || amount),
+          employeePf: Number(employeePf || 0),
+          salaryMonth: date.substring(0, 7), // YYYY-MM
+        };
+      } else if (txType === 'transfer' || txType === 'savings') {
+        payload.fromAccountId = fromAccountId;
+        payload.toAccountId = toAccountId;
+        payload.category = txType === 'savings' ? 'Investment' : 'Transfer';
+      }
+
+      if (paymentMethod === 'upi' && upiRefId) {
+        payload.upiRefId = upiRefId.trim();
+      }
+
+      // Optimistic Update
+      const optimisticTx = {
+        ...payload,
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
       };
       
-      await createMutation.mutateAsync(transactionData);
-      // Form closing is handled in mutation's onSuccess
-    } catch (error) {
-      console.error('Failed to create transaction:', error);
-      // Keep form open if there's an error
-      throw error; // Propagate error to show in form
+      // Update local cache
+      await mutateTransactions(
+        (current: any) => {
+          if (!current) return current;
+          const firstPage = current[0] || { data: [] };
+          const updatedFirstPage = {
+            ...firstPage,
+            data: [optimisticTx, ...(firstPage.data || [])],
+          };
+          return [updatedFirstPage, ...current.slice(1)];
+        },
+        { revalidate: false }
+      );
+
+      const res = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Failed to save transaction');
+
+      // Trigger full SWR updates
+      mutateTransactions();
+      mutateAccounts();
+
+      // Reset form states
+      setAmount('');
+      setNote('');
+      setCategory('');
+      setUpiRefId('');
+      setNetTakeHome('');
+      setEmployeePf('');
+      setFormOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Error saving transaction');
+    } finally {
+      setLoadingAction(false);
     }
   };
 
-  const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setFormOpen(true);
-    setMenuAnchor(null);
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this transaction?')) return;
+
+    try {
+      const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Deletion failed');
+      mutateTransactions();
+      mutateAccounts();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting transaction');
+    }
   };
-
-  const handleDeleteTransaction = (transaction: Transaction) => {
-    // Implement delete functionality
-    console.log('Delete transaction:', transaction.id);
-    setMenuAnchor(null);
-  };
-
-  const filteredTransactions = transactions.filter((tx: Transaction) => {
-    const matchesSearch = !filters.search || 
-      tx.note?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      tx.tags?.some(tag => tag.toLowerCase().includes(filters.search.toLowerCase()));
-    
-    const matchesAccount = !filters.account || 
-      (tx.fromAccountId && tx.fromAccountId === filters.account) || 
-      tx.toAccountId === filters.account;
-    
-    return matchesSearch && matchesAccount;
-  });
-
-  const getAccountName = (accountId: string) => {
-    const account = accounts.find((acc: Account) => acc.id === accountId);
-    return account?.name || 'Unknown Account';
-  };
-
-  const getAccountType = (accountId: string) => {
-    const account = accounts.find((acc: Account) => acc.id === accountId);
-    return account?.type || 'unknown';
-  };
-
-  if (transactionsLoading || accountsLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  const TransactionForm = transactionForms[transactionType];
-
-
 
   return (
-    <ResponsiveLayout>
-      <Container maxWidth="lg" sx={{ mt: 4, p: 3 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 4,
-            pb: 3,
-            borderBottom: 1,
-            borderColor: 'divider',
-          }}
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <PageHeader title="Transactions" />
+        <button
+          onClick={() => setFormOpen(!formOpen)}
+          className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all active:scale-[0.98] text-sm shrink-0"
         >
-          <Box>
-            <Typography 
-              variant="h4" 
-              component="h1"
-              sx={{ 
-                fontWeight: 600,
-                color: 'primary.main',
-                mb: 1,
+          <Plus className="w-4.5 h-4.5" /> Add Transaction
+        </button>
+      </div>
+
+      {/* Transaction Editor Panel */}
+      {formOpen && (
+        <div className="bg-card border border-border rounded-xl p-6 mb-6 animate-in fade-in slide-in-from-top duration-200">
+          <h3 className="font-syne text-md font-bold text-white mb-4">New Money Flow</h3>
+          <form onSubmit={handleAddTransaction} className="space-y-4">
+            
+            {/* Flow Type selector */}
+            <div className="grid grid-cols-5 gap-1.5 p-1 bg-[#0a0f1c] border border-border rounded-lg">
+              {TRANSACTION_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setTxType(type as any);
+                    setCategory('');
+                  }}
+                  className={`py-1.5 rounded text-xs font-semibold capitalize transition-all ${
+                    txType === type
+                      ? 'bg-cyan/15 text-cyan'
+                      : 'text-text-muted hover:text-text'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+
+            {/* Basic Grid Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Amount (INR)</label>
+                <input
+                  type="number"
+                  required
+                  min="0.01"
+                  step="any"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Payment Method</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan capitalize"
+                >
+                  {PAYMENT_METHODS.map((pm) => (
+                    <option key={pm} value={pm}>{pm}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Conditional Sub-selectors */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              
+              {/* Debit/From Account */}
+              {(txType === 'expense' || txType === 'transfer' || txType === 'savings') && (
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Debit From (Source)</label>
+                  <select
+                    required
+                    value={fromAccountId}
+                    onChange={(e) => setFromAccountId(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  >
+                    <option value="">Select Account</option>
+                    {accounts.map((acc: any) => (
+                      <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Credit/To Account */}
+              {(txType === 'income' || txType === 'salary' || txType === 'transfer' || txType === 'savings') && (
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Credit To (Destination)</label>
+                  <select
+                    required
+                    value={toAccountId}
+                    onChange={(e) => setToAccountId(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  >
+                    <option value="">Select Account</option>
+                    {accounts.map((acc: any) => (
+                      <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Category */}
+              {(txType === 'expense' || txType === 'income') && (
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  >
+                    <option value="">Select Category</option>
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* UPI ID */}
+              {paymentMethod === 'upi' && (
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">UPI Ref ID / UTR (Optional)</label>
+                  <input
+                    type="text"
+                    value={upiRefId}
+                    onChange={(e) => setUpiRefId(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="e.g. 601289139182"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Salary components */}
+            {txType === 'salary' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-border pt-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Net Take Home (Hits Bank)</label>
+                  <input
+                    type="number"
+                    value={netTakeHome}
+                    onChange={(e) => setNetTakeHome(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder={amount || '0.00'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Employee PF Deduction</label>
+                  <input
+                    type="number"
+                    value={employeePf}
+                    onChange={(e) => setEmployeePf(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Note text */}
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Notes</label>
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2.5 text-sm text-text focus:outline-none focus:border-cyan"
+                placeholder="Description of the transaction..."
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                className="border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loadingAction}
+                className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2 px-5 rounded-lg text-sm transition-all flex items-center gap-1.5"
+              >
+                {loadingAction ? 'Saving...' : 'Add Transaction'}
+              </button>
+            </div>
+
+          </form>
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="relative">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-muted">
+            <Search className="w-4 h-4" />
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notes or categories..."
+            className="w-full bg-card border border-border rounded-lg py-2 pl-9 pr-4 text-xs text-text focus:outline-none focus:border-cyan transition-colors"
+          />
+        </div>
+
+        <div className="relative">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-text-muted">
+            <Filter className="w-4 h-4" />
+          </span>
+          <select
+            value={selectedTypeFilter}
+            onChange={(e) => setSelectedTypeFilter(e.target.value)}
+            className="w-full bg-card border border-border rounded-lg py-2 pl-9 pr-4 text-xs text-text focus:outline-none focus:border-cyan transition-colors capitalize"
+          >
+            <option value="">All Flow Types</option>
+            {TRANSACTION_TYPES.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-end text-text-muted text-xs gap-1.5">
+          {isValidating && <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan" />}
+          <span>Displaying {filteredTransactions.length} records</span>
+        </div>
+      </div>
+
+      {/* Virtualized Table container */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        {/* Table Headings */}
+        <div className="grid grid-cols-12 px-5 py-3 border-b border-border bg-[#0a0f1c] text-[10px] font-bold text-text-dim uppercase tracking-wider text-left">
+          <div className="col-span-2">Date</div>
+          <div className="col-span-3">Transfer Route</div>
+          <div className="col-span-2">Category</div>
+          <div className="col-span-3">Note / Details</div>
+          <div className="col-span-2 text-right">Amount</div>
+        </div>
+
+        {filteredTransactions.length === 0 ? (
+          <div className="text-center py-12 text-text-muted text-sm">
+            No transactions found.
+          </div>
+        ) : (
+          <div
+            ref={parentRef}
+            className="overflow-auto max-h-[500px]"
+            style={{ position: 'relative' }}
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
               }}
             >
-              Transactions
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Track your income, expenses, and transfers between accounts
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => setFormOpen(true)}
-            sx={{
-              borderRadius: 2,
-              px: 3,
-              py: 1,
-              boxShadow: 2,
-              '&:hover': {
-                boxShadow: 4,
-              }
-            }}
-          >
-            Add Transaction
-          </Button>
-        </Box>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const tx = filteredTransactions[virtualRow.index];
+                if (!tx) return null;
+                const isIncome = tx.type === 'income' || tx.type === 'salary';
 
-        {transactionsError && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            Failed to load transactions. Please try again.
-          </Alert>
-        )}
-
-         {formOpen && (
-          <Card 
-          elevation={0}
-          sx={{ 
-            mb: 3,
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-            border: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Box mb={3}>
-              <FormControl fullWidth>
-                <InputLabel id="transaction-type-label">Transaction Type</InputLabel>
-                <Select
-                  labelId="transaction-type-label"
-                  value={transactionType}
-                  onChange={(e) => setTransactionType(e.target.value as keyof typeof transactionForms)}
-                  label="Transaction Type"
-                >
-                  {Object.keys(transactionForms).map((type) => (
-                    <MenuItem key={type} value={type} sx={{ textTransform: 'capitalize' }}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box>
-              <TransactionForm
-                onClose={() => {
-                  setFormOpen(false);
-                  setEditingTransaction(null);
-                  setShowForm(false);
-                }}
-                onSubmit={handleCreateTransaction}
-                accounts={accounts}
-                editingTransaction={editingTransaction}
-                isLoading={createMutation.isPending}
-                error={createMutation.error as Error}
-              />
-            </Box>
-          </CardContent>
-          </Card>
-        )}
-
-        {/* Filters */}
-        <Card 
-          elevation={0}
-          sx={{ 
-            mb: 3,
-            borderRadius: 2,
-            bgcolor: 'background.default',
-            border: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Search transactions"
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  fullWidth
-                  size="small"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: 'primary.main',
-                        }
-                      }
-                    }
-                  }}
-                  placeholder="Search by note or tags..."
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Filter by Account</InputLabel>
-                  <Select
-                    value={filters.account}
-                    onChange={(e) => setFilters({ ...filters, account: e.target.value })}
-                    label="Filter by Account"
-                    sx={{
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: 'primary.main',
-                        }
-                      }
+                return (
+                  <div
+                    key={virtualRow.index}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
                     }}
+                    className="grid grid-cols-12 px-5 py-3 border-b border-border/60 hover:bg-white/[0.015] items-center text-xs text-text transition-colors group"
                   >
-                    <SelectMenuItem value="">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <AccountBalance />
-                        All Accounts
-                      </Box>
-                    </SelectMenuItem>
-                    {accounts.map((account: Account) => (
-                      <SelectMenuItem key={account.id} value={account.id}>
-                        <Box sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: 1,
-                          color: account.type === 'income' 
-                            ? 'success.main' 
-                            : account.type === 'expense'
-                            ? 'error.main'
-                            : 'primary.main'
-                        }}>
-                          <AccountBalance />
-                          {account.name}
-                        </Box>
-                      </SelectMenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
+                    {/* Date */}
+                    <div className="col-span-2 flex flex-col">
+                      <span className="font-semibold text-white">{formatIndianDate(tx.date)}</span>
+                      <span className="text-[10px] text-text-dim uppercase font-mono mt-0.5">{tx.paymentMethod}</span>
+                    </div>
 
-        {/* Transactions Table */}
-        <Card
-          elevation={0}
-          sx={{
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-            border: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <CardContent sx={{ p: 2 }}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell 
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Date
-                    </TableCell>
-                    <TableCell 
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Account/Source
-                    </TableCell>
-                    <TableCell 
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Merchant/Destination
-                    </TableCell>
-                    <TableCell 
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Amount
-                    </TableCell>
-                    <TableCell 
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Tags
-                    </TableCell>
-                    <TableCell 
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Note
-                    </TableCell>
-                    <TableCell 
-                      align="right"
-                      sx={{ 
-                        bgcolor: 'background.default',
-                        fontWeight: 600,
-                        py: 2,
-                      }}
-                    >
-                      Actions
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredTransactions.map((transaction: Transaction) => (
-                    <TableRow 
-                      key={transaction.id}
-                      hover
-                      sx={{
-                        '&:hover': {
-                          '.transaction-actions': {
-                            opacity: 1,
-                          }
-                        }
-                      }}
-                    >
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" fontWeight={500}>
-                            {new Date(transaction.date).toLocaleDateString('en-IN', {
-                              day: 'numeric',
-                              month: 'short',
-                            })}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(transaction.date).toLocaleDateString('en-IN', {
-                              year: 'numeric',
-                            })}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          {transaction.fromAccountId ? (
-                            <>
-                              <Typography variant="body2" fontWeight={500}>
-                                {getAccountName(transaction.fromAccountId)}
-                              </Typography>
-                              <Chip
-                                label={getAccountType(transaction.fromAccountId)}
-                                size="small"
-                                color={
-                                  getAccountType(transaction.fromAccountId) === 'expense' 
-                                    ? 'error' 
-                                    : getAccountType(transaction.fromAccountId) === 'income'
-                                    ? 'success'
-                                    : 'primary'
-                                }
-                                sx={{ 
-                                  height: 20,
-                                  borderRadius: 1,
-                                  '& .MuiChip-label': {
-                                    px: 1,
-                                    fontSize: '0.7rem',
-                                    textTransform: 'capitalize',
-                                  }
-                                }}
-                              />
-                            </>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              -
-                            </Typography>
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" fontWeight={500}>
-                            {getAccountName(transaction.toAccountId)}
-                          </Typography>
-                          <Chip
-                            label={getAccountType(transaction.toAccountId)}
-                            size="small"
-                            color={
-                              getAccountType(transaction.toAccountId) === 'expense' 
-                                ? 'error' 
-                                : getAccountType(transaction.toAccountId) === 'income'
-                                ? 'success'
-                                : 'primary'
-                            }
-                            sx={{ 
-                              height: 20,
-                              borderRadius: 1,
-                              '& .MuiChip-label': {
-                                px: 1,
-                                fontSize: '0.7rem',
-                                textTransform: 'capitalize',
-                              }
-                            }}
-                          />
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          sx={{ 
-                            fontWeight: 600,
-                            color: transaction.amount > 0 ? 'success.main' : 'error.main',
-                            fontSize: '1rem',
-                          }}
-                        >
-                          ₹{Math.abs(transaction.amount).toLocaleString()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Box display="flex" gap={0.5} flexWrap="wrap">
-                          {transaction.tags?.map((tag, index) => (
-                            <Chip
-                              key={index}
-                              label={tag}
-                              size="small"
-                              sx={{ 
-                                height: 20,
-                                borderRadius: 1,
-                                bgcolor: 'action.selected',
-                                '& .MuiChip-label': {
-                                  px: 1,
-                                  fontSize: '0.7rem',
-                                }
-                              }}
-                            />
-                          ))}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography 
-                          variant="body2" 
-                          sx={{
-                            maxWidth: 200,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {transaction.note || '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          className="transaction-actions"
-                          size="small"
-                          onClick={(e) => {
-                            setSelectedTransaction(transaction);
-                            setMenuAnchor(e.currentTarget);
-                          }}
-                          sx={{
-                            opacity: 0,
-                            transition: 'opacity 0.2s',
-                          }}
-                        >
-                          <MoreVert fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
+                    {/* Route */}
+                    <div className="col-span-3 flex items-center gap-1.5 max-w-[90%] truncate">
+                      {tx.fromAccountId && (
+                        <span className="font-medium text-text-muted shrink truncate">
+                          {getAccountName(tx.fromAccountId)}
+                        </span>
+                      )}
+                      {tx.fromAccountId && tx.toAccountId && (
+                        <ArrowRight className="w-3.5 h-3.5 text-text-dim shrink-0" />
+                      )}
+                      {tx.toAccountId && (
+                        <span className="font-semibold text-white shrink truncate">
+                          {getAccountName(tx.toAccountId)}
+                        </span>
+                      )}
+                      {!tx.fromAccountId && !tx.toAccountId && (
+                        <span className="text-text-dim">-</span>
+                      )}
+                    </div>
 
-       
+                    {/* Category */}
+                    <div className="col-span-2">
+                      <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold capitalize ${
+                        tx.type === 'salary'
+                          ? 'bg-purple/10 text-purple border border-purple/20'
+                          : tx.type === 'savings'
+                          ? 'bg-cyan/10 text-cyan border border-cyan/20'
+                          : tx.type === 'transfer'
+                          ? 'bg-white/5 text-text-muted border border-border/80'
+                          : isIncome
+                          ? 'bg-green/10 text-green border border-green/20'
+                          : 'bg-red/10 text-red border border-red/20'
+                      }`}>
+                        {tx.category || tx.type}
+                      </span>
+                    </div>
 
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={menuAnchor}
-          open={Boolean(menuAnchor)}
-          onClose={() => setMenuAnchor(null)}
-        >
-          <MenuItem onClick={() => selectedTransaction && handleEditTransaction(selectedTransaction)}>
-            <Edit sx={{ mr: 1 }} />
-            Edit
-          </MenuItem>
-          <MenuItem onClick={() => selectedTransaction && handleDeleteTransaction(selectedTransaction)}>
-            <Delete sx={{ mr: 1 }} />
-            Delete
-          </MenuItem>
-        </Menu>
-      </Container>
-    </ResponsiveLayout>
+                    {/* Note */}
+                    <div className="col-span-3 pr-2 flex items-center justify-between">
+                      <span className="truncate text-text-muted max-w-[85%]">{tx.note || '-'}</span>
+                      {tx.upiRefId && (
+                        <span className="text-[9px] font-mono bg-white/5 border border-border px-1.5 py-0.5 rounded text-text-dim hidden md:inline-block">
+                          UPI: {tx.upiRefId}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Amount & Actions */}
+                    <div className="col-span-2 flex items-center justify-end gap-3 text-right">
+                      <span className={`font-mono text-sm font-bold ${isIncome ? 'text-green' : 'text-red'}`}>
+                        {isIncome ? '+' : '-'}{formatCurrency(tx.amount)}
+                      </span>
+                      
+                      {/* Delete Action button (reveals on row hover) */}
+                      <button
+                        onClick={() => handleDelete(tx.id)}
+                        className="opacity-0 group-hover:opacity-100 text-text-dim hover:text-red p-1 rounded hover:bg-red/5 transition-all"
+                        title="Delete Transaction"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Load More Button */}
+      {pagesData && pagesData[pagesData.length - 1]?.nextCursor && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={() => setSize(size + 1)}
+            disabled={isValidating}
+            className="border border-border hover:bg-card text-text-muted hover:text-text font-bold py-2.5 px-6 rounded-lg text-xs transition-all active:scale-[0.98]"
+          >
+            {isValidating ? 'Loading...' : 'Load Older Transactions'}
+          </button>
+        </div>
+      )}
+    </AppLayout>
   );
 }

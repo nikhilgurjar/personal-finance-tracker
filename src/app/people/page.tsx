@@ -1,287 +1,460 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuthContext } from '@/components/AuthProvider';
-import { ResponsiveLayout } from '@/components/ResponsiveLayout';
-import { useAuthedQuery } from '@/hooks/useAuthedQuery';
-import { RepaymentForm } from '@/components/RepaymentForm';
-import { authedJson } from '@/lib/apiClient';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
+import AppLayout from '@/components/layout/AppLayout';
+import PageHeader from '@/components/layout/PageHeader';
+import { fetcher } from '@/lib/swr';
+import { formatCurrency } from '@/lib/utils/currency';
+import { formatIndianDate } from '@/lib/utils/date';
 import {
-  Box, Container, Typography, Card, CardContent, Grid,
-  Avatar, Chip, Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
-  Divider, Skeleton, Button, Snackbar, TextField
-} from '@mui/material';
-import { Close, Receipt, TrendingDown, Handshake, AccountBalanceWallet, Add } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+  Plus,
+  Users,
+  Coins,
+  History,
+  X,
+  UserPlus,
+  ArrowUpRight,
+  ArrowDownRight,
+  CreditCard,
+  PlusCircle,
+} from 'lucide-react';
 
 const TYPE_CONFIG = {
-  lent: { label: 'Lent', color: '#10b981', icon: <TrendingDown fontSize="small" /> },
-  borrowed: { label: 'Borrowed', color: '#ef4444', icon: <Handshake fontSize="small" /> },
-  payable: { label: 'Payable', color: '#f97316', icon: <Receipt fontSize="small" /> },
+  lent: { label: 'Lent', textColor: 'text-green', bgColor: 'bg-green/10 border-green/20' },
+  borrowed: { label: 'Borrowed', textColor: 'text-red', bgColor: 'bg-red/10 border-red/20' },
+  payable: { label: 'Payable', textColor: 'text-amber', bgColor: 'bg-amber/10 border-amber/20' },
 };
 
-function LedgerDialog({
-  person,
-  open,
-  onClose,
-  onRecordRepayment,
-}: {
-  person: any,
-  open: boolean,
-  onClose: () => void,
-  onRecordRepayment: (person: any, loanType: 'lent' | 'borrowed' | 'payable') => void,
-}) {
-  if (!person) return null;
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: person.netBalance >= 0 ? '#10b981' : '#ef4444' }}>
-            {person.name.charAt(0)}
-          </Avatar>
-          <Box>
-            <Typography variant="h6">{person.name}</Typography>
-            <Typography variant="body2" color={person.netBalance >= 0 ? 'success.main' : 'error.main'} fontWeight={700}>
-              Net Balance: {person.netBalance >= 0 ? '+' : ''}₹{person.netBalance.toLocaleString('en-IN')}
-            </Typography>
-          </Box>
-        </Box>
-        <IconButton onClick={onClose}><Close /></IconButton>
-      </DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
-        <Box sx={{ p: 2, display: 'flex', gap: 1, flexWrap: 'wrap', borderBottom: '1px solid', borderColor: 'divider' }}>
-          {person.totalLent > 0 && (
-            <Button size="small" variant="outlined" color="success" onClick={() => onRecordRepayment(person, 'lent')}>
-              Receive Lent Repayment
-            </Button>
-          )}
-          {person.totalBorrowed > 0 && (
-            <Button size="small" variant="outlined" color="error" onClick={() => onRecordRepayment(person, 'borrowed')}>
-              Pay Borrowed Amount
-            </Button>
-          )}
-          {person.totalPayable > 0 && (
-            <Button size="small" variant="outlined" color="warning" onClick={() => onRecordRepayment(person, 'payable')}>
-              Pay Payable Amount
-            </Button>
-          )}
-        </Box>
-        {person.loans.sort((a: any, b: any) => b.startDate - a.startDate).map((loan: any) => {
-          const cfg = TYPE_CONFIG[loan.loanType as keyof typeof TYPE_CONFIG];
-          return (
-            <Box key={loan.id} sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Chip label={cfg.label} size="small" icon={cfg.icon} sx={{ color: cfg.color, borderColor: cfg.color }} variant="outlined" />
-                  <Typography variant="body2" fontWeight={600}>
-                    ₹{loan.principalAmount.toLocaleString('en-IN')}
-                  </Typography>
-                </Box>
-                <Typography variant="caption" color="text.secondary">
-                  {new Date(loan.startDate).toLocaleDateString('en-IN')}
-                </Typography>
-              </Box>
-              
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Status: <strong>{loan.status.toUpperCase()}</strong> (Outstanding: ₹{loan.outstandingAmount.toLocaleString('en-IN')})
-              </Typography>
-              {loan.note && <Typography variant="caption" display="block" sx={{ fontStyle: 'italic', mb: 1 }}>"{loan.note}"</Typography>}
-
-              {loan.repayments?.length > 0 && (
-                <Box sx={{ ml: 2, mt: 1, pl: 2, borderLeft: '2px solid', borderColor: 'grey.200' }}>
-                  <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                    REPAYMENTS
-                  </Typography>
-                  {loan.repayments.map((rep: any) => (
-                    <Box key={rep.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2">
-                        ₹{rep.amount.toLocaleString('en-IN')}
-                        {rep.note && <span style={{ color: '#666', fontSize: '0.8em', marginLeft: '8px' }}>— {rep.note}</span>}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(rep.date).toLocaleDateString('en-IN')}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          );
-        })}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function PeoplePage() {
-  const { user, loading } = useAuthContext();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [repaymentOpen, setRepaymentOpen] = useState(false);
   const [repaymentContext, setRepaymentContext] = useState<any | null>(null);
-  const [toast, setToast] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState('');
+  const [loadingAction, setLoadingAction] = useState(false);
 
-  useEffect(() => { if (!loading && !user) router.push('/'); }, [loading, user, router]);
+  // Repayment form states
+  const [repAmount, setRepAmount] = useState('');
+  const [repDate, setRepDate] = useState(new Date().toISOString().split('T')[0]);
+  const [repAccountId, setRepAccountId] = useState('');
+  const [repNote, setRepNote] = useState('');
 
-  const { data: people = [], isLoading } = useAuthedQuery(user, ['people', user?.uid], '/api/people');
+  // SWR queries
+  const { data: people = [], mutate: mutatePeople } = useSWR('/api/people', fetcher);
+  const { data: accounts = [] } = useSWR('/api/accounts', fetcher);
 
-  const repaymentMutation = useMutation({
-    mutationFn: async (repayment: any) => authedJson(user, '/api/people/repayments', {
-      method: 'POST',
-      body: JSON.stringify(repayment),
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['people'] });
-      queryClient.invalidateQueries({ queryKey: ['loans'] });
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      setRepaymentContext(null);
-      setToast('Person repayment recorded');
-    },
-  });
+  const handleCreatePerson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPersonName.trim()) return;
 
-  const createMutation = useMutation({
-    mutationFn: async (name: string) => authedJson(user, '/api/people', {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['people'] });
+    setLoadingAction(true);
+    try {
+      const res = await fetch('/api/people', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newPersonName.trim() }),
+      });
+
+      if (!res.ok) throw new Error('Failed to create person');
+      mutatePeople();
       setCreateOpen(false);
       setNewPersonName('');
-      setToast('Person created successfully');
-    },
-  });
+    } catch (err: any) {
+      alert(err.message || 'Error creating person');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
 
-  if (!user) return null;
+  const handleRecordRepayment = (person: any, loanType: 'lent' | 'borrowed' | 'payable') => {
+    setRepaymentContext({
+      personName: person.name,
+      loanType,
+      outstandingAmount:
+        loanType === 'lent'
+          ? person.totalLent
+          : loanType === 'borrowed'
+          ? person.totalBorrowed
+          : person.totalPayable,
+    });
+    setRepAmount('');
+    setRepAccountId('');
+    setRepNote('');
+    setRepDate(new Date().toISOString().split('T')[0]);
+    setRepaymentOpen(true);
+  };
+
+  const handleRepaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!repAmount || Number(repAmount) <= 0 || !repAccountId) {
+      return alert('Enter valid amount and select account');
+    }
+
+    if (Number(repAmount) > repaymentContext.outstandingAmount) {
+      return alert('Repayment amount cannot exceed outstanding balance.');
+    }
+
+    setLoadingAction(true);
+    try {
+      const payload = {
+        repayment: {
+          personName: repaymentContext.personName,
+          loanType: repaymentContext.loanType,
+          amount: Number(repAmount),
+          currency: 'INR',
+          date: new Date(repDate).getTime(),
+          accountId: repAccountId,
+          note: repNote.trim() || undefined,
+        },
+      };
+
+      const res = await fetch('/api/people/repayments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Failed to record repayment');
+      
+      mutatePeople();
+      setRepaymentOpen(false);
+      setSelectedPerson(null);
+    } catch (err: any) {
+      alert(err.message || 'Error saving repayment');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
 
   return (
-    <ResponsiveLayout>
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', bgcolor: 'background.default' }}>
-        <Container maxWidth="lg">
-          <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box>
-              <Typography variant="h4" fontWeight={800} color="text.primary">People & Ledger</Typography>
-              <Typography variant="body2" color="text.secondary">View all money interactions grouped by person</Typography>
-            </Box>
-            <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-              Add Person
-            </Button>
-          </Box>
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <PageHeader title="People & Ledger" />
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all active:scale-[0.98] text-sm shrink-0"
+        >
+          <UserPlus className="w-4.5 h-4.5" /> Add Person
+        </button>
+      </div>
 
-          {isLoading ? (
-            <Grid container spacing={2}>
-              {[1, 2, 3].map(i => <Grid item xs={12} sm={6} md={4} key={i}><Skeleton variant="rounded" height={160} /></Grid>)}
-            </Grid>
-          ) : people.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <AccountBalanceWallet sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">No interactions found</Typography>
-            </Box>
-          ) : (
-            <Grid container spacing={3}>
-              {people.map((person: any) => (
-                <Grid item xs={12} sm={6} md={4} key={person.name}>
-                  <Card 
-                    onClick={() => setSelectedPerson(person)}
-                    sx={{ 
-                      cursor: 'pointer',
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
-                    }}
-                  >
-                    <CardContent>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                        <Avatar sx={{ bgcolor: person.netBalance >= 0 ? '#10b981' : '#ef4444', width: 48, height: 48 }}>
-                          {person.name.charAt(0)}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="h6" fontWeight={700}>{person.name}</Typography>
-                          <Typography variant="body2" color="text.secondary">{person.loans.length} interactions</Typography>
-                        </Box>
-                      </Box>
-                      
-                      <Divider sx={{ my: 1.5 }} />
-                      
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body2" color="text.secondary">Net Balance</Typography>
-                        <Typography variant="body1" fontWeight={800} color={person.netBalance >= 0 ? 'success.main' : 'error.main'}>
-                          {person.netBalance >= 0 ? '+' : ''}₹{person.netBalance.toLocaleString('en-IN')}
-                        </Typography>
-                      </Box>
-                      
-                      {(person.totalLent > 0 || person.totalBorrowed > 0 || person.totalPayable > 0) && (
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                          {person.totalLent > 0 && <Chip label={`Lent: ₹${person.totalLent.toLocaleString()}`} size="small" color="success" variant="outlined" />}
-                          {person.totalBorrowed > 0 && <Chip label={`Borrowed: ₹${person.totalBorrowed.toLocaleString()}`} size="small" color="error" variant="outlined" />}
-                          {person.totalPayable > 0 && <Chip label={`Payable: ₹${person.totalPayable.toLocaleString()}`} size="small" color="warning" variant="outlined" />}
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </Container>
-      </Box>
-      <LedgerDialog
-        person={selectedPerson}
-        open={!!selectedPerson}
-        onClose={() => setSelectedPerson(null)}
-        onRecordRepayment={(person, loanType) => {
-          setRepaymentContext({
-            personName: person.name,
-            loanType,
-            outstandingAmount: loanType === 'lent'
-              ? person.totalLent
-              : loanType === 'borrowed'
-                ? person.totalBorrowed
-                : person.totalPayable,
-          });
-        }}
-      />
-      <RepaymentForm
-        open={!!repaymentContext}
-        onClose={() => setRepaymentContext(null)}
-        onSubmit={async (data) => repaymentMutation.mutateAsync(data.repayment)}
-        personName={repaymentContext?.personName}
-        loanType={repaymentContext?.loanType}
-        outstandingAmount={repaymentContext?.outstandingAmount}
-        currency="INR"
-      />
+      {/* People Grid */}
+      {people.length === 0 ? (
+        <div className="text-center py-12 text-text-muted text-sm border border-dashed border-border rounded-xl bg-card">
+          No people ledger interactions found. Add a person to get started.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="People lists">
+          {people.map((person: any) => {
+            const initials = person.name.substring(0, 2).toUpperCase();
+            const hasLent = person.totalLent > 0;
+            const hasBorrowed = person.totalBorrowed > 0;
+            const hasPayable = person.totalPayable > 0;
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add New Person</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Person Name"
-            type="text"
-            fullWidth
-            variant="outlined"
-            value={newPersonName}
-            onChange={(e) => setNewPersonName(e.target.value)}
+            return (
+              <div
+                key={person.id}
+                onClick={() => setSelectedPerson(person)}
+                className="bg-card border border-border rounded-xl p-5 hover:border-cyan/35 transition-all cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs font-mono border ${
+                      person.netBalance >= 0 ? 'bg-green/10 border-green/20 text-green' : 'bg-red/10 border-red/20 text-red'
+                    }`}>
+                      {initials}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-white text-sm">{person.name}</h4>
+                      <span className="text-[10px] text-text-muted">
+                        {person.loans.length} interactions
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center py-2.5 px-3 bg-[#0a0f1c] border border-border rounded-lg mb-3">
+                    <span className="text-[10px] text-text-dim uppercase font-bold tracking-wider">Net Balance</span>
+                    <span className={`font-syne text-sm font-bold ${
+                      person.netBalance >= 0 ? 'text-green' : 'text-red'
+                    }`}>
+                      {person.netBalance >= 0 ? '+' : ''}{formatCurrency(person.netBalance)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {hasLent && (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-green/10 border border-green/20 text-green">
+                      Lent: {formatCurrency(person.totalLent)}
+                    </span>
+                  )}
+                  {hasBorrowed && (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-red/10 border border-red/20 text-red">
+                      Borrowed: {formatCurrency(person.totalBorrowed)}
+                    </span>
+                  )}
+                  {hasPayable && (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber/10 border border-amber/20 text-amber">
+                      Payable: {formatCurrency(person.totalPayable)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Person Detail Slider / Overlay */}
+      {selectedPerson && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            onClick={() => setSelectedPerson(null)}
           />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={() => createMutation.mutate(newPersonName)} 
-            variant="contained" 
-            disabled={!newPersonName.trim() || createMutation.isPending}
-          >
-            {createMutation.isPending ? 'Saving...' : 'Add'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          <div className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-surface border-l border-border z-50 p-6 overflow-y-auto shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-250">
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs font-mono border ${
+                    selectedPerson.netBalance >= 0 ? 'bg-green/10 border-green/20 text-green' : 'bg-red/10 border-red/20 text-red'
+                  }`}>
+                    {selectedPerson.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-syne text-md font-bold text-white leading-none mb-1">{selectedPerson.name}</h3>
+                    <span className={`text-[11px] font-bold ${
+                      selectedPerson.netBalance >= 0 ? 'text-green' : 'text-red'
+                    }`}>
+                      Net Balance: {selectedPerson.netBalance >= 0 ? '+' : ''}{formatCurrency(selectedPerson.netBalance)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedPerson(null)}
+                  className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-text-muted"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-      <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />
-    </ResponsiveLayout>
+              {/* Repayments actions panel */}
+              <div className="flex gap-2 flex-wrap mb-6 border-b border-border/60 pb-5">
+                {selectedPerson.totalLent > 0 && (
+                  <button
+                    onClick={() => handleRecordRepayment(selectedPerson, 'lent')}
+                    className="text-xs bg-green/10 hover:bg-green/15 text-green border border-green/25 font-bold py-1.5 px-3 rounded-lg transition-colors"
+                  >
+                    Receive Lent Repayment
+                  </button>
+                )}
+                {selectedPerson.totalBorrowed > 0 && (
+                  <button
+                    onClick={() => handleRecordRepayment(selectedPerson, 'borrowed')}
+                    className="text-xs bg-red/10 hover:bg-red/15 text-red border border-red/25 font-bold py-1.5 px-3 rounded-lg transition-colors"
+                  >
+                    Pay Borrowed Amount
+                  </button>
+                )}
+                {selectedPerson.totalPayable > 0 && (
+                  <button
+                    onClick={() => handleRecordRepayment(selectedPerson, 'payable')}
+                    className="text-xs bg-amber/10 hover:bg-amber/15 text-amber border border-amber/25 font-bold py-1.5 px-3 rounded-lg transition-colors"
+                  >
+                    Pay Payable Amount
+                  </button>
+                )}
+              </div>
+
+              {/* Loans List */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-text-dim uppercase tracking-wider mb-2">Interactions History</h4>
+                {selectedPerson.loans.map((loan: any) => {
+                  const cfg = TYPE_CONFIG[loan.loanType as keyof typeof TYPE_CONFIG] || TYPE_CONFIG.lent;
+                  return (
+                    <div key={loan.id} className="p-4 bg-[#0a0f1c] border border-border rounded-lg">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${cfg.bgColor} ${cfg.textColor}`}>
+                          {cfg.label}
+                        </span>
+                        <span className="text-[10px] text-text-muted font-mono">{formatIndianDate(loan.startDate)}</span>
+                      </div>
+
+                      <div className="flex justify-between items-baseline mb-2">
+                        <span className="text-sm font-bold text-white">{formatCurrency(loan.principalAmount)}</span>
+                        <span className="text-[11px] text-text-muted">
+                          Outstanding: <strong className="text-white">{formatCurrency(loan.outstandingAmount)}</strong>
+                        </span>
+                      </div>
+
+                      {loan.note && (
+                        <p className="text-[11px] text-text-muted italic mb-3">"{loan.note}"</p>
+                      )}
+
+                      {/* Repayments log */}
+                      {loan.repayments?.length > 0 && (
+                        <div className="mt-3 pl-3 border-l-2 border-border/80 space-y-1.5">
+                          <span className="text-[9px] font-bold text-text-dim uppercase tracking-wider block mb-1">Repayments logs</span>
+                          {loan.repayments.map((rep: any) => (
+                            <div key={rep.id} className="flex justify-between text-[11px] text-text-muted">
+                              <span>
+                                {formatCurrency(rep.amount)}
+                                {rep.note && <span className="text-text-dim"> — {rep.note}</span>}
+                              </span>
+                              <span>{formatIndianDate(rep.date)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-border">
+              <button
+                onClick={() => setSelectedPerson(null)}
+                className="w-full border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Record Repayment Dialog */}
+      {repaymentOpen && repaymentContext && (
+        <>
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50" onClick={() => setRepaymentOpen(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-surface border border-border p-6 rounded-xl shadow-2xl z-50 animate-in fade-in zoom-in duration-200">
+            <h3 className="font-syne text-md font-bold text-white mb-2">Record Person Repayment</h3>
+            <p className="text-xs text-text-muted mb-4 leading-normal">
+              Recording repayment against <strong className="text-text">{repaymentContext.personName}</strong>. 
+              This will automatically satisfy their oldest outstanding <strong className="text-text">{repaymentContext.loanType}</strong> dues first.
+            </p>
+
+            <form onSubmit={handleRepaymentSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Repayment Amount</label>
+                <input
+                  type="number"
+                  required
+                  step="any"
+                  value={repAmount}
+                  onChange={(e) => setRepAmount(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="0.00"
+                />
+                <span className="text-[10px] text-text-muted mt-1 block">
+                  Max outstanding: {formatCurrency(repaymentContext.outstandingAmount)}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={repDate}
+                  onChange={(e) => setRepDate(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">
+                  {repaymentContext.loanType === 'lent' ? 'Received Into Account' : 'Paid From Account'}
+                </label>
+                <select
+                  required
+                  value={repAccountId}
+                  onChange={(e) => setRepAccountId(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                >
+                  <option value="">Select Account</option>
+                  {accounts.map((acc: any) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({formatCurrency(acc.balance)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Notes</label>
+                <input
+                  type="text"
+                  value={repNote}
+                  onChange={(e) => setRepNote(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="repayment note details..."
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRepaymentOpen(false)}
+                  className="border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingAction}
+                  className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2 px-5 rounded-lg text-sm transition-all"
+                >
+                  {loadingAction ? 'Recording...' : 'Record Repayment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+
+      {/* Add Person Dialog */}
+      {createOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50" onClick={() => setCreateOpen(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-surface border border-border p-6 rounded-xl shadow-2xl z-50 animate-in fade-in zoom-in duration-200">
+            <h3 className="font-syne text-md font-bold text-white mb-4">Add New Person</h3>
+            <form onSubmit={handleCreatePerson} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Person Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  value={newPersonName}
+                  onChange={(e) => setNewPersonName(e.target.value)}
+                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  placeholder="e.g. Rahul Sharma"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  className="border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingAction || !newPersonName.trim()}
+                  className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2 px-5 rounded-lg text-sm transition-all"
+                >
+                  {loadingAction ? 'Saving...' : 'Add'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+    </AppLayout>
   );
 }

@@ -1,278 +1,442 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuthContext } from '@/components/AuthProvider';
-import { ResponsiveLayout } from '@/components/ResponsiveLayout';
-import { LoanForm } from '@/components/LoanForm';
-import { RepaymentForm } from '@/components/RepaymentForm';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { authedFetch, authedJson } from '@/lib/apiClient';
-import { useAuthedQuery } from '@/hooks/useAuthedQuery';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
+import AppLayout from '@/components/layout/AppLayout';
+import PageHeader from '@/components/layout/PageHeader';
+import { fetcher } from '@/lib/swr';
+import { formatCurrency } from '@/lib/utils/currency';
+import { formatIndianDate } from '@/lib/utils/date';
 import {
-  Box, Container, Typography, Button, Grid, Card, CardContent, Chip,
-  IconButton, Menu, MenuItem, Alert, CircularProgress, LinearProgress,
-  Tabs, Tab, Skeleton, Snackbar,
-} from '@mui/material';
-import {
-  Add, MoreVert, Edit, Delete, Handshake, TrendingDown, Receipt,
-  CheckCircle, AccountBalance, Payment,
-} from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Loan } from '@/lib/types';
+  Plus,
+  Trash2,
+  Edit2,
+  Handshake,
+  TrendingDown,
+  Receipt,
+  X,
+  Calendar,
+  CheckCircle,
+  AlertTriangle,
+} from 'lucide-react';
 
-type LoanTab = 'all' | 'lent' | 'borrowed' | 'payable';
+const LOAN_TAB_TYPES = ['all', 'lent', 'borrowed', 'payable'];
 
 const LOAN_CONFIG = {
-  lent: { label: 'I Lent', color: '#10b981', bg: '#d1fae5', icon: <TrendingDown />, chipColor: 'success' as const },
-  borrowed: { label: 'I Borrowed', color: '#ef4444', bg: '#fee2e2', icon: <Handshake />, chipColor: 'error' as const },
-  payable: { label: 'I Owe', color: '#f97316', bg: '#ffedd5', icon: <Receipt />, chipColor: 'warning' as const },
+  lent: { label: 'I Lent', textColor: 'text-green', bgColor: 'bg-green/10 border-green/20', icon: TrendingDown },
+  borrowed: { label: 'I Borrowed', textColor: 'text-red', bgColor: 'bg-red/10 border-red/20', icon: Handshake },
+  payable: { label: 'I Owe', textColor: 'text-amber', bgColor: 'bg-amber/10 border-amber/20', icon: Receipt },
 };
 
 export default function LoansPage() {
-  const { user, loading } = useAuthContext();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  const [tab, setTab] = useState<LoanTab>('all');
+  const [tab, setTab] = useState<'all' | 'lent' | 'borrowed' | 'payable'>('all');
   const [formOpen, setFormOpen] = useState(false);
-  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [repaymentFormOpen, setRepaymentFormOpen] = useState(false);
-  const [toast, setToast] = useState('');
+  const [editingLoan, setEditingLoan] = useState<any>(null);
+  const [loadingAction, setLoadingAction] = useState(false);
 
-  useEffect(() => { if (!loading && !user) router.push('/'); }, [loading, user, router]);
+  // Form states
+  const [loanType, setLoanType] = useState<'lent' | 'borrowed' | 'payable'>('lent');
+  const [personName, setPersonName] = useState('');
+  const [principal, setPrincipal] = useState('');
+  const [outstanding, setOutstanding] = useState('');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dueDate, setDueDate] = useState('');
+  const [interestRate, setInterestRate] = useState('');
+  const [note, setNote] = useState('');
 
-  const { data: loans = [], isLoading, error } = useAuthedQuery(user, ['loans', user?.uid], '/api/loans');
+  // SWR queries
+  const { data: loans = [], mutate: mutateLoans, error } = useSWR('/api/loans', fetcher);
 
-  const createMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return authedJson(user, '/api/loans', {
-        method: 'POST',
-        body: JSON.stringify({ ...data, startDate: data.startDate.getTime(), dueDate: data.dueDate?.getTime() }),
-      });
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['loans'] }); setFormOpen(false); setToast('Loan added!'); },
-  });
+  const filteredLoans = useMemo(() => {
+    return loans.filter((l: any) => {
+      if (tab !== 'all' && l.loanType !== tab) return false;
+      return true;
+    });
+  }, [loans, tab]);
 
-  const deleteMutation = useMutation({
-    mutationFn: async (loanId: string) => {
-      await authedFetch(user, `/api/loans/${loanId}`, { method: 'DELETE' });
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['loans'] }); setConfirmOpen(false); setToast('Loan deleted'); },
-  });
+  const totals = useMemo(() => {
+    let lentTotal = 0;
+    let borrowedTotal = 0;
+    let payableTotal = 0;
 
-  const repaymentMutation = useMutation({
-    mutationFn: async ({ repayment }: { repayment: any }) => {
-      return authedJson(user, '/api/people/repayments', {
-        method: 'POST',
-        body: JSON.stringify(repayment),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['loans'] });
-      queryClient.invalidateQueries({ queryKey: ['people'] });
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      setRepaymentFormOpen(false);
-      setToast('Person repayment recorded!');
-    },
-  });
+    loans.forEach((l: any) => {
+      if (l.status === 'active') {
+        if (l.loanType === 'lent') lentTotal += l.outstandingAmount || 0;
+        else if (l.loanType === 'borrowed') borrowedTotal += l.outstandingAmount || 0;
+        else if (l.loanType === 'payable') payableTotal += l.outstandingAmount || 0;
+      }
+    });
 
-  if (!user) return null;
+    return { lent: lentTotal, borrowed: borrowedTotal, payable: payableTotal };
+  }, [loans]);
 
-  const filtered = tab === 'all' ? loans : loans.filter((l: Loan) => l.loanType === tab);
-
-  const totals = {
-    lent: loans.filter((l: Loan) => l.loanType === 'lent' && l.status === 'active').reduce((s: number, l: Loan) => s + l.outstandingAmount, 0),
-    borrowed: loans.filter((l: Loan) => l.loanType === 'borrowed' && l.status === 'active').reduce((s: number, l: Loan) => s + l.outstandingAmount, 0),
-    payable: loans.filter((l: Loan) => l.loanType === 'payable' && l.status === 'active').reduce((s: number, l: Loan) => s + l.outstandingAmount, 0),
+  const handleOpenCreate = () => {
+    setEditingLoan(null);
+    setLoanType('lent');
+    setPersonName('');
+    setPrincipal('');
+    setOutstanding('');
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setDueDate('');
+    setInterestRate('');
+    setNote('');
+    setFormOpen(true);
   };
 
-  const selectedPersonOutstanding = selectedLoan
-    ? loans
-        .filter((loan: Loan) =>
-          loan.status === 'active' &&
-          loan.loanType === selectedLoan.loanType &&
-          loan.personName.trim().toLowerCase() === selectedLoan.personName.trim().toLowerCase()
-        )
-        .reduce((sum: number, loan: Loan) => sum + loan.outstandingAmount, 0)
-    : 0;
+  const handleOpenEdit = (loan: any) => {
+    setEditingLoan(loan);
+    setLoanType(loan.loanType || 'lent');
+    setPersonName(loan.personName || '');
+    setPrincipal(String(loan.principalAmount || ''));
+    setOutstanding(String(loan.outstandingAmount || ''));
+    setStartDate(loan.startDate ? new Date(loan.startDate).toISOString().split('T')[0] : '');
+    setDueDate(loan.dueDate ? new Date(loan.dueDate).toISOString().split('T')[0] : '');
+    setInterestRate(String(loan.interestRate || ''));
+    setNote(loan.note || '');
+    setFormOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!personName.trim() || !principal || Number(principal) <= 0) {
+      return alert('Enter valid person name and principal amount');
+    }
+
+    setLoadingAction(true);
+    try {
+      const payload: any = {
+        loanType,
+        personName: personName.trim(),
+        principalAmount: Number(principal),
+        outstandingAmount: Number(outstanding || principal),
+        startDate: new Date(startDate).getTime(),
+        dueDate: dueDate ? new Date(dueDate).getTime() : undefined,
+        interestRate: interestRate ? Number(interestRate) : undefined,
+        note: note.trim() || undefined,
+        currency: 'INR',
+        status: 'active',
+      };
+
+      const method = editingLoan ? 'PUT' : 'POST';
+      const url = editingLoan ? `/api/loans/${editingLoan.id}` : '/api/loans';
+
+      if (editingLoan) {
+        payload.id = editingLoan.id;
+      }
+
+      // Optimistic update
+      const tempLoan = {
+        ...payload,
+        id: editingLoan ? editingLoan.id : crypto.randomUUID(),
+      };
+
+      await mutateLoans(
+        (current: any) => {
+          if (!current) return current;
+          if (editingLoan) {
+            return current.map((l: any) => (l.id === editingLoan.id ? tempLoan : l));
+          }
+          return [tempLoan, ...current];
+        },
+        { revalidate: false }
+      );
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Failed to save loan');
+
+      mutateLoans();
+      setFormOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Error saving loan');
+      mutateLoans();
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this loan?')) return;
+
+    try {
+      const res = await fetch(`/api/loans/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Deletion failed');
+      mutateLoans();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting loan');
+    }
+  };
 
   return (
-    <ResponsiveLayout>
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh' }}>
-        <Container maxWidth="lg">
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-            <Box>
-              <Typography variant="h4" fontWeight={800} color="text.primary">Loans & Dues</Typography>
-              <Typography variant="body2" color="text.secondary">Track money you lent, borrowed, or owe</Typography>
-            </Box>
-            <Button variant="contained" startIcon={<Add />} onClick={() => { setEditingLoan(null); setFormOpen(true); }}>
-              Add Loan
-            </Button>
-          </Box>
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <PageHeader title="Loans & Dues" />
+        <button
+          onClick={handleOpenCreate}
+          className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all active:scale-[0.98] text-sm shrink-0"
+        >
+          <Plus className="w-4.5 h-4.5" /> Add Loan
+        </button>
+      </div>
 
-          {/* Summary cards */}
-          <Grid container spacing={2} sx={{ mb: 4 }}>
-            {Object.entries(LOAN_CONFIG).map(([type, cfg]) => (
-              <Grid item xs={12} sm={4} key={type}>
-                <Card sx={{ borderTop: 4, borderTopColor: cfg.color, background: cfg.bg }}>
-                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Box sx={{ color: cfg.color }}>{cfg.icon}</Box>
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">{cfg.label} (outstanding)</Typography>
-                      <Typography variant="h5" fontWeight={700} sx={{ color: cfg.color }}>
-                        ₹{totals[type as keyof typeof totals].toLocaleString('en-IN')}
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+      {/* Summary statistics grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8" aria-label="Outstanding sums">
+        <div className="bg-[#0f1d19] border border-green/15 rounded-xl p-5">
+          <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">I Lent (Dues to Collect)</span>
+          <div className="font-syne text-xl font-bold text-green mt-1">
+            {formatCurrency(totals.lent)}
+          </div>
+        </div>
 
-          {error && <Alert severity="error" sx={{ mb: 3 }}>Failed to load loans</Alert>}
+        <div className="bg-[#1f1216] border border-red/15 rounded-xl p-5">
+          <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">I Borrowed (Dues to Pay)</span>
+          <div className="font-syne text-xl font-bold text-red mt-1">
+            {formatCurrency(totals.borrowed)}
+          </div>
+        </div>
 
-          {/* Tabs */}
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
-            <Tab label="All" value="all" />
-            <Tab label="I Lent" value="lent" />
-            <Tab label="I Borrowed" value="borrowed" />
-            <Tab label="I Owe" value="payable" />
-          </Tabs>
+        <div className="bg-[#1e1711] border border-amber/15 rounded-xl p-5">
+          <span className="text-[10px] font-bold text-text-dim uppercase tracking-wider">I Owe (Accounts Payable)</span>
+          <div className="font-syne text-xl font-bold text-amber mt-1">
+            {formatCurrency(totals.payable)}
+          </div>
+        </div>
+      </div>
 
-          {isLoading ? (
-            <Grid container spacing={2}>
-              {[1,2,3].map(i => <Grid item xs={12} sm={6} md={4} key={i}><Skeleton variant="rounded" height={180} /></Grid>)}
-            </Grid>
-          ) : filtered.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <Handshake sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">No loans found</Typography>
-              <Button variant="contained" startIcon={<Add />} sx={{ mt: 2 }} onClick={() => setFormOpen(true)}>
-                Add First Loan
-              </Button>
-            </Box>
-          ) : (
-            <Grid container spacing={2}>
-              {filtered.map((loan: Loan) => {
-                const cfg = LOAN_CONFIG[loan.loanType];
-                const repaidPct = ((loan.principalAmount - loan.outstandingAmount) / loan.principalAmount) * 100;
-                const isSettled = loan.status === 'settled';
-                return (
-                  <Grid item xs={12} sm={6} md={4} key={loan.id}>
-                    <Card sx={{
-                      borderTop: 4, borderTopColor: isSettled ? 'grey.300' : cfg.color,
-                      opacity: isSettled ? 0.75 : 1,
-                      transition: 'box-shadow 0.2s',
-                      '&:hover': { boxShadow: 6 },
-                    }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                          <Box sx={{ flex: 1 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                              <Chip label={cfg.label} size="small" color={cfg.chipColor} />
-                              {isSettled && <Chip label="Settled" size="small" color="default" icon={<CheckCircle fontSize="small" />} />}
-                            </Box>
-                            <Typography variant="h6" fontWeight={700}>{loan.personName}</Typography>
-                          </Box>
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setSelectedLoan(loan); setMenuAnchor(e.currentTarget); }}>
-                            <MoreVert />
-                          </IconButton>
-                        </Box>
+      {/* Add / Edit Form Modal */}
+      {formOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setFormOpen(false)} />
+          <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-surface border-l border-border z-50 p-6 overflow-y-auto shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-250">
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-syne text-md font-bold text-white">
+                  {editingLoan ? 'Edit Loan Record' : 'Record New Loan / Due'}
+                </h3>
+                <button onClick={() => setFormOpen(false)} className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-text-muted">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-                        <Typography variant="h5" fontWeight={800} sx={{ color: cfg.color, mb: 1 }}>
-                          ₹{loan.outstandingAmount.toLocaleString('en-IN')}
-                          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                            / ₹{loan.principalAmount.toLocaleString('en-IN')}
-                          </Typography>
-                        </Typography>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Loan / Due Type</label>
+                  <select
+                    value={loanType}
+                    onChange={(e) => setLoanType(e.target.value as any)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  >
+                    <option value="lent">Lent (I gave money to someone)</option>
+                    <option value="borrowed">Borrowed (Someone gave money to me)</option>
+                    <option value="payable">Payable (Accounts/Subscriptions payable)</option>
+                  </select>
+                </div>
 
-                        <LinearProgress
-                          variant="determinate" value={Math.min(repaidPct, 100)}
-                          sx={{ mb: 1, height: 6, borderRadius: 3, bgcolor: 'grey.200',
-                            '& .MuiLinearProgress-bar': { bgcolor: cfg.color } }}
-                        />
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Counterparty (Person Name)</label>
+                  <input
+                    type="text"
+                    required
+                    value={personName}
+                    onChange={(e) => setPersonName(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="e.g. Rahul Sharma"
+                  />
+                </div>
 
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(loan.startDate).toLocaleDateString('en-IN')}
-                          </Typography>
-                          {!isSettled && (
-                            <Button 
-                              variant="outlined" 
-                              size="small" 
-                              color={cfg.chipColor}
-                              onClick={(e) => { e.stopPropagation(); setSelectedLoan(loan); setRepaymentFormOpen(true); }}
-                              sx={{ mt: 1, borderRadius: 2 }}
-                            >
-                              Repay Person
-                            </Button>
-                          )}
-                        </Box>
-                        {loan.dueDate && (
-                          <Typography variant="caption" color={new Date(loan.dueDate) < new Date() && !isSettled ? 'error.main' : 'text.secondary'} sx={{ display: 'block', mt: 1 }}>
-                            Due: {new Date(loan.dueDate).toLocaleDateString('en-IN')}
-                          </Typography>
-                        )}
-                        {loan.note && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>{loan.note}</Typography>}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                );
-              })}
-            </Grid>
-          )}
-        </Container>
-      </Box>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Principal Amount (INR)</label>
+                    <input
+                      type="number"
+                      required
+                      value={principal}
+                      onChange={(e) => setPrincipal(e.target.value)}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                      placeholder="0.00"
+                    />
+                  </div>
 
-      {/* Loan Form */}
-      <LoanForm
-        open={formOpen}
-        onClose={() => { setFormOpen(false); setEditingLoan(null); }}
-        onSubmit={createMutation.mutateAsync}
-        accounts={[]}
-        editingLoan={editingLoan}
-      />
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Outstanding Amount</label>
+                    <input
+                      type="number"
+                      value={outstanding}
+                      onChange={(e) => setOutstanding(e.target.value)}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                      placeholder="Default is same as principal"
+                    />
+                  </div>
+                </div>
 
-      {/* Actions Menu */}
-      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-        <MenuItem onClick={() => { setRepaymentFormOpen(true); setMenuAnchor(null); }} disabled={selectedLoan?.status === 'settled'}>
-          <Payment sx={{ mr: 1 }} fontSize="small" /> Repay Person
-        </MenuItem>
-        <MenuItem onClick={() => { setEditingLoan(selectedLoan); setFormOpen(true); setMenuAnchor(null); }}>
-          <Edit sx={{ mr: 1 }} fontSize="small" /> Edit
-        </MenuItem>
-        <MenuItem onClick={() => { setConfirmOpen(true); setMenuAnchor(null); }} sx={{ color: 'error.main' }}>
-          <Delete sx={{ mr: 1 }} fontSize="small" /> Delete
-        </MenuItem>
-      </Menu>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Start Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    />
+                  </div>
 
-      {/* Confirm Delete */}
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Delete Loan"
-        message={`Delete loan for ${selectedLoan?.personName}? This cannot be undone.`}
-        onConfirm={() => selectedLoan && deleteMutation.mutate(selectedLoan.id)}
-        onCancel={() => setConfirmOpen(false)}
-        loading={deleteMutation.isPending}
-      />
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Due Date (Optional)</label>
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    />
+                  </div>
+                </div>
 
-      {/* Repayment Form */}
-      <RepaymentForm
-        open={repaymentFormOpen}
-        onClose={() => setRepaymentFormOpen(false)}
-        onSubmit={async (data) => { if (selectedLoan) await repaymentMutation.mutateAsync({ repayment: data.repayment }); }}
-        loan={selectedLoan}
-        outstandingAmount={selectedPersonOutstanding}
-      />
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Interest Rate (% p.a. Optional)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={interestRate}
+                    onChange={(e) => setInterestRate(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="0.00"
+                  />
+                </div>
 
-      <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} message={toast} />
-    </ResponsiveLayout>
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Notes</label>
+                  <input
+                    type="text"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="Additional context..."
+                  />
+                </div>
+              </form>
+            </div>
+
+            <div className="flex gap-2 pt-6 border-t border-border mt-6">
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                className="flex-1 border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loadingAction}
+                className="flex-1 bg-cyan hover:bg-cyan/95 text-bg font-bold py-2 px-5 rounded-lg text-sm transition-all"
+              >
+                {loadingAction ? 'Saving...' : 'Save Loan'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Tabs */}
+      <div className="flex border-b border-border mb-6">
+        {LOAN_TAB_TYPES.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t as any)}
+            className={`pb-2.5 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 ${
+              tab === t ? 'border-cyan text-cyan' : 'border-transparent text-text-muted hover:text-text'
+            }`}
+          >
+            {t === 'all' ? 'All Loans' : t === 'lent' ? '💰 Lent' : t === 'borrowed' ? '🤝 Borrowed' : '💸 Owed'}
+          </button>
+        ))}
+      </div>
+
+      {/* List Grid */}
+      {filteredLoans.length === 0 ? (
+        <div className="text-center py-12 text-text-muted text-sm border border-dashed border-border rounded-xl bg-card">
+          No active loans found. Record one above!
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Active loan records">
+          {filteredLoans.map((loan: any) => {
+            const cfg = LOAN_CONFIG[loan.loanType as 'lent' | 'borrowed' | 'payable'] || LOAN_CONFIG.lent;
+            const Icon = cfg.icon;
+            const repaidPct = loan.principalAmount ? ((loan.principalAmount - loan.outstandingAmount) / loan.principalAmount) * 100 : 0;
+            const isSettled = loan.status === 'settled';
+
+            return (
+              <div
+                key={loan.id}
+                className={`bg-card border border-border rounded-xl p-5 hover:border-cyan/35 transition-all flex flex-col justify-between relative group ${
+                  isSettled ? 'opacity-65' : ''
+                }`}
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border ${cfg.bgColor} ${cfg.textColor}`}>
+                      {cfg.label}
+                    </span>
+
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleOpenEdit(loan)}
+                        className="text-text-dim hover:text-cyan p-1 rounded hover:bg-cyan/5 transition-all"
+                        title="Edit Loan"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(loan.id)}
+                        className="text-text-dim hover:text-red p-1 rounded hover:bg-red/5 transition-all"
+                        title="Delete Loan"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <h4 className="font-semibold text-white text-sm mb-1">{loan.personName}</h4>
+
+                  <div className="font-syne text-xl font-bold text-white mt-1 mb-3">
+                    {formatCurrency(loan.outstandingAmount || 0)}
+                    <span className="text-[10px] text-text-muted font-normal ml-1 font-mono">
+                      / {formatCurrency(loan.principalAmount || 0)}
+                    </span>
+                  </div>
+
+                  {/* Progress Line */}
+                  <div className="w-full bg-[#0a0f1c] rounded-full h-1.5 overflow-hidden border border-border my-3">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 bg-cyan`}
+                      style={{ width: `${Math.min(repaidPct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center text-[10px] text-text-muted font-mono mt-2">
+                    <span>Started: {formatIndianDate(loan.startDate)}</span>
+                    {loan.dueDate && (
+                      <span className={new Date(loan.dueDate) < new Date() && !isSettled ? 'text-red font-bold' : ''}>
+                        Due: {formatIndianDate(loan.dueDate)}
+                      </span>
+                    )}
+                  </div>
+
+                  {loan.note && (
+                    <p className="text-[10px] text-text-dim italic mt-2.5 truncate">"{loan.note}"</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </AppLayout>
   );
 }

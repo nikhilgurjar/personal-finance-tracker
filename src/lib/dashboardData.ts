@@ -1,73 +1,61 @@
 import { db } from './firebaseAdmin';
-
-function getMonthRange(month?: string | null) {
-  const fallback = new Date().toISOString().slice(0, 7);
-  const [year, monthIndex] = (month || fallback).split('-').map(Number);
-
-  if (!year || !monthIndex || monthIndex < 1 || monthIndex > 12) {
-    return getMonthRange(fallback);
-  }
-
-  return {
-    start: new Date(year, monthIndex - 1, 1).getTime(),
-    end: new Date(year, monthIndex, 1).getTime() - 1,
-  };
-}
-
-function sumBy<T>(items: T[], getAmount: (item: T) => number) {
-  return items.reduce((total, item) => total + getAmount(item), 0);
-}
+import { getCurrentMonthStr } from './utils/date';
 
 export async function getDashboardData(userId: string, month?: string | null) {
-  const { start, end } = getMonthRange(month);
+  const monthStr = month || getCurrentMonthStr();
   const userRef = db.collection('users').doc(userId);
 
-  const expensesRef = userRef.collection('expenses');
-  const incomesRef = userRef.collection('incomes');
-
   const [
-    monthExpensesSnapshot,
-    monthIncomesSnapshot,
-    activeSavingsSnapshot,
-    activeLoansSnapshot,
-    goalsSnapshot,
-    recentExpensesSnapshot,
-    recentIncomesSnapshot,
+    summarySnap,
+    accountsSnap,
+    instrumentsSnap,
+    loansSnap,
+    goalsSnap,
+    recentTxSnap
   ] = await Promise.all([
-    expensesRef.where('date', '>=', start).where('date', '<=', end).get(),
-    incomesRef.where('date', '>=', start).where('date', '<=', end).get(),
-    userRef.collection('savingsInstruments').where('status', '==', 'active').get(),
+    userRef.collection('summaries').doc(monthStr).get(),
+    userRef.collection('accounts').get(),
+    userRef.collection('instruments').where('status', '==', 'active').get(),
     userRef.collection('loans').where('status', '==', 'active').get(),
     userRef.collection('goals').orderBy('createdAt', 'desc').limit(2).get(),
-    expensesRef.orderBy('date', 'desc').limit(5).get(),
-    incomesRef.orderBy('date', 'desc').limit(5).get(),
+    userRef.collection('transactions').orderBy('date', 'desc').limit(5).get()
   ]);
 
-  const monthExpenses = monthExpensesSnapshot.docs.map(doc => doc.data());
-  const monthIncomes = monthIncomesSnapshot.docs.map(doc => doc.data());
-  const savingsInstruments = activeSavingsSnapshot.docs.map(doc => doc.data());
-  const loans = activeLoansSnapshot.docs.map(doc => doc.data());
-  const goals = goalsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const summaryData = summarySnap.exists ? summarySnap.data() || {} : {};
+  const accounts = accountsSnap.docs.map(doc => doc.data());
+  const instruments = instrumentsSnap.docs.map(doc => doc.data());
+  const loans = loansSnap.docs.map(doc => doc.data());
+  const goals = goalsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const recentTransactions = recentTxSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-  const recentTransactions = [
-    ...recentIncomesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), txType: 'income' })),
-    ...recentExpensesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), txType: 'expense' })),
-  ]
-    .sort((a: any, b: any) => (b.date || 0) - (a.date || 0))
-    .slice(0, 5);
+  const totalIncome = summaryData.income || 0;
+  const totalExpenses = summaryData.expenses || 0;
+  
+  // Sum bank balances
+  const netWorth = accounts.reduce((acc, account) => {
+    return acc + (account.balance || 0);
+  }, 0);
+
+  // Sum active investments
+  const savingsPortfolio = instruments.reduce((acc, inst) => {
+    return acc + (inst.currentValue || 0);
+  }, 0);
+
+  // Sum outstanding loans
+  const outstandingLoans = loans.reduce((acc, loan) => {
+    return acc + (loan.outstandingAmount || 0);
+  }, 0);
 
   return {
     totals: {
-      totalIncome: sumBy(monthIncomes, (income: any) => income.amount || 0),
-      salaryIncome: sumBy(
-        monthIncomes.filter((income: any) => income.sourceType === 'salary'),
-        (income: any) => income.amount || 0
-      ),
-      totalExpenses: sumBy(monthExpenses, (expense: any) => expense.amount || 0),
-      savingsPortfolio: sumBy(savingsInstruments, (instrument: any) => instrument.currentValue || 0),
-      outstandingLoans: sumBy(loans, (loan: any) => loan.outstandingAmount || 0),
+      totalIncome,
+      totalExpenses,
+      netWorth,
+      savingsPortfolio,
+      outstandingLoans,
     },
     recentTransactions,
     goals,
+    accounts: accounts.map(acc => ({ id: acc.id, name: acc.name, type: acc.type, balance: acc.balance })),
   };
 }

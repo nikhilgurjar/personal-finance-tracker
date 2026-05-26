@@ -78,7 +78,7 @@ export default function SavingsPage() {
   const { user, loading } = useAuthContext();
   const router = useRouter();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const queryClient = useQueryClient();
 
   const [tab, setTab] = useState('all');
@@ -248,7 +248,7 @@ export default function SavingsPage() {
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <ResponsiveLayout>
-        <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', pb: 10 }}>
+        <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', pb: { xs: 'calc(100px + env(safe-area-inset-bottom))', md: 10 } }}>
           <Container maxWidth="lg">
             {/* Header */}
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2, mb: 4 }}>
@@ -329,8 +329,10 @@ export default function SavingsPage() {
                         display: 'flex', flexDirection: 'column',
                         borderTop: 4, borderTopColor: isClosed ? 'grey.300' : cfg.color,
                         opacity: isClosed ? 0.75 : 1,
-                        transition: 'transform 0.2s, box-shadow 0.2s',
-                        '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 },
+                        transition: 'all 0.2s ease-in-out',
+                        boxShadow: '0 4px 20px 0 rgba(0,0,0,0.05)',
+                        borderRadius: 3,
+                        '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 12px 24px 0 rgba(0,0,0,0.1)' },
                       }}>
                         <CardContent sx={{ flexGrow: 1 }}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -382,13 +384,13 @@ export default function SavingsPage() {
                           </Box>
                         </CardContent>
                         
-                        <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
+                        <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1, flexDirection: 'row' }}>
                           {!isClosed && (
-                            <Button size="small" variant="outlined" fullWidth onClick={() => { setSelectedInstrument(instrument); setEventOpen(true); }}>
+                            <Button size="small" variant="outlined" sx={{ flexGrow: 1 }} onClick={() => { setSelectedInstrument(instrument); setEventOpen(true); }}>
                               Add Event
                             </Button>
                           )}
-                          <Button size="small" variant="text" fullWidth onClick={() => { setSelectedInstrument(instrument); setHistoryOpen(true); }}>
+                          <Button size="small" variant="text" sx={{ flexGrow: 1 }} onClick={() => { setSelectedInstrument(instrument); setHistoryOpen(true); }}>
                             History ({(instrument.events || []).length})
                           </Button>
                         </Box>
@@ -719,7 +721,13 @@ export default function SavingsPage() {
           <Fab 
             color="primary" 
             aria-label="add" 
-            sx={{ position: 'fixed', bottom: 76, right: 16, zIndex: 1000 }}
+            sx={{
+              position: 'fixed',
+              bottom: { xs: 'calc(80px + env(safe-area-inset-bottom))', md: 80 },
+              right: 16,
+              zIndex: 1200,
+              boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)',
+            }}
             onClick={() => setCreateOpen(true)}
           >
             <Add />

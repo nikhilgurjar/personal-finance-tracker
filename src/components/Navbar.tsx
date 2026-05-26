@@ -193,11 +193,25 @@ export function Navbar() {
         </Dialog>
 
         {/* Bottom Navigation on Mobile */}
-        <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1100, borderTop: 1, borderColor: 'divider' }} elevation={3}>
+        <Paper
+          sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1100,
+            borderTop: 1,
+            borderColor: 'divider',
+            pb: 'env(safe-area-inset-bottom)',
+            backgroundColor: 'background.paper',
+            transform: 'translate3d(0,0,0)',
+          }}
+          elevation={3}
+        >
           <BottomNavigation
             value={pathname === '/dashboard' ? 0 : pathname === '/expenses' ? 2 : pathname === '/incomes' ? 3 : -1}
             showLabels
-            sx={{ height: 60 }}
+            sx={{ height: 60, bgcolor: 'transparent' }}
           >
             <BottomNavigationAction
               label="Dashboard"

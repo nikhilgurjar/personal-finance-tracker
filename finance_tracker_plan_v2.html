@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinanceAI — Implementation Plan v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080c17;
+  --surface: #0e1424;
+  --card: #131928;
+  --card-hover: #171f30;
+  --border: rgba(255,255,255,0.06);
+  --border-med: rgba(255,255,255,0.1);
+  --border-strong: rgba(255,255,255,0.16);
+  --text: #dde4f0;
+  --text-muted: #6b7a99;
+  --text-dim: #3d4a62;
+  --cyan: #22d3ee;
+  --cyan-bg: rgba(34,211,238,0.08);
+  --amber: #f59e0b;
+  --amber-bg: rgba(245,158,11,0.08);
+  --green: #34d399;
+  --green-bg: rgba(52,211,153,0.08);
+  --red: #f87171;
+  --purple: #c084fc;
+  --sidebar-w: 220px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 14.5px;
+  line-height: 1.75;
+  display: flex;
+  min-height: 100vh;
+}
+/* SIDEBAR */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+.sidebar-logo .sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+}
+.ver-badge {
+  display: inline-block;
+  background: var(--cyan-bg);
+  color: var(--cyan);
+  border: 1px solid rgba(34,211,238,0.2);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  margin-top: 8px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.nav-section { padding: 14px 0 6px; }
+.nav-label {
+  padding: 0 20px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.nav-item.active { color: var(--text); background: rgba(34,211,238,0.05); border-left-color: var(--cyan); }
+.nav-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+.nav-item.active .nav-dot { background: var(--cyan); }
+/* MAIN */
+.main {
+  flex: 1;
+  padding: 44px 52px 96px;
+  max-width: 900px;
+  min-width: 0;
+}
+/* HERO */
+.hero {
+  margin-bottom: 52px;
+  padding-bottom: 44px;
+  border-bottom: 1px solid var(--border);
+}
+.hero-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  font-weight: 600;
+  margin-bottom: 14px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 40px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -1.5px;
+  line-height: 1.15;
+  margin-bottom: 14px;
+}
+.hero p { font-size: 15px; color: var(--text-muted); max-width: 560px; line-height: 1.7; }
+.hero-pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.pill-c { background: var(--cyan-bg); color: var(--cyan); border: 1px solid rgba(34,211,238,0.18); }
+.pill-a { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245,158,11,0.18); }
+.pill-g { background: var(--green-bg); color: var(--green); border: 1px solid rgba(52,211,153,0.18); }
+.pill-p { background: rgba(192,132,252,0.08); color: var(--purple); border: 1px solid rgba(192,132,252,0.18); }
+/* SECTION */
+section { margin-bottom: 60px; scroll-margin-top: 20px; }
+.sec-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+.sec-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  background: var(--cyan-bg);
+  border: 1px solid rgba(34,211,238,0.2);
+  border-radius: 5px;
+  padding: 4px 9px;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.sec-num.amber { color: var(--amber); background: var(--amber-bg); border-color: rgba(245,158,11,0.2); }
+h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -0.5px;
+}
+h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 30px 0 14px;
+}
+p { color: var(--text); margin-bottom: 12px; }
+/* METRICS */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.metric-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.metric-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.metric-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: white;
+  line-height: 1.2;
+}
+.metric-val.c { color: var(--cyan); }
+.metric-val.a { color: var(--amber); }
+.metric-val.g { color: var(--green); }
+.metric-val.p { color: var(--purple); }
+.metric-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; }
+/* TABLE */
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-bottom: 20px; }
+thead tr { border-bottom: 1px solid var(--border-strong); }
+th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--text);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.015); }
+td strong { color: white; font-weight: 600; }
+td code, th code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  background: rgba(255,255,255,0.07);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--cyan);
+}
+/* CODE */
+pre {
+  background: rgba(0,0,0,0.45);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 22px;
+  margin: 12px 0 22px;
+  overflow-x: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #b0bec5;
+}
+.kw  { color: #89b4fa; }
+.str { color: #a6e3a1; }
+.cm  { color: #4d5566; font-style: italic; }
+.ty  { color: #cba6f7; }
+.fn  { color: #89dceb; }
+.num { color: #fab387; }
+.prop{ color: #f38ba8; }
+code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  background: rgba(255,255,255,0.07);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #89dceb;
+}
+/* CARD */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+/* OPT CALLOUT */
+.opt {
+  background: rgba(245,158,11,0.05);
+  border: 1px solid rgba(245,158,11,0.18);
+  border-radius: 9px;
+  padding: 16px 20px;
+  margin: 18px 0;
+}
+.opt-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--amber);
+  margin-bottom: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.opt-title::before { content: '⚡'; font-size: 12px; }
+.opt ul { list-style: none; padding: 0; }
+.opt ul li {
+  font-size: 13.5px;
+  color: rgba(245,158,11,0.8);
+  padding: 3px 0 3px 18px;
+  position: relative;
+  line-height: 1.6;
+}
+.opt ul li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: rgba(245,158,11,0.45);
+}
+.opt p { font-size: 13.5px; color: rgba(245,158,11,0.8); margin: 0; line-height: 1.6; }
+/* ROUTE GRID */
+.route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 16px 0 20px;
+}
+.route-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.route-path {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  color: var(--cyan);
+  min-width: 118px;
+  flex-shrink: 0;
+}
+.route-label { font-size: 13px; color: var(--text-muted); }
+/* COMPARE */
+.compare-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0 22px;
+}
+.compare-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.compare-card.winner {
+  border-color: rgba(34,211,238,0.28);
+  background: linear-gradient(135deg, rgba(34,211,238,0.04), rgba(34,211,238,0.01));
+}
+.compare-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.compare-item {
+  font-size: 13px;
+  padding: 3px 0;
+  display: flex;
+  gap: 8px;
+  color: var(--text-muted);
+  align-items: flex-start;
+}
+.compare-item.good::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+.compare-item.bad::before  { content: '✗'; color: var(--red);   font-weight: 700; flex-shrink: 0; }
+/* SCHEMA CHIPS */
+.chips { margin: 6px 0; }
+.chip {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  margin: 3px;
+}
+.chip-sys { background: rgba(192,132,252,0.1); color: var(--purple); border: 1px solid rgba(192,132,252,0.2); }
+.chip-usr { background: var(--cyan-bg); color: var(--cyan); border: 1px solid rgba(34,211,238,0.18); }
+.chip-new { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+.chips-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; font-weight: 600; }
+/* AI FEATURES */
+.ai-feature {
+  display: flex;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ai-feature:last-child { border-bottom: none; }
+.ai-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  background: var(--cyan-bg);
+  border: 1px solid rgba(34,211,238,0.15);
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  height: fit-content;
+  flex-shrink: 0;
+}
+.ai-desc { font-size: 13.5px; color: var(--text-muted); line-height: 1.6; }
+.ai-quote {
+  font-style: italic;
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-top: 5px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-med);
+}
+/* STACK */
+.stack-cat { margin-bottom: 22px; }
+.stack-cat-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 600; margin-bottom: 8px; }
+.stack-items { display: flex; flex-direction: column; gap: 6px; }
+.stack-item {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.stack-name { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--cyan); min-width: 190px; flex-shrink: 0; }
+.stack-why { font-size: 13px; color: var(--text-muted); flex: 1; }
+/* PHASES */
+.phase-wrap { display: flex; flex-direction: column; gap: 0; }
+.phase { display: flex; gap: 0; position: relative; padding-bottom: 0; }
+.phase::after {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 42px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-med);
+}
+.phase:last-child::after { display: none; }
+.phase-dot {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cyan);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.phase-body {
+  flex: 1;
+  margin-left: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+}
+.phase-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: white; margin-bottom: 3px; }
+.phase-weeks { font-size: 11px; color: var(--text-dim); margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; }
+.phase-items { list-style: none; padding: 0; }
+.phase-items li {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  padding: 3px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.phase-items li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+/* WARN BOX */
+.warn-box {
+  background: rgba(245,158,11,0.06);
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.warn-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--amber); font-weight: 600; font-family: 'IBM Plex Mono', monospace; margin-bottom: 10px; }
+.warn-title { font-family: 'Syne', sans-serif; font-size: 19px; font-weight: 700; color: white; margin-bottom: 6px; }
+.warn-sub { font-size: 13.5px; color: rgba(245,158,11,0.65); }
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+/* RESPONSIVE */
+@media (max-width: 820px) {
+  .sidebar { display: none; }
+  .main { padding: 28px 22px 60px; max-width: 100%; }
+  .compare-row { grid-template-columns: 1fr; }
+  .route-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar" aria-label="Document sections">
+  <div class="sidebar-logo">
+    <h1>💰 FinanceAI</h1>
+    <span class="sub">Implementation Plan</span>
+    <div class="ver-badge">v2 · Optimized</div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Sections</div>
+    <a href="#overview" class="nav-item active"><span class="nav-dot"></span> Overview</a>
+    <a href="#schema" class="nav-item"><span class="nav-dot"></span> Firestore Schema</a>
+    <a href="#performance" class="nav-item"><span class="nav-dot"></span> Scalability &amp; Perf</a>
+    <a href="#routes" class="nav-item"><span class="nav-dot"></span> Routes</a>
+    <a href="#ai" class="nav-item"><span class="nav-dot"></span> AI Integration</a>
+    <a href="#stack" class="nav-item"><span class="nav-dot"></span> Tech Stack</a>
+    <a href="#components" class="nav-item"><span class="nav-dot"></span> Components</a>
+    <a href="#fetching" class="nav-item"><span class="nav-dot"></span> Data Fetching</a>
+    <a href="#phases" class="nav-item"><span class="nav-dot"></span> Build Phases</a>
+    <a href="#question" class="nav-item"><span class="nav-dot"></span> Open Question</a>
+  </div>
+</nav>
+
+<main class="main">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">Final System Design · All Decisions Locked</div>
+    <h1>FinanceAI<br>Implementation Plan</h1>
+    <p>Indian-first personal finance tracker. PF, UPI, fiscal year, salary slips, people-ledger, goals ↔ instruments ↔ people, Gemini everywhere, and a Telegram bot.</p>
+    <div class="hero-pills">
+      <span class="pill pill-c">Next.js 14</span>
+      <span class="pill pill-c">Firebase</span>
+      <span class="pill pill-a">Gemini Flash</span>
+      <span class="pill pill-g">SWR</span>
+      <span class="pill pill-p">Telegram Bot</span>
+      <span class="pill pill-c">shadcn/ui</span>
+      <span class="pill pill-c">Tailwind</span>
+    </div>
+  </div>
+
+  <!-- 01 OVERVIEW -->
+  <section id="overview">
+    <div class="sec-header">
+      <span class="sec-num">01</span>
+      <h2>Decisions Summary</h2>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">UI Library</div>
+        <div class="metric-val c">shadcn/ui</div>
+        <div class="metric-sub">Tailwind + Radix · zero bundle</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Data Fetching</div>
+        <div class="metric-val g">SWR</div>
+        <div class="metric-sub">2KB · auto-revalidate on focus</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">AI Engine</div>
+        <div class="metric-val a">Gemini Flash</div>
+        <div class="metric-sub">Function calling · everywhere</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Bot</div>
+        <div class="metric-val p">Telegram</div>
+        <div class="metric-sub">Phase 1 · webhook · no library</div>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Area</th><th>Decision</th><th>Rationale</th></tr></thead>
+      <tbody>
+        <tr><td><strong>CSS</strong></td><td><code>Tailwind CSS v3</code></td><td>Zero runtime, utility-first, dark mode trivial</td></tr>
+        <tr><td><strong>UI Library</strong></td><td><code>shadcn/ui</code></td><td>Radix primitives, copy-paste, no bundle bloat</td></tr>
+        <tr><td><strong>Theme</strong></td><td>Dark only</td><td>Finance apps feel premium in dark</td></tr>
+        <tr><td><strong>Data Fetching</strong></td><td><code>SWR</code></td><td>2KB vs 12KB · simple · auto-revalidates on focus</td></tr>
+        <tr><td><strong>Forms</strong></td><td>Controlled React state</td><td>No Zod/RHF — form complexity doesn't justify them</td></tr>
+        <tr><td><strong>Routes</strong></td><td>Separate pages</td><td>Better URL sharing + route-level code splitting</td></tr>
+        <tr><td><strong>Salary form</strong></td><td>3 fields only</td><td>Net take-home + employee PF + salary month</td></tr>
+        <tr><td><strong>Schedules</strong></td><td>Human-readable</td><td>"Monthly on 5th" — no RRule library overhead</td></tr>
+        <tr><td><strong>Dates</strong></td><td><code>Intl</code> + Native Date</td><td>Saves 7KB vs dayjs — handles Indian locale natively</td></tr>
+        <tr><td><strong>Deployment</strong></td><td>Vercel</td><td>Free tier · edge cache for lookup tables · webhook URLs</td></tr>
+        <tr><td><strong>Tax / Capital Gains</strong></td><td>Not included</td><td>Out of scope — not needed for personal tracking</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Why Custom Over Open-Source?</h3>
+    <table>
+      <thead><tr><th>Tool</th><th>What it does</th><th>Why it doesn't fit</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Maybe Finance</strong></td><td>Net worth tracker</td><td>No Indian instruments, no people-ledger, no Telegram</td></tr>
+        <tr><td><strong>Firefly III</strong></td><td>Budget tracker (PHP)</td><td>No investments, no goals-savings link, PHP server</td></tr>
+        <tr><td><strong>Actual Budget</strong></td><td>Local-first budget app</td><td>No cloud sync, no investments, no loans-people link</td></tr>
+        <tr><td><strong>Ghostfolio</strong></td><td>Portfolio tracker</td><td>Only investments — no expenses, loans, or goals</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 02 SCHEMA -->
+  <section id="schema">
+    <div class="sec-header">
+      <span class="sec-num">02</span>
+      <h2>Firestore Schema</h2>
+    </div>
+
+    <h3>Collection Map</h3>
+    <div class="card">
+      <div class="chips-label">System-level (shared, cached at edge)</div>
+      <div class="chips">
+        <span class="chip chip-sys">/platforms</span>
+        <span class="chip chip-sys">/providers</span>
+        <span class="chip chip-sys">/instrument_masters</span>
+      </div>
+      <div class="chips-label" style="margin-top:16px;">Per-user (users/{uid}/...)</div>
+      <div class="chips">
+        <span class="chip chip-usr">settings</span>
+        <span class="chip chip-usr">accounts</span>
+        <span class="chip chip-usr">transactions</span>
+        <span class="chip chip-usr">instruments</span>
+        <span class="chip chip-usr">goals</span>
+        <span class="chip chip-usr">loans</span>
+        <span class="chip chip-usr">loan_repayments</span>
+        <span class="chip chip-usr">people</span>
+        <span class="chip chip-usr">schedules</span>
+        <span class="chip chip-usr">budgets</span>
+        <span class="chip chip-usr">categories</span>
+        <span class="chip chip-usr">audit_logs</span>
+        <span class="chip chip-new">summaries ← added</span>
+      </div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-title">Scalability — Summaries Subcollection</div>
+      <ul>
+        <li>Add <code>users/{uid}/summaries/{yyyy-mm}</code> storing pre-computed monthly totals (income, expenses, savings, per-category). Updated atomically with every transaction write via <code>FieldValue.increment</code> in a batched write.</li>
+        <li>Dashboard reads a single document instead of aggregating all transactions client-side — reduces Firestore reads from O(n) to O(1) per page load.</li>
+        <li>Budget page uses the same summary doc for instant category totals without scanning every transaction for the month.</li>
+      </ul>
+    </div>
+
+    <h3>Currency Inheritance</h3>
+    <pre><span class="cm">// Single source of truth — stop storing currency: "INR" everywhere</span>
+user_settings.baseCurrency = <span class="str">"INR"</span>
+
+<span class="cm">// Resolution rule applied to every entity at read time</span>
+<span class="kw">const</span> effectiveCurrency = doc.currency ?? user.baseCurrency
+
+<span class="cm">// Impact: removes currency field from ~95% of transactions and instruments</span>
+<span class="cm">// Only set when it differs: USD NRE account, US stocks, etc.</span></pre>
+
+    <h3>Instrument Interface</h3>
+    <pre><span class="kw">interface</span> <span class="ty">Instrument</span> {
+  id: <span class="ty">string</span>;  userId: <span class="ty">string</span>
+  ownerId?: <span class="ty">string</span>          <span class="cm">// FK → people (can be family member, not userId)</span>
+  platformId?: <span class="ty">string</span>       <span class="cm">// FK → /platforms</span>
+  providerId?: <span class="ty">string</span>        <span class="cm">// FK → /providers</span>
+  linkedAccountId?: <span class="ty">string</span>   <span class="cm">// FK → accounts (bank for withdrawals)</span>
+  instrumentClass: <span class="str">'fixed_return'</span> | <span class="str">'market_linked'</span> | <span class="str">'govt_scheme'</span>
+  type: <span class="str">'fd'</span> | <span class="str">'rd'</span> | <span class="str">'mf'</span> | <span class="str">'stock'</span> | <span class="str">'etf'</span> | <span class="str">'ppf'</span> | <span class="str">'nps'</span> | <span class="str">'epf'</span> | <span class="str">'bond'</span>
+  principal: <span class="ty">number</span>;  currentValue: <span class="ty">number</span>;  unrealizedGain: <span class="ty">number</span>
+  goalIds: <span class="ty">string</span>[];  sipScheduleId?: <span class="ty">string</span>
+  details: <span class="ty">FixedReturnDetails</span> | <span class="ty">MarketLinkedDetails</span>
+  status: <span class="str">'active'</span> | <span class="str">'matured'</span> | <span class="str">'closed'</span>
+  currency?: <span class="ty">string</span>         <span class="cm">// omit when INR (inherited)</span>
+  createdAt: <span class="ty">number</span>;  updatedAt: <span class="ty">number</span>  <span class="cm">// ← added: needed for delta sync</span>
+}
+
+<span class="cm">// Market-linked: currentValue = units × currentNAV (NOT events sum)</span>
+<span class="cm">// unrealizedGain = currentValue − (units × avgCostBasis)</span></pre>
+
+    <h3>Simplified Salary (3 fields)</h3>
+    <pre><span class="kw">interface</span> <span class="ty">SalaryComponents</span> {
+  netTakeHome: <span class="ty">number</span>    <span class="cm">// what hits your bank account</span>
+  employeePf: <span class="ty">number</span>     <span class="cm">// your PF deduction</span>
+  salaryMonth: <span class="ty">string</span>    <span class="cm">// "2026-05"</span>
+}
+<span class="cm">// Stored as transaction.salaryComponents on type:'salary' transactions</span></pre>
+
+    <h3>Indian Transaction Fields</h3>
+    <pre><span class="kw">interface</span> <span class="ty">Transaction</span> {
+  <span class="cm">// ... core fields</span>
+  fiscalYear?: <span class="ty">string</span>         <span class="cm">// "2025-26" — denormalized for FY queries</span>
+  paymentMethod?: <span class="str">'upi'</span> | <span class="str">'neft'</span> | <span class="str">'imps'</span> | <span class="str">'rtgs'</span> | <span class="str">'cash'</span> | <span class="str">'card'</span> | <span class="str">'cheque'</span>
+  upiRefId?: <span class="ty">string</span>           <span class="cm">// for reconciliation</span>
+  currency?: <span class="ty">string</span>           <span class="cm">// omit when INR</span>
+  exchangeRate?: <span class="ty">number</span>
+}
+<span class="cm">// Note: UPI is a paymentMethod, not an account type</span>
+<span class="cm">// Credit card spend debits credit_card account, not the bank account</span></pre>
+  </section>
+
+  <!-- 03 PERFORMANCE -->
+  <section id="performance">
+    <div class="sec-header">
+      <span class="sec-num amber">03</span>
+      <h2>Scalability &amp; Performance</h2>
+    </div>
+    <p style="color:var(--text-muted); margin-bottom:24px;">Optimizations added on top of the baseline plan — for production readiness from day one.</p>
+
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-label">Target First-Load JS</div>
+        <div class="metric-val c">&lt;150KB</div>
+        <div class="metric-sub">gzipped · per route</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Dashboard Load</div>
+        <div class="metric-val g">1 read</div>
+        <div class="metric-sub">summaries doc, not full scan</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Transactions List</div>
+        <div class="metric-val g">Virtualized</div>
+        <div class="metric-sub">Only ~15 rows in DOM</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">AI Insight Cache</div>
+        <div class="metric-val a">5 min</div>
+        <div class="metric-sub">SWR dedup · no per-focus call</div>
+      </div>
+    </div>
+
+    <h3>Bundle Optimization — Dynamic Imports</h3>
+    <pre><span class="cm">// next.config.js — lazy-load only what each page needs</span>
+
+<span class="cm">// Heavy charts: only loaded on /investments, /budgets, /dashboard</span>
+<span class="kw">const</span> SpendingChart = <span class="fn">dynamic</span>(
+  () => <span class="fn">import</span>(<span class="str">'../components/charts/SpendingChart'</span>),
+  { ssr: <span class="kw">false</span> }
+)
+
+<span class="cm">// AI chat panel: lazy — not needed on first paint</span>
+<span class="kw">const</span> AIChatPanel = <span class="fn">dynamic</span>(
+  () => <span class="fn">import</span>(<span class="str">'../components/shared/AIChatPanel'</span>),
+  { loading: () => <span class="fn">&lt;ChatSkeleton /&gt;</span> }
+)
+
+<span class="cm">// Full AI page: disable SSR — Gemini SDK is client-only</span>
+<span class="kw">const</span> AIPage = <span class="fn">dynamic</span>(<span class="str">'./ai/page'</span>, { ssr: <span class="kw">false</span> })
+
+<span class="cm">// Target: Recharts (~45KB) only bundled on pages that chart</span>
+<span class="cm">// Result: login, transactions, people pages stay under 80KB</span></pre>
+
+    <h3>Transaction List Virtualization</h3>
+    <pre><span class="cm">// When count > 100 rows, avoid 500+ DOM nodes</span>
+<span class="cm">// @tanstack/react-virtual adds only ~2KB gzipped</span>
+<span class="kw">import</span> { useVirtualizer } <span class="kw">from</span> <span class="str">'@tanstack/react-virtual'</span>
+
+<span class="kw">const</span> rowVirtualizer = <span class="fn">useVirtualizer</span>({
+  count: transactions.length,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => <span class="num">64</span>,   <span class="cm">// row height px</span>
+  overscan: <span class="num">5</span>,               <span class="cm">// pre-render 5 rows above/below viewport</span>
+})
+
+<span class="cm">// Renders only ~15 rows at any time regardless of list size</span>
+<span class="cm">// Wrap TransactionRow in React.memo to prevent re-renders on SWR revalidate</span></pre>
+
+    <h3>Cursor-Based Pagination</h3>
+    <pre><span class="cm">// NEVER use offset pagination — it re-scans the entire collection</span>
+<span class="cm">// Always use startAfter() with the last document snapshot</span>
+
+<span class="kw">const</span> { data, setSize } = <span class="fn">useSWRInfinite</span>(
+  (pageIndex, prevData) => {
+    <span class="kw">if</span> (prevData && !prevData.nextCursor) <span class="kw">return null</span>  <span class="cm">// end of list</span>
+    <span class="kw">const</span> cursor = prevData?.nextCursor ?? <span class="str">''</span>
+    <span class="kw">return</span> <span class="str">`/api/transactions?after=${cursor}&limit=25`</span>
+  },
+  fetcher
+)
+
+<span class="cm">// API route uses startAfter(lastDocSnapshot)</span>
+<span class="cm">// Return { data: [...], nextCursor: lastDoc.id || null }</span>
+<span class="cm">// Cost: 25 reads per page, not O(total docs)</span></pre>
+
+    <h3>SWR Global Config + Optimistic Updates</h3>
+    <pre><span class="cm">// lib/swr.ts — production-ready SWR setup</span>
+<span class="kw">export const</span> swrConfig = {
+  dedupingInterval: <span class="num">5000</span>,        <span class="cm">// ignore duplicate keys within 5s</span>
+  revalidateOnFocus: <span class="kw">true</span>,
+  revalidateOnReconnect: <span class="kw">true</span>,
+  errorRetryCount: <span class="num">3</span>,
+  errorRetryInterval: <span class="num">5000</span>,
+}
+
+<span class="cm">// Optimistic update — UI reflects change immediately</span>
+<span class="kw">async function</span> <span class="fn">addTransaction</span>(data: <span class="ty">TransactionInput</span>) {
+  <span class="kw">const</span> temp = { ...data, id: <span class="fn">crypto.randomUUID</span>(), createdAt: Date.<span class="fn">now</span>() }
+  <span class="kw">await</span> <span class="fn">mutate</span>(<span class="str">'/api/transactions'</span>,
+    (current) => [temp, ...current],
+    { revalidate: <span class="kw">false</span> }  <span class="cm">// update UI instantly, no spinner</span>
+  )
+  <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">'/api/transactions'</span>, { method: <span class="str">'POST'</span>, body: <span class="fn">JSON.stringify</span>(data) })
+  <span class="fn">mutate</span>(<span class="str">'/api/transactions'</span>)  <span class="cm">// revalidate to get server-assigned ID</span>
+}</pre>
+
+    <h3>Firestore Atomic Batch Writes</h3>
+    <pre><span class="cm">// Never write transaction + summary separately — use a batch</span>
+<span class="kw">async function</span> <span class="fn">addTransactionWithSummary</span>(tx: <span class="ty">Transaction</span>) {
+  <span class="kw">const</span> batch = db.<span class="fn">batch</span>()
+
+  <span class="kw">const</span> txRef = db.<span class="fn">collection</span>(<span class="str">`users/${uid}/transactions`</span>).<span class="fn">doc</span>()
+  batch.<span class="fn">set</span>(txRef, { ...tx, createdAt: <span class="fn">serverTimestamp</span>() })
+
+  <span class="kw">const</span> summaryRef = db.<span class="fn">doc</span>(<span class="str">`users/${uid}/summaries/${tx.salaryMonth}`</span>)
+  batch.<span class="fn">set</span>(summaryRef, {
+    expenses: FieldValue.<span class="fn">increment</span>(tx.type === <span class="str">'expense'</span> ? tx.amount : <span class="num">0</span>),
+    income:   FieldValue.<span class="fn">increment</span>(tx.type === <span class="str">'income'</span>  ? tx.amount : <span class="num">0</span>),
+    [tx.category]: FieldValue.<span class="fn">increment</span>(tx.amount)
+  }, { merge: <span class="kw">true</span> })
+
+  <span class="kw">await</span> batch.<span class="fn">commit</span>()  <span class="cm">// atomic — both succeed or both fail</span>
+}</pre>
+
+    <div class="opt">
+      <div class="opt-title">Composite Firestore Indexes (firestore.indexes.json)</div>
+      <ul>
+        <li><strong>Transactions page:</strong> <code>[userId, createdAt DESC]</code> and <code>[userId, type, createdAt DESC]</code> for type-filtered views</li>
+        <li><strong>Budget queries:</strong> <code>[userId, fiscalYear, category]</code> — enables FY category roll-up without client-side scan</li>
+        <li><strong>Schedules cron:</strong> <code>[userId, status, nextRunAt ASC]</code> — finds all active due schedules efficiently</li>
+        <li><strong>Instruments portfolio:</strong> <code>[userId, status, type]</code> — fast active-by-type filtering</li>
+        <li>Deploy all with: <code>firebase deploy --only firestore:indexes</code></li>
+      </ul>
+    </div>
+
+    <h3>API Route Caching</h3>
+    <pre><span class="cm">// Lookup tables (platforms, providers) change rarely — cache at edge</span>
+<span class="kw">export async function</span> <span class="fn">GET</span>() {
+  <span class="kw">const</span> platforms = <span class="kw">await</span> db.<span class="fn">collection</span>(<span class="str">'platforms'</span>).<span class="fn">get</span>()
+  <span class="kw">return</span> Response.<span class="fn">json</span>(platforms, {
+    headers: {
+      <span class="str">'Cache-Control'</span>: <span class="str">'public, s-maxage=3600, stale-while-revalidate=86400'</span>
+    }                <span class="cm">// Vercel Edge: 1hr fresh, 24hr stale-while-revalidate</span>
+  })
+}
+
+<span class="cm">// User-specific routes: private, no CDN caching</span>
+<span class="cm">// Budget summary (changes slowly): private, max-age=60s</span>
+<span class="str">'Cache-Control'</span>: <span class="str">'private, max-age=60, stale-while-revalidate=300'</span>
+
+<span class="cm">// AI insight responses: cache 5 minutes in SWR to avoid repeated Gemini calls</span>
+{ dedupingInterval: <span class="num">300_000</span>, revalidateOnFocus: <span class="kw">false</span> }</pre>
+
+    <h3>Gemini Cost Controls</h3>
+    <pre><span class="cm">// Debounce auto-categorize — don't call Gemini per keystroke</span>
+<span class="kw">const</span> debouncedCategorize = <span class="fn">useMemo</span>(
+  () => <span class="fn">debounce</span>(<span class="kw">async</span> (note: <span class="ty">string</span>) => {
+    <span class="kw">if</span> (note.length < <span class="num">4</span>) <span class="kw">return</span>  <span class="cm">// skip very short inputs</span>
+    <span class="kw">const</span> suggestion = <span class="kw">await</span> <span class="fn">aiCategorize</span>(note)
+    <span class="fn">setCategory</span>(suggestion)
+  }, <span class="num">600</span>),  <span class="cm">// fire only after 600ms pause in typing</span>
+  []
+)
+
+<span class="cm">// Cache insight cards — 5-minute SWR TTL per page</span>
+<span class="kw">const</span> { data: insights } = <span class="fn">useSWR</span>(
+  <span class="str">`/api/ai/insights?page=dashboard&month=${month}`</span>,
+  fetcher,
+  { revalidateOnFocus: <span class="kw">false</span>, dedupingInterval: <span class="num">300_000</span> }
+)
+<span class="cm">// Telegram: rate-limit to 30 requests/min per chatId to prevent abuse</span></pre>
+
+    <h3>Firestore Security Rules</h3>
+    <pre><span class="cm">// firestore.rules — deploy before launch</span>
+rules_version = <span class="str">'2'</span>;
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    <span class="cm">// System lookup tables: authenticated reads only, no writes</span>
+    match /<span class="prop">platforms</span>/{doc} { allow read: <span class="kw">if</span> request.auth != <span class="kw">null</span>; }
+    match /<span class="prop">providers</span>/{doc} { allow read: <span class="kw">if</span> request.auth != <span class="kw">null</span>; }
+    match /<span class="prop">instrument_masters</span>/{doc} { allow read: <span class="kw">if</span> request.auth != <span class="kw">null</span>; }
+
+    <span class="cm">// User data: strictly owner-only access</span>
+    match /<span class="prop">users</span>/{userId}/{document=**} {
+      allow read, write: <span class="kw">if</span> request.auth.uid == userId;
+    }
+  }
+}</pre>
+
+    <div class="opt">
+      <div class="opt-title">PWA &amp; Offline Strategy</div>
+      <ul>
+        <li>Enable Firestore <code>enablePersistence()</code> — offline reads from local cache while reconnecting.</li>
+        <li>Add PWA manifest + service worker (<code>next-pwa</code> or manual) — cache static assets and last-loaded page data.</li>
+        <li>Show offline banner with <code>navigator.onLine</code> listener — queue writes to Firestore (which handles this natively) and flush on reconnect.</li>
+        <li>Cache <code>/platforms</code> and <code>/providers</code> responses in SWR with long TTL — they're needed for every form, change rarely.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 04 ROUTES -->
+  <section id="routes">
+    <div class="sec-header">
+      <span class="sec-num">04</span>
+      <h2>Routes &amp; Navigation</h2>
+    </div>
+
+    <div class="route-grid">
+      <div class="route-item"><span class="route-path">/</span><span class="route-label">Login</span></div>
+      <div class="route-item"><span class="route-path">/dashboard</span><span class="route-label">Home — net worth, briefing</span></div>
+      <div class="route-item"><span class="route-path">/transactions</span><span class="route-label">All money in/out</span></div>
+      <div class="route-item"><span class="route-path">/accounts</span><span class="route-label">Bank accounts &amp; credit cards</span></div>
+      <div class="route-item"><span class="route-path">/investments</span><span class="route-label">Savings instruments portfolio</span></div>
+      <div class="route-item"><span class="route-path">/people</span><span class="route-label">People &amp; ledger</span></div>
+      <div class="route-item"><span class="route-path">/budgets</span><span class="route-label">Monthly budget limits</span></div>
+      <div class="route-item"><span class="route-path">/goals</span><span class="route-label">Financial goals</span></div>
+      <div class="route-item"><span class="route-path">/loans</span><span class="route-label">Loans &amp; dues</span></div>
+      <div class="route-item"><span class="route-path">/schedules</span><span class="route-label">Recurring payments</span></div>
+      <div class="route-item"><span class="route-path">/ai</span><span class="route-label">Full AI chat page</span></div>
+      <div class="route-item"><span class="route-path">/settings</span><span class="route-label">App settings</span></div>
+    </div>
+
+    <div class="opt">
+      <div class="opt-title">Route-Level Performance Additions</div>
+      <ul>
+        <li>Add <code>loading.tsx</code> per route — skeleton UI renders instantly while the page JS hydrates, eliminating blank-screen flashes.</li>
+        <li>Add <code>error.tsx</code> per route — catches async errors without crashing the whole app.</li>
+        <li>Move <code>/dashboard</code> to a React Server Component — fetch summary data server-side, no client-side loading state for above-the-fold content.</li>
+        <li>Set <code>prefetch={false}</code> on sidebar links to <code>/ai</code> and <code>/settings</code> — they're heavy and rarely visited; don't waste bandwidth prefetching them.</li>
+      </ul>
+    </div>
+
+    <h3>Navigation Layouts</h3>
+    <div class="compare-row">
+      <div class="compare-card">
+        <div class="compare-title">Desktop Sidebar (fixed left)</div>
+        <pre style="font-size:12px; padding:12px 14px; margin:0;">┌────────────────────┐
+│ 💰 FinanceAI       │
+│ ─────────────────  │
+│ 🏠 Dashboard       │
+│ 💸 Transactions    │
+│ 🏦 Accounts        │
+│ 📈 Investments     │
+│ 👥 People          │
+│ 🎯 Goals           │
+│ 📊 Budgets         │
+│ 🤝 Loans           │
+│ 📅 Schedules       │
+│ ─────────────────  │
+│ 🤖 AI Assistant    │
+│ ⚙️  Settings       │
+└────────────────────┘</pre>
+      </div>
+      <div class="compare-card">
+        <div class="compare-title">Mobile Bottom Bar</div>
+        <pre style="font-size:12px; padding:12px 14px; margin:0;">┌──────────────────────┐
+│ 🏠  💸  🏦  🎯  ···  │
+│ Home TX  Acc Goal More│
+└──────────────────────┘
+
+Remaining pages accessible
+via "More" overflow sheet.
+
+Bottom bar: 5 items max.
+Keep it thumb-friendly.</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 AI -->
+  <section id="ai">
+    <div class="sec-header">
+      <span class="sec-num">05</span>
+      <h2>AI Integration — Everywhere</h2>
+    </div>
+    <p style="color:var(--text-muted); margin-bottom:20px;">Single Gemini function-calling engine. 15 functions. Insight cards on every page. Floating chat from anywhere. Full page. Telegram bot.</p>
+
+    <div class="card" style="padding:0;">
+      <div style="padding: 16px 24px; border-bottom: 1px solid var(--border);">
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); font-weight:600;">AI on every page</div>
+      </div>
+      <div style="padding: 4px 24px 4px;">
+        <div class="ai-feature">
+          <span class="ai-tag">dashboard</span>
+          <div><div class="ai-desc">Morning briefing + smart schedule alerts</div><div class="ai-quote">"Good morning! ₹4,200 spent in 3 days. Food budget 65% used. SIP due tomorrow."</div></div>
+        </div>
+        <div class="ai-feature">
+          <span class="ai-tag">transactions</span>
+          <div><div class="ai-desc">Auto-categorize on add (debounced). Pattern detection alerts.</div><div class="ai-quote">"Swiggy 12x this month — want to set a food budget?"</div></div>
+        </div>
+        <div class="ai-feature">
+          <span class="ai-tag">investments</span>
+          <div><div class="ai-desc">Portfolio health check. Maturity alerts. Real return vs inflation.</div><div class="ai-quote">"FD at 7.5% vs 5.5% inflation — real return is 2%"</div></div>
+        </div>
+        <div class="ai-feature">
+          <span class="ai-tag">goals</span>
+          <div><div class="ai-desc">Progress projection and savings gap analysis</div><div class="ai-quote">"At current rate, Buy House in 8 months — 3 weeks ahead of target"</div></div>
+        </div>
+        <div class="ai-feature">
+          <span class="ai-tag">loans</span>
+          <div><div class="ai-desc">Payoff timeline optimizer</div><div class="ai-quote">"₹2,000 extra/month on Rahul's loan clears it by Aug 2026"</div></div>
+        </div>
+        <div class="ai-feature">
+          <span class="ai-tag">budgets</span>
+          <div><div class="ai-desc">Smart budget suggestions from last 3 months</div><div class="ai-quote">"Suggest ₹6,500 Food · ₹3,000 Transport · ₹1,200 Utilities"</div></div>
+        </div>
+        <div class="ai-feature">
+          <span class="ai-tag">ai page</span>
+          <div><div class="ai-desc">Full freeform chat with all 15 read/write/analysis functions available</div></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Telegram Bot — Gemini Powered</h3>
+    <pre><span class="cm">// app/api/telegram/route.ts</span>
+<span class="kw">POST</span> /api/telegram
+  → <span class="fn">verifySecretToken</span>(req.headers)     <span class="cm">// reject spoofed webhooks</span>
+  → <span class="fn">getUserIdFromChatId</span>(chatId)         <span class="cm">// Firestore lookup</span>
+  → <span class="fn">runGeminiWithFunctions</span>(msg, userId)
+  → <span class="fn">executeToolCall</span>(toolName, params)   <span class="cm">// read/write Firestore</span>
+  → <span class="fn">sendTelegramReply</span>(chatId, result)
+
+<span class="cm">// Commands: /start /summary /today /budget /goals /loans /help</span>
+
+<span class="cm">// Example exchange:</span>
+You:  <span class="str">"add 500 swiggy"</span>
+Bot:  ✅ Added ₹500 expense — Food (AI detected) — HDFC Bank
+      [✏️ Edit category] [❌ Undo]
+
+You:  <span class="str">"how much did i spend this month"</span>
+Bot:  📊 May 2026: Income ₹85,000 · Expenses ₹42,300 · Net +₹24,700
+      Top: 🍔 Food ₹8,200 (102% budget 🔴) · 🏠 Rent ₹15,000</pre>
+
+    <div class="opt">
+      <div class="opt-title">Telegram Security</div>
+      <ul>
+        <li>Verify <code>X-Telegram-Bot-Api-Secret-Token</code> header on every webhook request — set during webhook registration, reject without it.</li>
+        <li>Store <code>chatId → userId</code> mapping in Firestore with <code>linkedAt</code>. One-time link flow via <code>/start</code> command with a 10-minute expiring token.</li>
+        <li>Rate-limit webhook route: 30 requests/min per chatId — prevents Gemini cost abuse from spam.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 06 STACK -->
+  <section id="stack">
+    <div class="sec-header">
+      <span class="sec-num">06</span>
+      <h2>Tech Stack</h2>
+    </div>
+
+    <div class="stack-cat">
+      <div class="stack-cat-title">Framework &amp; Database</div>
+      <div class="stack-items">
+        <div class="stack-item"><span class="stack-name">Next.js 14 App Router</span><span class="stack-why">RSC, API routes, route code-splitting, Vercel deploy</span></div>
+        <div class="stack-item"><span class="stack-name">Firebase Firestore</span><span class="stack-why">Real-time, offline persistence, scales to millions of docs</span></div>
+        <div class="stack-item"><span class="stack-name">Firebase Auth</span><span class="stack-why">Google/email auth · ID tokens secure every API route</span></div>
+      </div>
+    </div>
+
+    <div class="stack-cat">
+      <div class="stack-cat-title">UI &amp; Styling</div>
+      <div class="stack-items">
+        <div class="stack-item"><span class="stack-name">Tailwind CSS v3</span><span class="stack-why">Zero-runtime CSS · tree-shaken · dark mode trivial</span></div>
+        <div class="stack-item"><span class="stack-name">shadcn/ui</span><span class="stack-why">Radix + Tailwind, you own the code, fully accessible</span></div>
+        <div class="stack-item"><span class="stack-name">Lucide Icons</span><span class="stack-why">Tree-shakeable · 1KB per icon · replaces MUI icons</span></div>
+        <div class="stack-item"><span class="stack-name">Recharts</span><span class="stack-why">Keep · lazy-loaded only on pages that chart (~45KB)</span></div>
+      </div>
+    </div>
+
+    <div class="stack-cat">
+      <div class="stack-cat-title">Data, Forms &amp; Dates</div>
+      <div class="stack-items">
+        <div class="stack-item"><span class="stack-name">SWR</span><span class="stack-why">2KB · auto-revalidate · optimistic updates · infinite scroll</span></div>
+        <div class="stack-item"><span class="stack-name">Controlled React state</span><span class="stack-why">No Zod/RHF — form complexity doesn't justify the overhead</span></div>
+        <div class="stack-item"><span class="stack-name">Native Intl + Date</span><span class="stack-why">Saves 7KB vs dayjs · handles Indian locale natively</span></div>
+      </div>
+    </div>
+
+    <div class="stack-cat">
+      <div class="stack-cat-title">AI &amp; Bot</div>
+      <div class="stack-items">
+        <div class="stack-item"><span class="stack-name">Gemini 1.5 Flash</span><span class="stack-why">Fast + cheap for function calling ($0.075 / 1M tokens)</span></div>
+        <div class="stack-item"><span class="stack-name">Telegram Bot API</span><span class="stack-why">Webhooks · no polling · no library — just native fetch</span></div>
+      </div>
+    </div>
+
+    <h3>shadcn/ui vs MUI</h3>
+    <div class="compare-row">
+      <div class="compare-card winner">
+        <div class="compare-title">shadcn/ui <span class="pill pill-c" style="font-size:10px; padding:3px 8px;">chosen</span></div>
+        <div class="compare-item good">Tailwind-native — no CSS-in-JS, no emotion runtime</div>
+        <div class="compare-item good">Copy-paste components — you own, modify, extend freely</div>
+        <div class="compare-item good">Radix UI primitives — fully accessible out of the box</div>
+        <div class="compare-item good">Dark mode built-in via Tailwind class strategy</div>
+        <div class="compare-item good">Zero bundle overhead — components only added when used</div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-title">MUI (rejected)</div>
+        <div class="compare-item bad">300KB+ bundle regardless of what you use</div>
+        <div class="compare-item bad">CSS-in-JS with emotion — runtime overhead, SSR complexity</div>
+        <div class="compare-item bad">Opinionated styling — hard to override without fighting it</div>
+        <div class="compare-item bad">Not Tailwind-compatible — classes conflict</div>
+      </div>
+    </div>
+
+    <h3>SWR vs Tanstack Query</h3>
+    <div class="compare-row">
+      <div class="compare-card winner">
+        <div class="compare-title">SWR <span class="pill pill-g" style="font-size:10px; padding:3px 8px;">chosen</span></div>
+        <div class="compare-item good">2KB bundle (vs 12KB Tanstack Query)</div>
+        <div class="compare-item good">Simple API: <code>useSWR(key, fetcher)</code> — done</div>
+        <div class="compare-item good">Auto-revalidate on focus and reconnect</div>
+        <div class="compare-item good">useSWRMutation for writes</div>
+        <div class="compare-item good">useSWRInfinite for pagination</div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-title">Tanstack Query</div>
+        <div class="compare-item bad">12KB bundle</div>
+        <div class="compare-item bad">More config: QueryClient, QueryClientProvider</div>
+        <div class="compare-item good">Better DevTools</div>
+        <div class="compare-item good">More advanced caching options</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 COMPONENTS -->
+  <section id="components">
+    <div class="sec-header">
+      <span class="sec-num">07</span>
+      <h2>Component Architecture</h2>
+    </div>
+
+    <pre>src/
+  app/
+    layout.tsx                  <span class="cm"># Root layout — Tailwind dark mode</span>
+    loading.tsx                 <span class="cm"># Global loading skeleton ← add</span>
+    error.tsx                   <span class="cm"># Global error boundary ← add</span>
+    page.tsx                    <span class="cm"># Login</span>
+    dashboard/
+      page.tsx                  <span class="cm"># React Server Component → fast first load</span>
+      loading.tsx               <span class="cm"># Skeleton while JS hydrates ← add per route</span>
+    transactions/page.tsx       <span class="cm"># Virtualized list (TanStack Virtual)</span>
+    accounts/page.tsx
+    investments/page.tsx        <span class="cm"># Recharts lazy-loaded here</span>
+    people/page.tsx
+    budgets/page.tsx
+    goals/page.tsx
+    loans/page.tsx
+    schedules/page.tsx
+    ai/page.tsx                 <span class="cm"># dynamic({ ssr: false })</span>
+    settings/page.tsx
+
+    api/
+      transactions/route.ts     <span class="cm"># cursor pagination + batch writes</span>
+      accounts/route.ts
+      instruments/route.ts
+      goals/route.ts
+      loans/route.ts
+      people/route.ts
+      schedules/route.ts
+      budgets/route.ts
+      categories/route.ts
+      dashboard/route.ts        <span class="cm"># reads summaries/{month} — one doc read</span>
+      ai/route.ts               <span class="cm"># Gemini function calling engine</span>
+      telegram/route.ts         <span class="cm"># webhook + signature verify + rate limit</span>
+      platforms/route.ts        <span class="cm"># Cache-Control: s-maxage=3600 ← add</span>
+
+  components/
+    layout/
+      Sidebar.tsx               <span class="cm"># Desktop nav (prefetch=false on /ai, /settings)</span>
+      BottomNav.tsx             <span class="cm"># Mobile nav — 5 items + More sheet</span>
+      PageHeader.tsx
+
+    ui/                         <span class="cm"># shadcn/ui — copy-pasted, you own the code</span>
+      button card dialog input select badge
+      progress skeleton toast sheet dropdown-menu
+
+    shared/
+      ConfirmDialog.tsx
+      EmptyState.tsx
+      ErrorBoundary.tsx         <span class="cm"># Wrap each page section ← add</span>
+      AIInsightCard.tsx         <span class="cm"># SWR with 5min dedup, no revalidateOnFocus</span>
+      AIChatButton.tsx          <span class="cm"># Floating button — always visible</span>
+      AIChatPanel.tsx           <span class="cm"># dynamic() — lazy-loaded</span>
+
+    forms/
+      TransactionForm.tsx       <span class="cm"># expense + income + transfer + salary</span>
+      InstrumentForm.tsx        <span class="cm"># 3-step: identity → terms → ownership</span>
+      GoalForm.tsx  LoanForm.tsx  RepaymentForm.tsx
+      BudgetForm.tsx  ScheduleForm.tsx
+
+    charts/                     <span class="cm"># All dynamic() — never in initial bundle</span>
+      SpendingChart.tsx
+      CategoryPie.tsx
+      PortfolioChart.tsx
+
+  lib/
+    firebase.ts  firebaseAdmin.ts  auth.ts
+    swr.ts                      <span class="cm"># fetcher + global SWR config</span>
+    ai.ts                       <span class="cm"># Gemini function calling engine</span>
+    telegram.ts                 <span class="cm"># Telegram helpers + rate limiter</span>
+    types/                      <span class="cm"># transaction instrument goal loan schedule...</span>
+    utils/
+      currency.ts               <span class="cm"># format + baseCurrency inheritance</span>
+      date.ts                   <span class="cm"># fiscal year, ordinal labels — no dayjs</span>
+      schedule.ts               <span class="cm"># getNextRunAt() + scheduleLabel() — no RRule</span>
+      validation.ts             <span class="cm"># shared form validation helpers ← add</span></pre>
+
+    <div class="opt">
+      <div class="opt-title">Memoization Strategy</div>
+      <ul>
+        <li>Wrap <code>TransactionRow</code> with <code>React.memo</code> — transaction lists re-render on every SWR revalidation; memoization eliminates wasteful DOM diffing.</li>
+        <li>Use <code>useMemo</code> for category total computations in <code>BudgetPage</code> — O(n) computation over 100s of transactions is expensive per render.</li>
+        <li>Use <code>useCallback</code> for form handlers passed to child inputs — prevents unnecessary input re-renders on every parent state change.</li>
+        <li>Add <code>&lt;ErrorBoundary&gt;</code> around each AI insight card — a failed Gemini call shouldn't crash the whole page.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 08 FETCHING -->
+  <section id="fetching">
+    <div class="sec-header">
+      <span class="sec-num">08</span>
+      <h2>Data Fetching Patterns</h2>
+    </div>
+
+    <pre><span class="cm">// lib/swr.ts — complete production setup</span>
+<span class="kw">const</span> fetcher = <span class="kw">async</span> (url: <span class="ty">string</span>) => {
+  <span class="kw">const</span> token = <span class="kw">await</span> <span class="fn">getIdToken</span>()
+  <span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(url, {
+    headers: { Authorization: <span class="str">`Bearer ${token}`</span> }
+  })
+  <span class="kw">if</span> (!res.ok) <span class="kw">throw new</span> Error(<span class="str">`API ${res.status}`</span>)
+  <span class="kw">return</span> res.<span class="fn">json</span>()
+}
+
+<span class="cm">// Basic usage on any page:</span>
+<span class="kw">const</span> { data, isLoading, mutate } = <span class="fn">useSWR</span>(<span class="str">'/api/transactions'</span>, fetcher)
+
+<span class="cm">// Paginated with cursor:</span>
+<span class="kw">const</span> { data, size, setSize } = <span class="fn">useSWRInfinite</span>(
+  (i, prev) => prev && !prev.nextCursor
+    ? <span class="kw">null</span>
+    : <span class="str">`/api/transactions?after=${prev?.nextCursor ?? ''}&limit=25`</span>,
+  fetcher
+)</pre>
+
+    <h3>Schedule Logic (No RRule)</h3>
+    <pre><span class="cm">// utils/schedule.ts — simple, no library</span>
+<span class="kw">function</span> <span class="fn">getNextRunAt</span>(s: <span class="ty">Schedule</span>): <span class="ty">number</span> {
+  <span class="kw">const</span> now = <span class="kw">new</span> Date()
+  <span class="kw">if</span> (s.frequency === <span class="str">'monthly'</span>) {
+    <span class="kw">const</span> next = <span class="kw">new</span> Date(now.getFullYear(), now.getMonth(), s.dayOfMonth)
+    <span class="kw">if</span> (next <= now) next.<span class="fn">setMonth</span>(next.<span class="fn">getMonth</span>() + <span class="num">1</span>)
+    <span class="kw">return</span> next.<span class="fn">getTime</span>()
+  }
+  <span class="cm">// similar branches for weekly, quarterly, yearly</span>
+}
+
+<span class="kw">function</span> <span class="fn">scheduleLabel</span>(s: <span class="ty">Schedule</span>): <span class="ty">string</span> {
+  <span class="kw">if</span> (s.frequency === <span class="str">'monthly'</span>)   <span class="kw">return</span> <span class="str">`Monthly on the ${<span class="fn">ordinal</span>(s.dayOfMonth)}`</span>
+  <span class="kw">if</span> (s.frequency === <span class="str">'weekly'</span>)    <span class="kw">return</span> <span class="str">`Every ${<span class="fn">dayName</span>(s.dayOfWeek)}`</span>
+  <span class="kw">if</span> (s.frequency === <span class="str">'quarterly'</span>) <span class="kw">return</span> <span class="str">`Quarterly on the ${<span class="fn">ordinal</span>(s.dayOfMonth)}`</span>
+  <span class="kw">if</span> (s.frequency === <span class="str">'yearly'</span>)    <span class="kw">return</span> <span class="str">`Annually on ${<span class="fn">formatDate</span>(s.dayOfMonth, s.month)}`</span>
+  <span class="kw">return</span> s.frequency
+}
+<span class="cm">// → "Monthly on the 5th"</span>
+<span class="cm">// → "Every Monday"</span>
+<span class="cm">// → "Quarterly on the 1st"</span></pre>
+  </section>
+
+  <!-- 09 PHASES -->
+  <section id="phases">
+    <div class="sec-header">
+      <span class="sec-num">09</span>
+      <h2>Build Phases</h2>
+    </div>
+
+    <div class="phase-wrap">
+      <div class="phase">
+        <div class="phase-dot">P1</div>
+        <div class="phase-body">
+          <div class="phase-title">Foundation</div>
+          <div class="phase-weeks">Week 1–2</div>
+          <ul class="phase-items">
+            <li>Next.js 14 + Tailwind + shadcn/ui setup</li>
+            <li>Firebase Auth + SWR global config + fetcher</li>
+            <li>Sidebar + BottomNav + PageHeader (responsive)</li>
+            <li>Dashboard page as React Server Component</li>
+            <li>Transactions page with virtualized list</li>
+            <li>Accounts page</li>
+            <li>Summaries subcollection + batch write helper</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-dot">P2</div>
+        <div class="phase-body">
+          <div class="phase-title">Core Features</div>
+          <div class="phase-weeks">Week 3–4</div>
+          <ul class="phase-items">
+            <li>Investments page (instruments + events) + InstrumentForm</li>
+            <li>Goals page with 3-way allocations</li>
+            <li>Loans page + RepaymentForm</li>
+            <li>People page with ledger net-balance view</li>
+            <li>Budgets page (reads summaries, no transaction scan)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-dot">P3</div>
+        <div class="phase-body">
+          <div class="phase-title">AI Everywhere</div>
+          <div class="phase-weeks">Week 5</div>
+          <ul class="phase-items">
+            <li>Gemini function calling engine (lib/ai.ts) — 15 functions</li>
+            <li>AI insight cards per page (5-min SWR cache, no focus revalidation)</li>
+            <li>Floating AI chat button — lazy-loaded panel</li>
+            <li>Full AI chat page (dynamic, ssr:false)</li>
+            <li>Auto-categorize with 600ms debounce</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-dot">P4</div>
+        <div class="phase-body">
+          <div class="phase-title">Telegram Bot</div>
+          <div class="phase-weeks">Week 6</div>
+          <ul class="phase-items">
+            <li>/api/telegram webhook with signature verification</li>
+            <li>Account linking with 10-min expiring token</li>
+            <li>Core commands: add expense, summary, goals, loans, today</li>
+            <li>Gemini intent parsing + 30 req/min rate limit per chatId</li>
+            <li>Vercel deploy + register webhook</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-dot">P5</div>
+        <div class="phase-body">
+          <div class="phase-title">Polish &amp; Production Hardening</div>
+          <div class="phase-weeks">Week 7</div>
+          <ul class="phase-items">
+            <li>Schedules page (human-readable labels)</li>
+            <li>Settings page</li>
+            <li>PWA manifest + service worker + Firestore offline persistence</li>
+            <li>Firestore security rules deployed and tested</li>
+            <li>Composite indexes deployed (firestore.indexes.json)</li>
+            <li>Error boundaries on all page sections</li>
+            <li>Loading skeletons on all routes (loading.tsx)</li>
+            <li>Bundle analysis — confirm &lt;150KB first-load JS per route</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 QUESTION -->
+  <section id="question">
+    <div class="sec-header">
+      <span class="sec-num">10</span>
+      <h2>Open Question</h2>
+    </div>
+
+    <div class="warn-box">
+      <div class="warn-label">⚠ Decision required before build starts</div>
+      <div class="warn-title">Fresh Start or Migrate Existing Codebase?</div>
+      <div class="warn-sub">One question remaining before the build begins.</div>
+    </div>
+
+    <div class="compare-row">
+      <div class="compare-card winner">
+        <div class="compare-title">Fresh Start <span class="pill pill-c" style="font-size:10px; padding:3px 8px;">recommended</span></div>
+        <div class="compare-item good">Clean code — no legacy baggage</div>
+        <div class="compare-item good">Tailwind from day one, no class conflicts</div>
+        <div class="compare-item good">Reuse all API routes as-is</div>
+        <div class="compare-item good">Copy only <code>lib/</code> (types, firebase, auth)</div>
+        <div class="compare-item good">Rewrite only the UI layer</div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-title">Migrate Existing</div>
+        <div class="compare-item bad">MUI + Tailwind will conflict until fully removed</div>
+        <div class="compare-item bad">Messy transition — two styling systems at once</div>
+        <div class="compare-item good">API routes already work</div>
+        <div class="compare-item good">Firebase already configured</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:14px; font-weight:600; color:white; margin-bottom:8px;">Recommendation: Fresh Start</div>
+      <p style="font-size:13.5px; color:var(--text-muted); margin:0; line-height:1.7;">Reuse <strong style="color:var(--text);">all API routes</strong> and the <code>lib/</code> folder as-is — they're decoupled from the UI. Rewrite only pages and components. No MUI conflict, clean Tailwind, proper RSC setup from the start. Total rewrite of just the UI layer is 2–3 days of work against weeks of untangling a mixed codebase.</p>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const navLinks = document.querySelectorAll('.nav-item[href]');
+const sections = document.querySelectorAll('section[id]');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => {
+        l.classList.remove('active');
+        if (l.getAttribute('href') === '#' + e.target.id) l.classList.add('active');
+      });
+    }
+  });
+}, { threshold: 0.15, rootMargin: '-10% 0px -75% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

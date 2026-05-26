@@ -1,608 +1,462 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuthContext } from '@/components/AuthProvider';
-import { ResponsiveLayout } from '@/components/ResponsiveLayout';
-import { AccountForm } from '@/components/AccountForm';
-import { AccountDetails } from '@/components/AccountDetails';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getIdToken } from '@/lib/auth';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
+import AppLayout from '@/components/layout/AppLayout';
+import PageHeader from '@/components/layout/PageHeader';
+import { fetcher } from '@/lib/swr';
+import { formatCurrency } from '@/lib/utils/currency';
 import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  Card,
-  CardContent,
-  Grid,
-  Chip,
-  IconButton,
-  Menu,
-  MenuItem,
-  Alert,
-  CircularProgress,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem as SelectMenuItem,
-} from '@mui/material';
-import { MoreVert, Add, Edit, Delete, AccountBalance } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Account, AccountType, Goal } from '@/lib/types';
+  Plus,
+  Trash2,
+  Edit2,
+  Wallet,
+  Landmark,
+  ShieldCheck,
+  CreditCard,
+  History,
+  X,
+  BadgeAlert,
+} from 'lucide-react';
 
-interface AccountWithGoals extends Account {
-  linkedGoals?: Array<{
-    id: string;
-    name: string;
-    targetAmount: number;
-    currentAmount: number;
-  }>;
-}
-
-async function fetchAccounts(user: any) {
-  const token = await getIdToken(user);
-  if (!token) throw new Error('No authentication token available');
-  
-  const response = await fetch('/api/accounts?includeGoals=true', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error('Failed to fetch accounts');
-  return response.json();
-}
-
-async function createAccount(data: any, user: any) {
-  const token = await getIdToken(user);
-  if (!token) throw new Error('No authentication token available');
-  
-  const response = await fetch('/api/accounts', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) throw new Error('Failed to create account');
-  return response.json();
-}
-
-async function deleteAccount(accountId: string, user: any) {
-  const token = await getIdToken(user);
-  if (!token) throw new Error('No authentication token available');
-  
-  const response = await fetch(`/api/accounts/${accountId}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!response.ok) throw new Error('Failed to delete account');
-  return response.json();
-}
+const ACCOUNT_TYPES = ['savings', 'expense', 'income'];
+const ACCOUNT_SUBTYPES: Record<string, string[]> = {
+  savings: ['bank', 'savings_account', 'checking_account', 'wallet', 'commodity'],
+  expense: ['credit_card', 'loan', 'mortgage', 'utility', 'subscription'],
+  income: ['salary', 'freelance', 'business', 'other'],
+};
 
 export default function AccountsPage() {
-  const { user, loading } = useAuthContext();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-  const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
-  const [filters, setFilters] = useState({
-    search: '',
-    type: '',
-  });
+  const [editingAccount, setEditingAccount] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState('');
+  const [loadingAction, setLoadingAction] = useState(false);
 
-  const { data: accounts = [], isLoading, error } = useQuery({
-    queryKey: ['accounts', user?.uid],
-    queryFn: () => fetchAccounts(user),
-    enabled: !!user,
-  });
+  // Form states
+  const [name, setName] = useState('');
+  const [accType, setAccType] = useState<'savings' | 'expense' | 'income'>('savings');
+  const [accSubtype, setAccSubtype] = useState('bank');
+  const [institution, setInstitution] = useState('');
+  const [balance, setBalance] = useState('');
+  const [creditLimit, setCreditLimit] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [interestRate, setInterestRate] = useState('');
 
-  const createMutation = useMutation({
-    mutationFn: (data: any) => createAccount(data, user),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      setFormOpen(false);
-    },
-  });
+  // Fetch accounts list using SWR
+  const { data: accounts = [], mutate: mutateAccounts, error, isValidating } = useSWR(
+    '/api/accounts?includeGoals=true',
+    fetcher
+  );
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/');
-    }
-  }, [loading, user, router]);
+  const filteredAccounts = useMemo(() => {
+    return accounts.filter((acc: any) => {
+      const matchesSearch =
+        !searchQuery ||
+        acc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        acc.institution?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesType = !selectedTypeFilter || acc.type === selectedTypeFilter;
+      return matchesSearch && matchesType;
+    });
+  }, [accounts, searchQuery, selectedTypeFilter]);
 
-  const updateMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const token = await getIdToken(user);
-      if (!token) throw new Error('No authentication token available');
+  const handleOpenCreate = () => {
+    setEditingAccount(null);
+    setName('');
+    setAccType('savings');
+    setAccSubtype('bank');
+    setInstitution('');
+    setBalance('');
+    setCreditLimit('');
+    setDueDate('');
+    setInterestRate('');
+    setFormOpen(true);
+  };
 
-      if (editingAccount) {
-        const response = await fetch(`/api/accounts/${editingAccount.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(data),
-        });
-        if (!response.ok) throw new Error('Failed to update account');
-        return response.json();
+  const handleOpenEdit = (acc: any) => {
+    setEditingAccount(acc);
+    setName(acc.name || '');
+    setAccType(acc.type || 'savings');
+    setAccSubtype(acc.subtype || 'bank');
+    setInstitution(acc.institution || '');
+    setBalance(String(acc.balance || acc.currentBalance || 0));
+    setCreditLimit(String(acc.creditLimit || ''));
+    setDueDate(String(acc.dueDate || ''));
+    setInterestRate(String(acc.interestRate || ''));
+    setFormOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return alert('Name is required');
+
+    setLoadingAction(true);
+    try {
+      const payload: any = {
+        name: name.trim(),
+        type: accType,
+        subtype: accSubtype,
+        institution: institution.trim() || undefined,
+        balance: Number(balance || 0),
+        currency: 'INR',
+      };
+
+      if (accSubtype === 'credit_card' || accSubtype === 'loan') {
+        if (creditLimit) payload.creditLimit = Number(creditLimit);
+        if (dueDate) payload.dueDate = Number(dueDate);
+        if (interestRate) payload.interestRate = Number(interestRate);
       }
-      return createAccount(data, user);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+
+      const method = editingAccount ? 'PUT' : 'POST';
+      const url = editingAccount ? `/api/accounts/${editingAccount.id}` : '/api/accounts';
+
+      // Optimistic Update
+      const tempId = editingAccount ? editingAccount.id : crypto.randomUUID();
+      const tempAccount = {
+        ...payload,
+        id: tempId,
+        currentBalance: payload.balance,
+      };
+
+      await mutateAccounts(
+        (current: any) => {
+          if (!current) return current;
+          if (editingAccount) {
+            return current.map((a: any) => (a.id === tempId ? tempAccount : a));
+          }
+          return [...current, tempAccount];
+        },
+        { revalidate: false }
+      );
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error('Failed to save account');
+
+      mutateAccounts();
       setFormOpen(false);
-      setEditingAccount(null);
-    },
-  });
-
-  const handleCreateAccount = async (data: any) => {
-    await updateMutation.mutateAsync(data);
-  };
-
-  const handleEditAccount = (account: Account) => {
-    const accountToEdit = accounts.find((a: Account) => a.id === account.id);
-    if (accountToEdit) {
-      setEditingAccount(accountToEdit);
-      setFormOpen(true);
-      setMenuAnchor(null);
+    } catch (err: any) {
+      alert(err.message || 'Error saving account');
+      mutateAccounts();
+    } finally {
+      setLoadingAction(false);
     }
   };
 
-  const deleteMutation = useMutation({
-    mutationFn: (accountId: string) => deleteAccount(accountId, user),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      setMenuAnchor(null);
-    },
-  });
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this account? Any associated transactions will not be deleted.')) return;
 
-  if (loading || !user) {
-    return null;
-  }
-
-  const handleDeleteAccount = (account: Account) => {
-    setAccountToDelete(account);
-    setConfirmOpen(true);
-    setMenuAnchor(null);
-  };
-
-  const filteredAccounts = accounts.filter((account: Account) => {
-    const matchesSearch = !filters.search || 
-      account.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-      account.institution?.toLowerCase().includes(filters.search.toLowerCase());
-    
-    const matchesType = !filters.type || account.type === filters.type;
-    
-    return matchesSearch && matchesType;
-  });
-
-  const getTypeColor = (type: AccountType) => {
-    switch (type) {
-      case 'income':
-        return 'success';
-      case 'expense':
-        return 'error';
-      case 'savings':
-        return 'primary';
-      default:
-        return 'default';
+    try {
+      const res = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Deletion failed');
+      mutateAccounts();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting account');
     }
   };
-
-  const getTypeIcon = (type: AccountType) => {
-    return <AccountBalance />;
-  };
-
-  const getAccountsByType = (type: AccountType) => {
-    return filteredAccounts.filter((account: Account) => account.type === type);
-  };
-
-  if (isLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
-    <ResponsiveLayout>
-      <Container maxWidth="lg" sx={{ mt: 4, p: 3 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 4,
-            pb: 3,
-            borderBottom: 1,
-            borderColor: 'divider',
-          }}
+    <AppLayout>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <PageHeader title="Accounts & Cards" />
+        <button
+          onClick={handleOpenCreate}
+          className="bg-cyan hover:bg-cyan/95 text-bg font-bold py-2.5 px-4 rounded-lg flex items-center gap-2 transition-all active:scale-[0.98] text-sm shrink-0"
         >
-          <Box>
-            <Typography 
-              variant="h4" 
-              component="h1"
-              sx={{ 
-                fontWeight: 600,
-                color: 'primary.main',
-                mb: 1,
-              }}
-            >
-              Accounts
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Manage your financial accounts and track balances
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => setFormOpen(true)}
-            sx={{
-              borderRadius: 2,
-              px: 3,
-              py: 1,
-              boxShadow: 2,
-              '&:hover': {
-                boxShadow: 4,
-              }
-            }}
-          >
-            Add Account
-          </Button>
-        </Box>
+          <Plus className="w-4.5 h-4.5" /> Add Account
+        </button>
+      </div>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            Failed to load accounts. Please try again.
-          </Alert>
-        )}
+      {error && (
+        <div className="mb-4 bg-red/10 border border-red/20 text-red text-xs px-4 py-3 rounded-lg flex items-center">
+          <span>Failed to load accounts. Please refresh the page.</span>
+        </div>
+      )}
 
-        {/* Filters */}
-        <Card 
-          elevation={0}
-          sx={{ 
-            mb: 3,
-            borderRadius: 2,
-            bgcolor: 'background.default',
-            border: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Search accounts"
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  fullWidth
-                  size="small"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: 'primary.main',
-                        }
-                      }
-                    }
-                  }}
-                  placeholder="Search by name or institution..."
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Account Type</InputLabel>
-                  <Select
-                    value={filters.type}
-                    onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-                    label="Account Type"
-                    sx={{
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: 'primary.main',
-                        }
-                      }
-                    }}
-                  >
-                    <SelectMenuItem value="">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <AccountBalance />
-                        All Account Types
-                      </Box>
-                    </SelectMenuItem>
-                    <SelectMenuItem value="income">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
-                        <AccountBalance />
-                        Income Accounts
-                      </Box>
-                    </SelectMenuItem>
-                    <SelectMenuItem value="expense">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-                        <AccountBalance />
-                        Expense Accounts
-                      </Box>
-                    </SelectMenuItem>
-                    <SelectMenuItem value="savings">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
-                        <AccountBalance />
-                        Savings Accounts
-                      </Box>
-                    </SelectMenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
+      {/* Account form Drawer Overlay */}
+      {formOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            onClick={() => setFormOpen(false)}
+          />
+          <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-surface border-l border-border z-50 p-6 overflow-y-auto shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-250">
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-syne text-md font-bold text-white">
+                  {editingAccount ? 'Edit Account' : 'New Account'}
+                </h3>
+                <button
+                  onClick={() => setFormOpen(false)}
+                  className="p-1 rounded-full bg-white/5 hover:bg-white/10 text-text-muted hover:text-text"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-        {/* Accounts by Type */}
-        {(['income', 'expense', 'savings'] as AccountType[]).map((type) => {
-          const typeAccounts = getAccountsByType(type);
-          if (typeAccounts.length === 0) return null;
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Account Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="e.g. HDFC Salary Account"
+                  />
+                </div>
 
-          return (
-            <Box key={type} mb={3}>
-              <Typography variant="h6" gutterBottom sx={{ textTransform: 'capitalize' }}>
-                {type} Accounts ({typeAccounts.length})
-              </Typography>
-              <Grid container spacing={2}>
-                {typeAccounts.map((account: AccountWithGoals) => (
-                  <Grid item xs={12} sm={6} md={4} key={account.id}>
-                    <Card
-                      onClick={() => setViewingAccount(account)}
-                      sx={{
-                        height: '100%',
-                        transition: 'all 0.2s',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: (theme) => theme.shadows[8],
-                          '& .account-menu': {
-                            opacity: 1,
-                          },
-                        },
-                        background: (theme) => type === 'income' 
-                          ? 'linear-gradient(135deg, #52c41a10 0%, #52c41a05 100%)'
-                          : type === 'expense'
-                          ? 'linear-gradient(135deg, #ff4d4f10 0%, #ff4d4f05 100%)'
-                          : 'linear-gradient(135deg, #1890ff10 0%, #1890ff05 100%)',
-                        borderTop: 4,
-                        borderTopColor: (theme) => type === 'income' 
-                          ? 'success.main'
-                          : type === 'expense'
-                          ? 'error.main'
-                          : 'primary.main',
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Type</label>
+                    <select
+                      value={accType}
+                      onChange={(e) => {
+                        const nextType = e.target.value as any;
+                        setAccType(nextType);
+                        setAccSubtype(ACCOUNT_SUBTYPES[nextType][0]);
                       }}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan capitalize"
                     >
-                      <CardContent sx={{ p: 3 }}>
-                        <Box 
-                          display="flex" 
-                          justifyContent="space-between" 
-                          alignItems="flex-start"
-                          mb={2}
-                        >
-                          <Box>
-                            <Typography 
-                              variant="h6" 
-                              sx={{ 
-                                fontWeight: 600,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 1,
-                              }}
-                            >
-                              <AccountBalance 
-                                sx={{ 
-                                  color: type === 'income' 
-                                    ? 'success.main'
-                                    : type === 'expense'
-                                    ? 'error.main'
-                                    : 'primary.main'
-                                }} 
-                              />
-                              {account.name}
-                            </Typography>
-                            {account.institution && (
-                              <Typography 
-                                variant="body2" 
-                                color="text.secondary"
-                                sx={{ mt: 0.5 }}
-                              >
-                                {account.institution}
-                              </Typography>
-                            )}
-                          </Box>
-                          <IconButton
-                            className="account-menu"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedAccount(account);
-                              setMenuAnchor(e.currentTarget);
-                            }}
-                            sx={{
-                              opacity: 0,
-                              transition: 'opacity 0.2s',
-                            }}
-                          >
-                            <MoreVert />
-                          </IconButton>
-                        </Box>
-                        
-                        <Box 
-                          sx={{ 
-                            p: 2, 
-                            bgcolor: 'background.paper',
-                            borderRadius: 2,
-                            mb: 2,
-                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
-                          }}
-                        >
-                          {account.currentBalance !== undefined && (
-                            <Box>
-                              <Typography variant="overline" color="text.secondary">
-                                Current Balance
-                              </Typography>
-                              <Typography 
-                                variant="h4" 
-                                sx={{ 
-                                  fontWeight: 'bold',
-                                  color: type === 'income' 
-                                    ? 'success.main'
-                                    : type === 'expense'
-                                    ? 'error.main'
-                                    : 'primary.main'
-                                }}
-                              >
-                                ₹{account.currentBalance.toLocaleString()}
-                              </Typography>
-                            </Box>
-                          )}
-                        </Box>
+                      {ACCOUNT_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                        <Box display="flex" gap={1} mb={2} flexWrap="wrap">
-                          <Chip
-                            label={type}
-                            color={getTypeColor(type)}
-                            size="small"
-                            sx={{ 
-                              borderRadius: 2,
-                              textTransform: 'capitalize',
-                              fontWeight: 500,
-                            }}
-                          />
-                          {account.subtype && (
-                            <Chip
-                              label={account.subtype}
-                              variant="outlined"
-                              size="small"
-                              sx={{ 
-                                borderRadius: 2,
-                                textTransform: 'capitalize',
-                              }}
-                            />
-                          )}
-                        </Box>
-                        
-                        {account.linkedGoals && account.linkedGoals.length > 0 && (
-                          <Box>
-                            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                              Linked Goals
-                            </Typography>
-                            <Box display="flex" gap={1} flexWrap="wrap">
-                              {account.linkedGoals.map((goal) => (
-                                <Chip
-                                  key={goal.id}
-                                  label={`${goal.name} (₹${goal.currentAmount?.toLocaleString() || 0}/${goal.targetAmount.toLocaleString()})`}
-                                  size="small"
-                                  onClick={() => router.push(`/goals?id=${goal.id}`)}
-                                  sx={{
-                                    bgcolor: 'background.paper',
-                                    borderRadius: '16px',
-                                    '&:hover': {
-                                      bgcolor: 'action.hover',
-                                    },
-                                  }}
-                                />
-                              ))}
-                            </Box>
-                          </Box>
-                        )}
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Subtype</label>
+                    <select
+                      value={accSubtype}
+                      onChange={(e) => setAccSubtype(e.target.value)}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan capitalize"
+                    >
+                      {ACCOUNT_SUBTYPES[accType].map((sub) => (
+                        <option key={sub} value={sub}>{sub.replace('_', ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-                        <Box 
-                          sx={{ 
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.5,
-                            color: 'text.secondary',
-                            fontSize: '0.875rem'
-                          }}
-                        >
-                          <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                            Currency:
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {account.currency}
-                          </Typography>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          );
-        })}
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Institution / Bank Name</label>
+                  <input
+                    type="text"
+                    value={institution}
+                    onChange={(e) => setInstitution(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="e.g. HDFC Bank"
+                  />
+                </div>
 
-        {/* Account Form */}
-        <AccountForm
-          open={formOpen}
-          onClose={() => {
-            setFormOpen(false);
-            setEditingAccount(null);
-          }}
-          onSubmit={handleCreateAccount}
-          editingAccount={editingAccount || undefined}
+                <div>
+                  <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">
+                    {accType === 'expense' ? 'Current Outstanding Balance (INR)' : 'Current Balance (INR)'}
+                  </label>
+                  <input
+                    type="number"
+                    value={balance}
+                    onChange={(e) => setBalance(e.target.value)}
+                    className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                {accSubtype === 'credit_card' && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Credit Limit (INR)</label>
+                    <input
+                      type="number"
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value)}
+                      className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                      placeholder="e.g. 100000"
+                    />
+                  </div>
+                )}
+
+                {(accSubtype === 'credit_card' || accSubtype === 'loan') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Billing Due Day</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                        placeholder="e.g. 15"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Interest Rate (% p.a.)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={interestRate}
+                        onChange={(e) => setInterestRate(e.target.value)}
+                        className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                        placeholder="e.g. 12.5"
+                      />
+                    </div>
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div className="flex gap-2 pt-6 border-t border-border mt-6">
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                className="flex-1 border border-border hover:bg-white/5 text-text font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loadingAction}
+                className="flex-1 bg-cyan hover:bg-cyan/95 text-bg font-bold py-2 px-5 rounded-lg text-sm transition-all"
+              >
+                {loadingAction ? 'Saving...' : 'Save Account'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Filters & Search */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Filter by account name or bank..."
+          className="bg-card border border-border rounded-lg py-2 px-4 text-xs text-text focus:outline-none focus:border-cyan transition-colors"
         />
 
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={menuAnchor}
-          open={Boolean(menuAnchor)}
-          onClose={() => setMenuAnchor(null)}
+        <select
+          value={selectedTypeFilter}
+          onChange={(e) => setSelectedTypeFilter(e.target.value)}
+          className="bg-card border border-border rounded-lg py-2 px-4 text-xs text-text focus:outline-none focus:border-cyan transition-colors capitalize"
         >
-          <MenuItem onClick={() => selectedAccount && handleEditAccount(selectedAccount)}>
-            <Edit sx={{ mr: 1 }} />
-            Edit
-          </MenuItem>
-          <MenuItem onClick={() => selectedAccount && handleDeleteAccount(selectedAccount)}>
-            <Delete sx={{ mr: 1 }} />
-            Delete
-          </MenuItem>
-        </Menu>
+          <option value="">All Account Types</option>
+          {ACCOUNT_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
 
-        {/* Account Details Dialog */}
-        <AccountDetails
-          account={viewingAccount}
-          onClose={() => setViewingAccount(null)}
-        />
+      {/* Accounts List Deck */}
+      {filteredAccounts.length === 0 ? (
+        <div className="text-center py-12 text-text-muted text-sm border border-dashed border-border rounded-xl bg-card">
+          No accounts found. Create one to start tracking.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" aria-label="Accounts and Credit Cards list">
+          {filteredAccounts.map((acc: any) => {
+            const isSavings = acc.type === 'savings';
+            const isExpense = acc.type === 'expense';
+            const isCreditCard = acc.subtype === 'credit_card';
+            const bal = acc.balance ?? acc.currentBalance ?? 0;
 
-        <ConfirmDialog
-          open={confirmOpen}
-          title="Delete Account"
-          message={`Are you sure you want to delete account "${accountToDelete?.name}"?`}
-          onConfirm={async () => {
-            if (accountToDelete) {
-              try {
-                await deleteMutation.mutateAsync(accountToDelete.id);
-              } catch (error) {
-                console.error('Error deleting account:', error);
-              }
-            }
-            setConfirmOpen(false);
-            setAccountToDelete(null);
-          }}
-          onCancel={() => {
-            setConfirmOpen(false);
-            setAccountToDelete(null);
-          }}
-          loading={deleteMutation.isPending}
-        />
-      </Container>
-    </ResponsiveLayout>
+            return (
+              <div
+                key={acc.id}
+                className={`bg-card border border-border rounded-xl p-5 hover:border-cyan/35 transition-all flex flex-col justify-between relative group ${
+                  isExpense ? 'border-t-2 border-t-red' : isSavings ? 'border-t-2 border-t-cyan' : 'border-t-2 border-t-green'
+                }`}
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-2 rounded-lg bg-[#0a0f1c] ${
+                        isExpense ? 'text-red' : isSavings ? 'text-cyan' : 'text-green'
+                      }`}>
+                        {isCreditCard ? <CreditCard className="w-4.5 h-4.5" /> : <Landmark className="w-4.5 h-4.5" />}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-white text-sm">{acc.name}</h4>
+                        <span className="text-[10px] text-text-muted leading-none font-mono capitalize">
+                          {acc.subtype || acc.type}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleOpenEdit(acc)}
+                        className="text-text-dim hover:text-cyan p-1.5 rounded hover:bg-cyan/5 transition-all"
+                        title="Edit Account"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(acc.id)}
+                        className="text-text-dim hover:text-red p-1.5 rounded hover:bg-red/5 transition-all"
+                        title="Delete Account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {acc.institution && (
+                    <div className="text-xs text-text-muted flex items-center gap-1 mb-4">
+                      <Landmark className="w-3 h-3" />
+                      <span>{acc.institution}</span>
+                    </div>
+                  )}
+
+                  {/* Balance details */}
+                  <div className="p-3 bg-[#0a0f1c] border border-border rounded-lg mb-3">
+                    <div className="text-[9px] font-bold text-text-dim uppercase tracking-wider mb-0.5">
+                      {isExpense ? 'Owed / Outstanding' : 'Available Balance'}
+                    </div>
+                    <div className={`font-syne text-lg font-bold ${
+                      isExpense ? 'text-red' : isSavings ? 'text-cyan' : 'text-green'
+                    }`}>
+                      {formatCurrency(bal)}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  {/* Credit Card features */}
+                  {isCreditCard && acc.creditLimit && (
+                    <div className="space-y-2 mb-3">
+                      <div className="w-full bg-[#0a0f1c] rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-red h-full rounded-full transition-all"
+                          style={{ width: `${Math.min((bal / acc.creditLimit) * 100, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-text-muted">
+                        <span>Limit: {formatCurrency(acc.creditLimit)}</span>
+                        <span>Utilized: {Math.round((bal / acc.creditLimit) * 100)}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {acc.dueDate && (
+                    <div className="text-[10px] text-text-dim flex items-center gap-1.5 bg-[#0a0f1c] px-2.5 py-1.5 border border-border rounded-md mt-2">
+                      <BadgeAlert className="w-3.5 h-3.5 text-amber" />
+                      <span>Payment Due Day: <strong className="text-text">{acc.dueDate}</strong></span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </AppLayout>
   );
 }

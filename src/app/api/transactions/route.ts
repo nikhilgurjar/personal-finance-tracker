@@ -1,186 +1,144 @@
 import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { Transaction, SourceBreakdown, AccountType, TransactionType } from '@/lib/types';
-
-const SourceBreakdownSchema = z.object({
-  sourceAccountId: z.string(),
-  amount: z.number().positive(),
-  referenceTxId: z.string().optional(),
-});
+import { createTransactionWithSummary } from '@/lib/transactionBatch';
 
 const TransactionSchema = z.object({
   date: z.number(),
   amount: z.number().positive(),
-  currency: z.string(),
-  fromAccountId: z.string(),
-  toAccountId: z.string(),
+  currency: z.string().optional(),
+  type: z.enum(['expense', 'income', 'transfer', 'savings', 'salary', 'loan_repayment']),
+  fromAccountId: z.string().optional(),
+  toAccountId: z.string().optional(),
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
   note: z.string().optional(),
-  sourceBreakdown: z.array(SourceBreakdownSchema).optional(),
   scheduleId: z.string().optional(),
   expenseNature: z.enum(['fixed', 'dynamic']).optional(),
-  sourceType: z.string().optional(), // for incomes: salary, freelance, from_person, etc.
-  sourceName: z.string().optional(), // for incomes: person/employer name
+  sourceType: z.string().optional(),
+  sourceName: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  upiRefId: z.string().optional(),
+  instrumentId: z.string().optional(),
+  salaryComponents: z.object({
+    netTakeHome: z.number(),
+    employeePf: z.number(),
+    salaryMonth: z.string(),
+  }).optional(),
 });
 
-const TransactionTypeSchema = z.enum(['expense', 'income', 'transfer', 'savings', 'salary', 'loan_repayment']);
-
-const ExtendedTransactionSchema = TransactionSchema.extend({
-  type: TransactionTypeSchema,
-});
+async function getUserId(req: NextRequest) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    const decoded = await authAdmin.verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
+  const userId = await getUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    const token = req.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'No token provided' }, { status: 401 });
-    }
-
-    const decoded = await authAdmin.verifyIdToken(token);
-    const userId = decoded.uid;
-
     const body = await req.json();
-    const data = ExtendedTransactionSchema.parse(body);
+    const data = TransactionSchema.parse(body);
 
-    const batch = db.batch();
-
-    let collectionName;
-    switch (data.type) {
-      case 'expense':
-        collectionName = 'expenses';
-        break;
-      case 'income':
-        collectionName = 'incomes';
-        break;
-      case 'transfer':
-        collectionName = 'transfers';
-        break;
-      case 'savings':
-        collectionName = 'savings';
-        break;
-      case 'salary':
-        collectionName = 'salaries';
-        break;
-      default:
-        throw new Error('Invalid transaction type');
-    }
-
-    const txRef = db.collection('users').doc(userId).collection(collectionName).doc();
-
-    const transactionData = {
-      ...data,
-      id: txRef.id,
-      createdAt: Date.now(),
-      createdBy: userId,
-    };
-
-    batch.set(txRef, transactionData);
-
-    // Create audit log
-    const auditRef = db.collection('users').doc(userId).collection('auditLogs').doc();
-    batch.set(auditRef, {
-      id: auditRef.id,
-      system: data.type,
-      entityId: txRef.id,
-      action: 'create',
-      payload: transactionData,
-      timestamp: Date.now(),
-      userId,
-    });
-
-    await batch.commit();
-    return NextResponse.json({ id: txRef.id }, { status: 201 });
-  } catch (error) {
+    const createdTx = await createTransactionWithSummary(userId, data);
+    return NextResponse.json(createdTx, { status: 201 });
+  } catch (error: any) {
     console.error('Error creating transaction:', error);
-    return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 });
+    }
+    return NextResponse.json({ error: error.message || 'Failed to create transaction' }, { status: 500 });
   }
 }
 
 export async function GET(req: NextRequest) {
+  const userId = await getUserId(req);
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    const token = req.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
-      return NextResponse.json({ error: 'No token provided' }, { status: 401 });
-    }
-
-    const decoded = await authAdmin.verifyIdToken(token);
-    const userId = decoded.uid;
-
     const { searchParams } = new URL(req.url);
+    const limitParam = Number(searchParams.get('limit') || '25');
+    const limit = Math.min(Math.max(limitParam, 1), 100);
+    const after = searchParams.get('after'); // cursor document ID
+    const type = searchParams.get('type');
+    const category = searchParams.get('category');
+    const accountId = searchParams.get('accountId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const accountId = searchParams.get('accountId');
-    const limitParam = Number(searchParams.get('limit') || '100');
-    const resultLimit = Number.isFinite(limitParam)
-      ? Math.min(Math.max(limitParam, 1), 500)
-      : 100;
 
-    // Define all transaction collections to fetch from
-    const collections = ['expenses', 'incomes', 'transfers', 'savings', 'salaries'];
-    
-    // Fetch from all collections in parallel
-    const transactionPromises = collections.map(async (collectionName) => {
-      const collectionRef = db
+    let query: FirebaseFirestore.Query = db
+      .collection('users')
+      .doc(userId)
+      .collection('transactions');
+
+    // Apply filters
+    if (type) {
+      query = query.where('type', '==', type);
+    }
+    if (category) {
+      query = query.where('category', '==', category);
+    }
+    if (startDate) {
+      query = query.where('date', '>=', Number(startDate));
+    }
+    if (endDate) {
+      query = query.where('date', '<=', Number(endDate));
+    }
+
+    // Sort order (must match filters or use indexes)
+    query = query.orderBy('date', 'desc');
+
+    // Cursor pagination
+    if (after) {
+      const cursorDoc = await db
         .collection('users')
         .doc(userId)
-        .collection(collectionName);
+        .collection('transactions')
+        .doc(after)
+        .get();
 
-      let baseQuery = collectionRef as FirebaseFirestore.Query<FirebaseFirestore.DocumentData>;
-
-      if (startDate) {
-        baseQuery = baseQuery.where('date', '>=', parseInt(startDate));
+      if (cursorDoc.exists) {
+        query = query.startAfter(cursorDoc);
       }
-      if (endDate) {
-        baseQuery = baseQuery.where('date', '<=', parseInt(endDate));
-      }
+    }
 
-      if (accountId) {
-        // Check both fromAccountId and toAccountId for transfers
-        const fromQuery = baseQuery.where('fromAccountId', '==', accountId).limit(resultLimit);
-        const toQuery = baseQuery.where('toAccountId', '==', accountId).limit(resultLimit);
-        
-        const [fromSnapshot, toSnapshot] = await Promise.all([
-          fromQuery.get(),
-          toQuery.get()
-        ]);
-        
-        const fromDocs = fromSnapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id,
-          type: collectionName.slice(0, -1) // Remove 's' from end to get type
-        })) as Transaction[];
-        
-        const toDocs = toSnapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id,
-          type: collectionName.slice(0, -1) // Remove 's' from end to get type
-        })) as Transaction[];
-        
-        return [...fromDocs, ...toDocs];
-      }
-
-      const snapshot = await baseQuery.orderBy('date', 'desc').limit(resultLimit).get();
-      return snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id,
-        type: collectionName.slice(0, -1) // Remove 's' from end to get type
-      })) as Transaction[];
-    });
-
-    // Wait for all queries to complete
-    const transactionArrays = await Promise.all(transactionPromises);
+    // Limit to page size + 1 to check if there is a next page
+    const snapshot = await query.limit(limit + 1).get();
     
-    // Flatten and sort all transactions by date
-    const transactions = transactionArrays
-      .flat()
-      .sort((a, b) => (b.date || 0) - (a.date || 0))
-      .slice(0, resultLimit);
+    let docs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
 
-    return NextResponse.json(transactions);
-  } catch (error) {
+    // If accountId is provided, we need to filter on client/API for fromAccountId or toAccountId.
+    // (Note: Firestore does not support OR queries across different fields natively without complex queries,
+    // so if accountId is passed, we check if it is either debit or credit account).
+    if (accountId) {
+      docs = docs.filter((doc: any) => doc.fromAccountId === accountId || doc.toAccountId === accountId);
+    }
+
+    let nextCursor: string | null = null;
+    if (docs.length > limit) {
+      nextCursor = docs[limit - 1].id;
+      docs = docs.slice(0, limit);
+    }
+
+    return NextResponse.json({
+      data: docs,
+      nextCursor,
+    });
+  } catch (error: any) {
     console.error('Error fetching transactions:', error);
-    return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to fetch transactions' }, { status: 500 });
   }
 }

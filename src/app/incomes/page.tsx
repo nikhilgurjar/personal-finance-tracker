@@ -12,7 +12,7 @@ import {
   IconButton, Menu, MenuItem, Alert, Skeleton, Tabs, Tab,
   TextField, InputAdornment, Snackbar, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, FormControl, InputLabel, Select,
-  useTheme, useMediaQuery, Fab,
+  useTheme, useMediaQuery, Fab, List, ListItem, Divider,
 } from '@mui/material';
 import { Add, MoreVert, Edit, Delete, TrendingUp, Search } from '@mui/icons-material';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -58,7 +58,7 @@ export default function IncomesPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
@@ -156,7 +156,7 @@ export default function IncomesPage() {
 
   return (
     <ResponsiveLayout>
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh' }}>
+      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', pb: { xs: 'calc(100px + env(safe-area-inset-bottom))', md: 4 } }}>
         <Container maxWidth="lg">
           {/* Header */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
@@ -234,50 +234,92 @@ export default function IncomesPage() {
               </Button>
             </Box>
           ) : isMobile ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {filtered.map((income: any) => {
-                const cfg = SOURCE_COLORS[income.sourceType] || SOURCE_COLORS.other;
-                return (
-                  <Card key={income.id} variant="outlined" sx={{ borderRadius: 2 }}>
-                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                        <Box>
-                          <Typography variant="subtitle2" fontWeight={700}>
-                            {income.sourceName || 'Unknown'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(income.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </Typography>
+            <Paper elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
+              <List sx={{ p: 0 }}>
+                {filtered.map((income: any, idx: number) => {
+                  const cfg = SOURCE_COLORS[income.sourceType] || SOURCE_COLORS.other;
+                  const showDivider = idx < filtered.length - 1;
+                  return (
+                    <Box key={income.id}>
+                      <ListItem
+                        sx={{
+                          py: 1.5,
+                          px: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 2,
+                          '&:hover': {
+                            backgroundColor: 'action.hover',
+                          },
+                        }}
+                      >
+                        {/* Left: Rounded avatar with emoji icon */}
+                        <Box
+                          sx={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            bgcolor: cfg.bg,
+                            fontSize: '1.25rem',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {(SOURCE_LABELS[income.sourceType] || '📦').split(' ')[0]}
                         </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Typography variant="subtitle1" fontWeight={700} color="success.dark" sx={{ mr: 1 }}>
+
+                        {/* Middle: Name/Source + Date & Note */}
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                            <Typography variant="subtitle2" fontWeight={700} noWrap>
+                              {income.sourceName || 'Unknown'}
+                            </Typography>
+                            <Chip
+                              label={(SOURCE_LABELS[income.sourceType] || income.sourceType).replace(/^.\s*/, '')}
+                              size="small"
+                              sx={{
+                                bgcolor: cfg.bg,
+                                color: cfg.color,
+                                fontSize: '0.65rem',
+                                height: 18,
+                                fontWeight: 600,
+                              }}
+                            />
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(income.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                            </Typography>
+                            {income.note && (
+                              <>
+                                <Typography variant="caption" color="text.disabled">•</Typography>
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: '150px' }}>
+                                  {income.note}
+                                </Typography>
+                              </>
+                            )}
+                          </Box>
+                        </Box>
+
+                        {/* Right: Amount & Actions */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                          <Typography variant="subtitle1" fontWeight={700} color="success.dark">
                             +₹{income.amount.toLocaleString('en-IN')}
                           </Typography>
                           <IconButton size="small" onClick={(e) => { setSelectedIncome(income); setMenuAnchor(e.currentTarget); }}>
                             <MoreVert fontSize="small" />
                           </IconButton>
                         </Box>
-                      </Box>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Chip
-                          label={SOURCE_LABELS[income.sourceType] || income.sourceType}
-                          size="small"
-                          sx={{
-                            bgcolor: cfg.bg,
-                            color: cfg.color,
-                            fontSize: '0.7rem',
-                            height: 20
-                          }}
-                        />
-                        <Typography variant="caption" color="text.secondary" sx={{ maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {income.note || '—'}
-                        </Typography>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </Box>
+                      </ListItem>
+                      {showDivider && <Divider sx={{ mx: 2 }} />}
+                    </Box>
+                  );
+                })}
+              </List>
+            </Paper>
           ) : (
             <TableContainer component={Paper} elevation={0} sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>
               <Table size="small">
@@ -343,9 +385,9 @@ export default function IncomesPage() {
           onClick={() => { setEditingIncome(null); setFormOpen(true); }}
           sx={{
             position: 'fixed',
-            bottom: 16,
+            bottom: { xs: 'calc(80px + env(safe-area-inset-bottom))', md: 80 },
             right: 16,
-            zIndex: 1000,
+            zIndex: 1200,
             boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.3)',
             bgcolor: '#10b981',
             '&:hover': {

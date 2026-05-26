@@ -1,0 +1,434 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: transparent; }
+.wrap { padding: 20px 0; font-family: var(--font-sans); }
+.section-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-tertiary); margin: 0 0 8px 4px; }
+.grid { display: grid; gap: 12px; margin-bottom: 20px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: 1fr 1fr 1fr; }
+.g4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.card { border-radius: var(--border-radius-lg); border: 1.5px solid var(--color-border-tertiary); background: var(--color-background-secondary); overflow: hidden; }
+.card-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--color-border-tertiary); display: flex; align-items: center; gap: 8px; }
+.card-head .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.card-head .label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.card-head .badge { margin-left: auto; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+.fields { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 3px; }
+.field { display: flex; align-items: center; gap: 6px; font-size: 11.5px; line-height: 1.5; }
+.field .fname { color: var(--color-text-secondary); font-weight: 400; }
+.field .ftype { color: var(--color-text-tertiary); font-size: 10.5px; font-family: var(--font-mono); }
+.field .ftag { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 500; flex-shrink: 0; }
+.pk { background: #ede9fe; color: #5b21b6; }
+.fk { background: #dbeafe; color: #1e40af; }
+.idx { background: #d1fae5; color: #065f46; }
+.comp { background: #fef3c7; color: #92400e; }
+.arr { background: #fae8ff; color: #7e22ce; }
+.divider { height: 1px; background: var(--color-border-tertiary); margin: 5px 0; }
+.enum-tag { display: inline-block; font-size: 10px; font-family: var(--font-mono); padding: 1px 4px; border-radius: 3px; background: var(--color-background-primary); border: 1px solid var(--color-border-tertiary); color: var(--color-text-secondary); margin-top: 1px; }
+.rel-section { margin: 0 0 20px; }
+.rel-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; border-radius: 8px; background: var(--color-background-secondary); border: 1px solid var(--color-border-tertiary); margin-bottom: 6px; }
+.rel-entity { font-size: 12px; font-weight: 500; color: var(--color-text-primary); min-width: 110px; }
+.rel-arrow { font-size: 11px; color: var(--color-text-tertiary); min-width: 80px; text-align: center; font-family: var(--font-mono); }
+.rel-desc { font-size: 11.5px; color: var(--color-text-secondary); flex: 1; }
+.note { font-size: 11.5px; color: var(--color-text-secondary); background: var(--color-background-secondary); border: 1px solid var(--color-border-tertiary); border-left: 3px solid var(--color-border-secondary); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
+.h2 { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary); }
+.leg span { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 500; }
+.highlight { background: #fef9ec; border: 1px solid #fbbf24; border-radius: 6px; padding: 6px 12px; font-size: 11.5px; color: #92400e; margin-bottom: 10px; display: flex; gap: 8px; align-items: flex-start; }
+.highlight i { margin-top: 2px; flex-shrink: 0; font-size: 14px; }
+@media (max-width: 560px) {
+  .g3 { grid-template-columns: 1fr 1fr; }
+  .g4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 400px) {
+  .g2, .g3, .g4 { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="wrap">
+
+<div class="legend">
+  <div class="leg"><span class="ftag pk">PK</span> Primary key</div>
+  <div class="leg"><span class="ftag fk">FK</span> Foreign key</div>
+  <div class="leg"><span class="ftag idx">IDX</span> Indexed field</div>
+  <div class="leg"><span class="ftag comp">∑</span> Computed / derived</div>
+  <div class="leg"><span class="ftag arr">[]</span> Array field</div>
+</div>
+
+<div class="note">
+  <strong>Key design changes from current model:</strong> Unified <code>transactions</code> replaces 5 separate collections · Accounts use <code>asset/liability</code> types instead of <code>income/expense</code> · Double-entry with <code>debitAccountId + creditAccountId</code> · Single <code>audit_log</code> collection · People linked by ID, not name string · Loan repayments are transactions, not a separate collection
+</div>
+
+<div class="section-label">Core — financial accounts &amp; ledger</div>
+<div class="grid g2">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#7c3aed"></div>
+      <div class="label">accounts</div>
+      <div class="badge" style="background:#ede9fe;color:#5b21b6">core</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">accountType</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap">
+          <span class="enum-tag">asset</span>
+          <span class="enum-tag">liability</span>
+        </span>
+      </div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">subtype</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap">
+          <span class="enum-tag">checking</span>
+          <span class="enum-tag">savings</span>
+          <span class="enum-tag">credit_card</span>
+          <span class="enum-tag">cash</span>
+          <span class="enum-tag">wallet</span>
+          <span class="enum-tag">investment</span>
+          <span class="enum-tag">loan</span>
+        </span>
+      </div>
+      <div class="field"><span class="fname">currency</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">balance</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">institution</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">creditLimit</span><span class="ftype">number?</span></div>
+      <div class="field"><span class="fname">interestRate</span><span class="ftype">number?</span></div>
+      <div class="field"><span class="fname">isActive</span><span class="ftype">boolean</span></div>
+      <div class="field"><span class="fname">createdAt</span><span class="ftype">epoch</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#0891b2"></div>
+      <div class="label">transactions</div>
+      <div class="badge" style="background:#cffafe;color:#164e63">unified ledger</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">date</span><span class="ftype">epoch</span></div>
+      <div class="field"><span class="fname">amount</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">currency</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">type</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap">
+          <span class="enum-tag">income</span>
+          <span class="enum-tag">expense</span>
+          <span class="enum-tag">transfer</span>
+          <span class="enum-tag">adjustment</span>
+        </span>
+      </div>
+      <div class="field"><span class="ftag fk idx">FK</span><span class="fname">debitAccountId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk idx">FK</span><span class="fname">creditAccountId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">categoryId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag arr">[]</span><span class="fname">tags</span><span class="ftype">string[]</span></div>
+      <div class="field"><span class="fname">note</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">expenseNature</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">fixed</span><span class="enum-tag">variable</span></span>
+      </div>
+      <div class="field"><span class="fname">sourceType</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap"><span class="enum-tag">salary</span><span class="enum-tag">freelance</span><span class="enum-tag">rental</span><span class="enum-tag">investment</span><span class="enum-tag">from_person</span></span>
+      </div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">sourceEntityId</span><span class="ftype">string?</span></div>
+      <div class="divider"></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">scheduleId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">loanId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">instrumentId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">status</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">pending</span><span class="enum-tag">cleared</span><span class="enum-tag">reconciled</span></span>
+      </div>
+      <div class="field"><span class="fname">createdAt</span><span class="ftype">epoch</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-label">People, loans &amp; repayments</div>
+<div class="grid g3">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#f97316"></div>
+      <div class="label">people</div>
+      <div class="badge" style="background:#ffedd5;color:#9a3412">contacts</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">phone</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">email</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">netBalance</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">createdAt</span><span class="ftype">epoch</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#dc2626"></div>
+      <div class="label">loans</div>
+      <div class="badge" style="background:#fee2e2;color:#991b1b">financial obligation</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk idx">FK</span><span class="fname">personId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">direction</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">given</span><span class="enum-tag">taken</span></span>
+      </div>
+      <div class="field"><span class="fname">principal</span><span class="ftype">number</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">outstanding</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">currency</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">interestRate</span><span class="ftype">number?</span></div>
+      <div class="field"><span class="fname">startDate</span><span class="ftype">epoch</span></div>
+      <div class="field"><span class="fname">dueDate</span><span class="ftype">epoch?</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">linkedAccountId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">status</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">active</span><span class="enum-tag">settled</span></span>
+      </div>
+      <div class="divider"></div>
+      <div class="note" style="font-size:10.5px;padding:4px 6px;margin:2px 0">Repayments are <code>transactions</code> with <code>loanId</code> set — no separate collection needed</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#059669"></div>
+      <div class="label">instruments</div>
+      <div class="badge" style="background:#d1fae5;color:#065f46">savings/investments</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">linkedAccountId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">type</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap"><span class="enum-tag">fd</span><span class="enum-tag">rd</span><span class="enum-tag">mf</span><span class="enum-tag">stock</span><span class="enum-tag">ppf</span><span class="enum-tag">nps</span></span>
+      </div>
+      <div class="field"><span class="fname">provider</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">platform</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">ownerId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">principal</span><span class="ftype">number</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">currentValue</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">currency</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">interestRate</span><span class="ftype">number?</span></div>
+      <div class="field"><span class="fname">openedAt</span><span class="ftype">epoch</span></div>
+      <div class="field"><span class="fname">maturityDate</span><span class="ftype">epoch?</span></div>
+      <div class="field"><span class="ftag arr">[]</span><span class="fname">goalIds</span><span class="ftype">string[]</span></div>
+      <div class="field"><span class="ftag arr">[]</span><span class="fname">events</span><span class="ftype">Event[]</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">status</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">active</span><span class="enum-tag">matured</span><span class="enum-tag">closed</span></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-label">Planning — goals, budgets, schedules</div>
+<div class="grid g3">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#2563eb"></div>
+      <div class="label">goals</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">targetAmount</span><span class="ftype">number</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">currentAmount</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">targetDate</span><span class="ftype">epoch?</span></div>
+      <div class="field"><span class="fname">priority</span><span class="ftype">1-5</span></div>
+      <div class="field"><span class="ftag arr">[]</span><span class="fname">instrumentIds</span><span class="ftype">string[]</span></div>
+      <div class="field"><span class="ftag arr">[]</span><span class="fname">accountIds</span><span class="ftype">string[]</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">status</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">active</span><span class="enum-tag">achieved</span><span class="enum-tag">paused</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#b45309"></div>
+      <div class="label">budgets</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk idx">FK</span><span class="fname">categoryId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">period</span><span class="ftype">YYYY-MM</span></div>
+      <div class="field"><span class="fname">limitAmount</span><span class="ftype">number</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">spentAmount</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">expenseNature</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">fixed</span><span class="enum-tag">variable</span><span class="enum-tag">both</span></span>
+      </div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">alertLevel</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">ok</span><span class="enum-tag">warn</span><span class="enum-tag">critical</span></span>
+      </div>
+      <div class="field"><span class="fname">createdAt</span><span class="ftype">epoch</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#7c3aed"></div>
+      <div class="label">schedules</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">rrule</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">nextRunAt</span><span class="ftype">epoch</span></div>
+      <div class="field"><span class="fname">lastRunAt</span><span class="ftype">epoch?</span></div>
+      <div class="fname" style="font-size:11px;color:var(--color-text-tertiary);padding: 2px 0">template (transaction shape)</div>
+      <div class="field" style="padding-left:10px"><span class="fname">amount</span><span class="ftype">number</span></div>
+      <div class="field" style="padding-left:10px"><span class="fname">type</span><span class="ftype">string</span></div>
+      <div class="field" style="padding-left:10px"><span class="ftag fk">FK</span><span class="fname">debitAccountId</span><span class="ftype">string</span></div>
+      <div class="field" style="padding-left:10px"><span class="ftag fk">FK</span><span class="fname">creditAccountId</span><span class="ftype">string</span></div>
+      <div class="field" style="padding-left:10px"><span class="ftag fk">FK</span><span class="fname">categoryId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">status</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">active</span><span class="enum-tag">paused</span></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-label">Reference data &amp; system</div>
+<div class="grid g4">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#64748b"></div>
+      <div class="label">categories</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">parentId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">icon</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">color</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">appliesTo</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap"><span class="enum-tag">income</span><span class="enum-tag">expense</span><span class="enum-tag">both</span></span>
+      </div>
+      <div class="field"><span class="fname">isSystem</span><span class="ftype">boolean</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#64748b"></div>
+      <div class="label">user_settings</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">baseCurrency</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">locale</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">paydayDom</span><span class="ftype">number</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">primaryAccountId</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="fname">budgetAlertPct</span><span class="ftype">number</span></div>
+      <div class="field"><span class="fname">darkMode</span><span class="ftype">boolean</span></div>
+      <div class="field"><span class="fname">updatedAt</span><span class="ftype">epoch</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#64748b"></div>
+      <div class="label">tags</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">name</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">color</span><span class="ftype">string?</span></div>
+      <div class="field"><span class="ftag comp">∑</span><span class="fname">usageCount</span><span class="ftype">number</span></div>
+      <div class="divider"></div>
+      <div class="note" style="font-size:10.5px;padding:4px 6px;margin:2px 0">Transactions store <code>tags[]</code> by name for denormalized reads. This table enables rename/autocomplete.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="dot" style="background:#64748b"></div>
+      <div class="label">audit_log</div>
+      <div class="badge" style="background:#f1f5f9;color:#475569">single collection</div>
+    </div>
+    <div class="fields">
+      <div class="field"><span class="ftag pk">PK</span><span class="fname">id</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag fk">FK</span><span class="fname">userId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">entity</span>
+        <span style="display:flex;gap:3px;flex-wrap:wrap"><span class="enum-tag">account</span><span class="enum-tag">transaction</span><span class="enum-tag">loan</span><span class="enum-tag">goal</span></span>
+      </div>
+      <div class="field"><span class="ftag fk idx">FK</span><span class="fname">entityId</span><span class="ftype">string</span></div>
+      <div class="field"><span class="fname">action</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">create</span><span class="enum-tag">update</span><span class="enum-tag">delete</span></span>
+      </div>
+      <div class="field"><span class="fname">before</span><span class="ftype">object?</span></div>
+      <div class="field"><span class="fname">after</span><span class="ftype">object?</span></div>
+      <div class="field"><span class="ftag idx">IDX</span><span class="fname">at</span><span class="ftype">epoch</span></div>
+      <div class="field"><span class="fname">reason</span>
+        <span style="display:flex;gap:3px"><span class="enum-tag">manual</span><span class="enum-tag">schedule</span><span class="enum-tag">system</span></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-label">Relationships</div>
+<div class="rel-section">
+  <div class="rel-row">
+    <span class="rel-entity">transactions</span>
+    <span class="rel-arrow">→ accounts (×2)</span>
+    <span class="rel-desc"><code>debitAccountId</code> and <code>creditAccountId</code> — every transaction moves value between two accounts. Replaces the implicit income/expense account type magic.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">loan repayment</span>
+    <span class="rel-arrow">IS a transaction</span>
+    <span class="rel-desc">A repayment sets <code>loanId</code> on a regular <code>transactions</code> record. No separate <code>loanRepayments</code> collection. Outstanding balance is computed by summing <code>transactions.amount WHERE loanId = X</code>.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">loans</span>
+    <span class="rel-arrow">→ people (1:1)</span>
+    <span class="rel-desc">Always linked by <code>personId</code> (FK), never by <code>personName</code> string. The <code>people</code> record is the single source of truth for the person's name.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">instruments</span>
+    <span class="rel-arrow">→ accounts (opt)</span>
+    <span class="rel-desc"><code>linkedAccountId</code> points to the bank account where the instrument lives. Withdrawals/closures also create a <code>transactions</code> record with <code>instrumentId</code> set.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">goals</span>
+    <span class="rel-arrow">→ instruments / accounts ([])</span>
+    <span class="rel-desc"><code>instrumentIds[]</code> and <code>accountIds[]</code> drive <code>currentAmount</code> computation. No embedded allocations array needed — the references are the allocation.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">budgets</span>
+    <span class="rel-arrow">→ categories (1:1)</span>
+    <span class="rel-desc"><code>categoryId</code> FK instead of a category name string. Renaming a category now propagates correctly.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">schedules</span>
+    <span class="rel-arrow">→ transactions (1:N)</span>
+    <span class="rel-desc">When a schedule fires it creates a <code>transactions</code> record with <code>scheduleId</code> set. Querying "all transactions from schedule X" is a single indexed query.</span>
+  </div>
+  <div class="rel-row">
+    <span class="rel-entity">categories</span>
+    <span class="rel-arrow">→ categories (self)</span>
+    <span class="rel-desc"><code>parentId</code> enables a two-level hierarchy: e.g. <em>Food</em> → <em>Dining Out</em>, <em>Groceries</em>. Analytics can roll up to the parent level.</span>
+  </div>
+</div>
+
+<div class="section-label">Firestore collection layout</div>
+<div class="note">
+  All entities are <strong>root collections</strong> under the user path — not subcollections. This allows collection group queries across all users for admin analytics, and avoids deep nesting that complicates security rules and migrations.<br><br>
+  Path pattern: <code>/users/{userId}/{collection}/{docId}</code><br><br>
+  Required composite indexes: <code>(userId, date)</code> on transactions · <code>(userId, status, nextRunAt)</code> on schedules · <code>(userId, period, categoryId)</code> on budgets · <code>(userId, personId, status)</code> on loans · <code>(userId, entity, at)</code> on audit_log
+</div>
+
+</div>

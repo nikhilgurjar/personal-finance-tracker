@@ -1,0 +1,460 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.w{padding:18px 0;font-family:var(--font-sans)}
+.sl{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:var(--color-text-tertiary);margin:0 0 7px 2px}
+.grid{display:grid;gap:10px;margin-bottom:18px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:1fr 1fr 1fr}
+.g4{grid-template-columns:1fr 1fr 1fr 1fr}
+.card{border-radius:10px;border:1.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);overflow:hidden}
+.ch{padding:9px 11px 7px;border-bottom:1px solid var(--color-border-tertiary);display:flex;align-items:center;gap:7px}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.lbl{font-size:12.5px;font-weight:500;color:var(--color-text-primary)}
+.badge{margin-left:auto;font-size:9.5px;padding:2px 6px;border-radius:4px;font-weight:500}
+.new-badge{background:#dcfce7;color:#166534}
+.mod-badge{background:#dbeafe;color:#1e40af}
+.sys-badge{background:#fef9c3;color:#713f12}
+.fields{padding:7px 11px 9px;display:flex;flex-direction:column;gap:2.5px}
+.f{display:flex;align-items:flex-start;gap:5px;font-size:11px;line-height:1.5}
+.fn{color:var(--color-text-secondary)}
+.ft{color:var(--color-text-tertiary);font-size:10px;font-family:var(--font-mono)}
+.tag{font-size:9.5px;padding:1px 5px;border-radius:3px;font-weight:500;flex-shrink:0;margin-top:1px}
+.pk{background:#ede9fe;color:#5b21b6}
+.fk{background:#dbeafe;color:#1e40af}
+.idx{background:#d1fae5;color:#065f46}
+.comp{background:#fef3c7;color:#92400e}
+.arr{background:#fae8ff;color:#7e22ce}
+.opt{background:#f1f5f9;color:#475569}
+.div{height:1px;background:var(--color-border-tertiary);margin:4px 0}
+.etag{display:inline-block;font-size:9.5px;font-family:var(--font-mono);padding:1px 4px;border-radius:3px;background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);color:var(--color-text-secondary);margin:1px 2px 0 0}
+.note{font-size:11px;color:var(--color-text-secondary);background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-left:3px solid var(--color-border-secondary);border-radius:5px;padding:6px 10px;margin-bottom:8px;line-height:1.5}
+.callout{font-size:11px;border-radius:7px;padding:8px 11px;margin-bottom:14px;line-height:1.6}
+.callout.green{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}
+.callout.blue{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af}
+.callout.amber{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.callout code{background:rgba(0,0,0,.07);padding:1px 4px;border-radius:3px;font-family:var(--font-mono)}
+.rrow{display:flex;align-items:flex-start;gap:8px;padding:7px 10px;border-radius:7px;background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);margin-bottom:5px}
+.re{font-size:11.5px;font-weight:500;color:var(--color-text-primary);min-width:130px}
+.ra{font-size:10.5px;color:var(--color-text-tertiary);min-width:70px;text-align:center;font-family:var(--font-mono);margin-top:1px}
+.rd{font-size:11px;color:var(--color-text-secondary);flex:1}
+.section-break{border:none;border-top:1px dashed var(--color-border-tertiary);margin:16px 0}
+.tab-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tab{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--color-border-tertiary);background:var(--color-background-secondary);color:var(--color-text-secondary);cursor:pointer;transition:all .15s}
+.tab.active{background:var(--color-text-primary);color:var(--color-background-primary);border-color:var(--color-text-primary)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+@media(max-width:540px){.g3,.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
+@media(max-width:380px){.g2,.g3,.g4{grid-template-columns:1fr}}
+</style>
+
+<div class="w">
+
+<div class="tab-row">
+  <div class="tab active" onclick="switchTab('lookups')">Lookup tables</div>
+  <div class="tab" onclick="switchTab('instruments')">Instruments (refined)</div>
+  <div class="tab" onclick="switchTab('sip')">SIP &amp; schedules</div>
+  <div class="tab" onclick="switchTab('india')">Indian-specific</div>
+  <div class="tab" onclick="switchTab('currency')">Currency strategy</div>
+</div>
+
+<div id="tab-lookups" class="tab-panel active">
+
+<div class="callout blue">System-level lookup tables — shared across all users, not per-user. Users pick from these lists; submitting a new value adds it to the shared pool after deduplication. Seeded with Indian-relevant defaults.</div>
+
+<div class="sl">Lookup tables (system-level, not per-user)</div>
+<div class="grid g3">
+
+  <div class="card">
+    <div class="ch"><div class="dot" style="background:#0891b2"></div><div class="lbl">platforms</div><div class="badge sys-badge">system seeded</div></div>
+    <div class="fields">
+      <div class="f"><span class="tag pk">PK</span><span class="fn">id</span></div>
+      <div class="f"><span class="fn">name</span><span class="ft">string</span></div>
+      <div class="f"><span class="fn">type</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">trading</span><span class="etag">mf_invest</span><span class="etag">banking</span><span class="etag">insurance</span><span class="etag">crypto</span></span>
+      </div>
+      <div class="f"><span class="fn">logoUrl</span><span class="ft">string?</span></div>
+      <div class="f"><span class="fn">isActive</span><span class="ft">boolean</span></div>
+      <div class="div"></div>
+      <div class="f" style="flex-wrap:wrap;gap:3px">
+        <span class="etag">Groww</span><span class="etag">Zerodha Kite</span><span class="etag">Zerodha Coin</span><span class="etag">Upstox</span><span class="etag">Angel One</span><span class="etag">HDFC Sky</span><span class="etag">Paytm Money</span><span class="etag">PhonePe</span><span class="etag">ET Money</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="dot" style="background:#7c3aed"></div><div class="lbl">providers</div><div class="badge sys-badge">system seeded</div></div>
+    <div class="fields">
+      <div class="f"><span class="tag pk">PK</span><span class="fn">id</span></div>
+      <div class="f"><span class="fn">name</span><span class="ft">string</span></div>
+      <div class="f"><span class="fn">type</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">bank</span><span class="etag">amc</span><span class="etag">broker</span><span class="etag">insurance</span><span class="etag">govt</span></span>
+      </div>
+      <div class="f"><span class="fn">shortCode</span><span class="ft">string</span></div>
+      <div class="f"><span class="fn">logoUrl</span><span class="ft">string?</span></div>
+      <div class="div"></div>
+      <div class="f" style="flex-wrap:wrap;gap:3px">
+        <span class="etag">HDFC Bank</span><span class="etag">SBI</span><span class="etag">ICICI</span><span class="etag">Axis</span><span class="etag">Mirae Asset</span><span class="etag">Nippon India</span><span class="etag">SBI MF</span><span class="etag">UTI AMC</span><span class="etag">NSDL</span><span class="etag">CDSL</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="dot" style="background:#059669"></div><div class="lbl">instrument_masters</div><div class="badge sys-badge">external sync</div></div>
+    <div class="fields">
+      <div class="f"><span class="tag pk">PK</span><span class="fn">isin</span><span class="ft">string</span></div>
+      <div class="f"><span class="fn">name</span><span class="ft">string</span></div>
+      <div class="f"><span class="fn">type</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">equity</span><span class="etag">mf_equity</span><span class="etag">mf_debt</span><span class="etag">etf</span><span class="etag">bond</span></span>
+      </div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">providerId</span><span class="ft">→ providers</span></div>
+      <div class="f"><span class="fn">category</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">large_cap</span><span class="etag">mid_cap</span><span class="etag">elss</span><span class="etag">liquid</span><span class="etag">index</span></span>
+      </div>
+      <div class="f"><span class="fn">currentNAV</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">navUpdatedAt</span><span class="ft">epoch</span></div>
+      <div class="f"><span class="fn">exitLoad</span><span class="ft">number?</span></div>
+      <div class="f"><span class="fn">lockInMonths</span><span class="ft">number?</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="sl">How users link to lookup tables</div>
+<div class="rrow">
+  <span class="re">instruments</span>
+  <span class="ra">→ FK</span>
+  <span class="rd">Stores <code>platformId</code> and <code>providerId</code> as FKs. Renaming "Groww" in the lookup table fixes every instrument that references it. The user just picks from a dropdown — no free-text entry for these fields.</span>
+</div>
+<div class="rrow">
+  <span class="re">User contribution</span>
+  <span class="ra">write-once</span>
+  <span class="rd">If a user types a platform not in the list, it's written to <code>platforms</code> with <code>isActive: false</code> and queued for review. Other users see it only after approval. Prevents "Growww" vs "Groww" duplicates.</span>
+</div>
+
+</div>
+
+<div id="tab-instruments" class="tab-panel">
+
+<div class="callout blue">Instruments split into two shapes: <strong>fixed-return</strong> (FD, RD, PPF, bonds — known rate + maturity) and <strong>market-linked</strong> (MF, stocks, ETF, NPS — units × NAV, no fixed return). The base fields are shared; subtype-specific fields are stored in an embedded <code>details</code> object so queries on the base fields still work without schema changes.</div>
+
+<div class="sl">Base instrument record (all subtypes)</div>
+<div class="grid g2">
+
+  <div class="card">
+    <div class="ch"><div class="dot" style="background:#059669"></div><div class="lbl">instruments (base)</div><div class="badge mod-badge">modified</div></div>
+    <div class="fields">
+      <div class="f"><span class="tag pk">PK</span><span class="fn">id</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">userId</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">ownerId</span><span class="ft">→ people (not userId)</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">platformId</span><span class="ft">→ platforms</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">providerId</span><span class="ft">→ providers</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">linkedAccountId</span><span class="ft">→ accounts?</span></div>
+      <div class="f"><span class="fn">name</span><span class="ft">string</span></div>
+      <div class="f"><span class="tag idx">IDX</span><span class="fn">instrumentClass</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">fixed_return</span><span class="etag">market_linked</span><span class="etag">govt_scheme</span></span>
+      </div>
+      <div class="f"><span class="tag idx">IDX</span><span class="fn">type</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">fd</span><span class="etag">rd</span><span class="etag">mf</span><span class="etag">stock</span><span class="etag">etf</span><span class="etag">ppf</span><span class="etag">nps</span><span class="etag">epf</span><span class="etag">bond</span></span>
+      </div>
+      <div class="f"><span class="fn">currency</span><span class="ft">string (default from settings)</span></div>
+      <div class="f"><span class="fn">principal</span><span class="ft">number</span></div>
+      <div class="f"><span class="tag comp">∑</span><span class="fn">currentValue</span><span class="ft">number</span></div>
+      <div class="f"><span class="tag comp">∑</span><span class="fn">unrealizedGain</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">openedAt</span><span class="ft">epoch</span></div>
+      <div class="f"><span class="tag arr">[]</span><span class="fn">goalIds</span><span class="ft">string[]</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">sipScheduleId</span><span class="ft">→ schedules?</span></div>
+      <div class="f"><span class="fn">details</span><span class="ft">object (subtype-specific, see →)</span></div>
+      <div class="f"><span class="tag arr">[]</span><span class="fn">events</span><span class="ft">Event[]</span></div>
+      <div class="f"><span class="tag idx">IDX</span><span class="fn">status</span>
+        <span style="display:flex;gap:3px"><span class="etag">active</span><span class="etag">matured</span><span class="etag">closed</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div class="card">
+      <div class="ch"><div class="dot" style="background:#b45309"></div><div class="lbl">details (fixed return)</div><div class="badge new-badge">FD · RD · PPF · bonds</div></div>
+      <div class="fields">
+        <div class="f"><span class="fn">interestRate</span><span class="ft">number (% p.a.)</span></div>
+        <div class="f"><span class="fn">maturityDate</span><span class="ft">epoch</span></div>
+        <div class="f"><span class="tag comp">∑</span><span class="fn">maturityAmount</span><span class="ft">number</span></div>
+        <div class="f"><span class="fn">payoutFrequency</span>
+          <span style="display:flex;flex-wrap:wrap"><span class="etag">cumulative</span><span class="etag">monthly</span><span class="etag">quarterly</span></span>
+        </div>
+        <div class="f"><span class="fn">accountNumber</span><span class="ft">string?</span></div>
+        <div class="f"><span class="fn">tdsApplicable</span><span class="ft">boolean</span></div>
+        <div class="div"></div>
+        <div class="note" style="margin:0;font-size:10px">PPF: annual limit ₹1.5L, 15yr lock-in, tax-free maturity (80C). Store <code>financialYear</code> on each deposit event for 80C tracking.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><div class="dot" style="background:#2563eb"></div><div class="lbl">details (market linked)</div><div class="badge new-badge">MF · stock · ETF · NPS</div></div>
+      <div class="fields">
+        <div class="f"><span class="tag fk">FK</span><span class="fn">isin</span><span class="ft">→ instrument_masters?</span></div>
+        <div class="f"><span class="fn">folioNumber</span><span class="ft">string?  (MF)</span></div>
+        <div class="f"><span class="fn">dematAccountNo</span><span class="ft">string?  (stock/ETF)</span></div>
+        <div class="f"><span class="fn">units</span><span class="ft">number</span></div>
+        <div class="f"><span class="fn">avgCostBasis</span><span class="ft">number  (per unit)</span></div>
+        <div class="f"><span class="fn">currentNAV</span><span class="ft">number  (synced periodically)</span></div>
+        <div class="f"><span class="fn">navUpdatedAt</span><span class="ft">epoch</span></div>
+        <div class="f"><span class="fn">npsAccountType</span>
+          <span style="display:flex;flex-wrap:wrap"><span class="etag">tier1</span><span class="etag">tier2</span></span>
+        </div>
+        <div class="f"><span class="fn">lockInUntil</span><span class="ft">epoch?  (ELSS 3yr)</span></div>
+        <div class="div"></div>
+        <div class="note" style="margin:0;font-size:10px"><code>currentValue = units × currentNAV</code>. Updated via a background job or manual NAV refresh — not computed from events. <code>unrealizedGain = currentValue − (units × avgCostBasis)</code>.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="sl">Instrument events (embedded array on instrument)</div>
+<div class="card">
+  <div class="ch"><div class="dot" style="background:#64748b"></div><div class="lbl">InstrumentEvent (embedded in instruments.events[])</div></div>
+  <div class="fields" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+    <div>
+      <div class="f"><span class="fn">id</span><span class="ft">string</span></div>
+      <div class="f"><span class="fn">type</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">deposit</span><span class="etag">withdrawal</span><span class="etag">interest</span><span class="etag">sip</span><span class="etag">closed</span><span class="etag">broken</span><span class="etag">nav_update</span></span>
+      </div>
+      <div class="f"><span class="fn">date</span><span class="ft">epoch</span></div>
+      <div class="f"><span class="fn">amount</span><span class="ft">number?</span></div>
+    </div>
+    <div>
+      <div class="f"><span class="fn">units</span><span class="ft">number?  (MF/stock)</span></div>
+      <div class="f"><span class="fn">navAtPurchase</span><span class="ft">number?</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">transactionId</span><span class="ft">→ transactions?</span></div>
+      <div class="f"><span class="fn">financialYear</span><span class="ft">string  e.g. 2024-25</span></div>
+      <div class="f"><span class="fn">tdsDeducted</span><span class="ft">number?</span></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div id="tab-sip" class="tab-panel">
+
+<div class="callout green">SIP is not a new table. It reuses <code>schedules</code> with an <code>instrumentId</code> in the template. When the schedule fires it creates two things: a <code>transaction</code> (money movement) and an <code>InstrumentEvent</code> (units credited). The <code>sipScheduleId</code> FK on the instrument points back to the schedule driving it.</div>
+
+<div class="sl">SIP via schedules — data flow</div>
+<div class="card" style="margin-bottom:10px">
+  <div class="ch"><div class="dot" style="background:#7c3aed"></div><div class="lbl">schedules.template for SIP</div><div class="badge new-badge">instrumentId added</div></div>
+  <div class="fields">
+    <div class="note" style="margin-bottom:6px">For a ₹5,000/month SIP into Mirae Asset Large Cap from HDFC Savings account:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px">
+      <div class="f"><span class="fn">type</span><span class="etag">savings</span></div>
+      <div class="f"><span class="fn">amount</span><span class="ft">5000</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">debitAccountId</span><span class="ft">→ HDFC account</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">creditAccountId</span><span class="ft">→ investment account</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">instrumentId</span><span class="ft">→ Mirae MF instrument</span></div>
+      <div class="f"><span class="fn">sipMode</span><span class="etag">auto</span><span class="etag">manual</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="sl">What happens when the schedule fires</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+  <div class="rrow">
+    <span class="re">Step 1</span>
+    <span class="ra">create →</span>
+    <span class="rd">A <code>transactions</code> record is created: debit HDFC savings, credit investment account, <code>scheduleId</code> set, <code>instrumentId</code> set.</span>
+  </div>
+  <div class="rrow">
+    <span class="re">Step 2</span>
+    <span class="ra">append →</span>
+    <span class="rd">An <code>InstrumentEvent</code> of type <code>sip</code> is appended to <code>instruments.events[]</code>: amount=5000, units computed from that day's NAV, <code>transactionId</code> linked back.</span>
+  </div>
+  <div class="rrow">
+    <span class="re">Step 3</span>
+    <span class="ra">update →</span>
+    <span class="rd"><code>instrument.units</code> += new units, <code>avgCostBasis</code> recomputed as running weighted average. <code>currentValue</code> stays as <code>units × currentNAV</code> — updated separately by NAV sync job.</span>
+  </div>
+  <div class="rrow">
+    <span class="re">Step 4</span>
+    <span class="ra">advance →</span>
+    <span class="rd"><code>schedules.nextRunAt</code> advanced by rrule. <code>schedules.lastRunAt</code> set. The schedule suggestion system picks it up for next month automatically.</span>
+  </div>
+</div>
+
+<div class="sl">SIP mode: auto vs manual</div>
+<div class="note">
+  <strong>auto</strong> — schedule fires and creates transaction + instrument event without approval. Suitable for bank-mandate SIPs where money moves automatically.<br>
+  <strong>manual</strong> — schedule surfaces as a suggestion on the dashboard. User approves after confirming the bank debit happened. Suitable for manual investments where they decide each time.<br><br>
+  RD works identically — it's a <code>fixed_return</code> instrument with type <code>rd</code>, principal grows by the installment amount each month, and maturity amount is deterministic.
+</div>
+
+</div>
+
+<div id="tab-india" class="tab-panel">
+
+<div class="callout amber">Indian finance has several concepts with no Western equivalent: fiscal year Apr–Mar, 80C/80D deductions, TDS at source, HRA, EPF, LTCG/STCG tax buckets, and UPI. These need first-class fields rather than being crammed into notes.</div>
+
+<div class="sl">Transaction — Indian fields (additions)</div>
+<div class="card" style="margin-bottom:10px">
+  <div class="ch"><div class="dot" style="background:#0891b2"></div><div class="lbl">transactions (India additions)</div><div class="badge mod-badge">extended</div></div>
+  <div class="fields" style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px">
+    <div class="f"><span class="fn">fiscalYear</span><span class="ft">string  e.g. 2024-25</span></div>
+    <div class="f"><span class="fn">paymentMethod</span>
+      <span style="display:flex;flex-wrap:wrap"><span class="etag">upi</span><span class="etag">neft</span><span class="etag">imps</span><span class="etag">rtgs</span><span class="etag">cash</span><span class="etag">card</span><span class="etag">cheque</span></span>
+    </div>
+    <div class="f"><span class="fn">upiRefId</span><span class="ft">string?</span></div>
+    <div class="f"><span class="fn">tdsDeducted</span><span class="ft">number?</span></div>
+    <div class="f"><span class="fn">taxSection</span>
+      <span style="display:flex;flex-wrap:wrap"><span class="etag">80C</span><span class="etag">80D</span><span class="etag">80G</span><span class="etag">24B</span><span class="etag">HRA</span></span>
+    </div>
+    <div class="f"><span class="fn">isTaxDeductible</span><span class="ft">boolean</span></div>
+    <div class="f"><span class="fn">gstAmount</span><span class="ft">number?  (services)</span></div>
+    <div class="f"><span class="fn">vendorGstin</span><span class="ft">string?</span></div>
+  </div>
+</div>
+
+<div class="sl">Salary slip (subcollection of income transactions)</div>
+<div class="card" style="margin-bottom:10px">
+  <div class="ch"><div class="dot" style="background:#059669"></div><div class="lbl">salary_components (embedded in salary transaction)</div><div class="badge new-badge">Indian payroll</div></div>
+  <div class="fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px 12px">
+    <div>
+      <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:3px">Earnings</div>
+      <div class="f"><span class="fn">basic</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">hra</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">da</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">specialAllowance</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">lta</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">bonus</span><span class="ft">number</span></div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:3px">Deductions</div>
+      <div class="f"><span class="fn">employeePf</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">professionalTax</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">tdsOnSalary</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">esic</span><span class="ft">number?</span></div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:3px">Employer (info only)</div>
+      <div class="f"><span class="fn">employerPf</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">employerEsic</span><span class="ft">number?</span></div>
+      <div class="div"></div>
+      <div class="f"><span class="tag comp">∑</span><span class="fn">grossSalary</span></div>
+      <div class="f"><span class="tag comp">∑</span><span class="fn">netTakeHome</span></div>
+      <div class="f"><span class="fn">salaryMonth</span><span class="ft">YYYY-MM</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="sl">Tax declarations &amp; 80C tracker</div>
+<div class="grid g2">
+  <div class="card">
+    <div class="ch"><div class="dot" style="background:#dc2626"></div><div class="lbl">tax_declarations</div><div class="badge new-badge">per fiscal year</div></div>
+    <div class="fields">
+      <div class="f"><span class="tag pk">PK</span><span class="fn">id</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">userId</span></div>
+      <div class="f"><span class="fn">fiscalYear</span><span class="ft">string  2024-25</span></div>
+      <div class="f"><span class="fn">regime</span>
+        <span style="display:flex;gap:3px"><span class="etag">old</span><span class="etag">new</span></span>
+      </div>
+      <div class="f"><span class="fn">section80C</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">PPF</span><span class="etag">ELSS</span><span class="etag">EPF</span><span class="etag">LIC</span><span class="etag">NSC</span><span class="etag">tuition</span></span>
+      </div>
+      <div class="f"><span class="tag comp">∑</span><span class="fn">total80C</span><span class="ft">max ₹1.5L</span></div>
+      <div class="f"><span class="fn">section80D</span><span class="ft">health insurance premium</span></div>
+      <div class="f"><span class="fn">hraExemption</span><span class="ft">number?</span></div>
+      <div class="f"><span class="fn">homeLoanInterest</span><span class="ft">number?  (24B)</span></div>
+      <div class="f"><span class="tag comp">∑</span><span class="fn">totalDeductions</span></div>
+      <div class="f"><span class="fn">pan</span><span class="ft">string (encrypted)</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="dot" style="background:#b45309"></div><div class="lbl">capital_gains</div><div class="badge new-badge">LTCG / STCG tracker</div></div>
+    <div class="fields">
+      <div class="f"><span class="tag pk">PK</span><span class="fn">id</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">userId</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">instrumentId</span></div>
+      <div class="f"><span class="tag fk">FK</span><span class="fn">saleTransactionId</span></div>
+      <div class="f"><span class="fn">assetType</span>
+        <span style="display:flex;flex-wrap:wrap"><span class="etag">equity</span><span class="etag">mf_equity</span><span class="etag">mf_debt</span><span class="etag">fd</span><span class="etag">gold</span></span>
+      </div>
+      <div class="f"><span class="fn">purchaseDate</span><span class="ft">epoch</span></div>
+      <div class="f"><span class="fn">saleDate</span><span class="ft">epoch</span></div>
+      <div class="f"><span class="fn">holdingDays</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">gainType</span>
+        <span style="display:flex;gap:3px"><span class="etag">LTCG</span><span class="etag">STCG</span></span>
+      </div>
+      <div class="f"><span class="fn">gain</span><span class="ft">number</span></div>
+      <div class="f"><span class="fn">taxRate</span><span class="ft">number  (10% / 15% / 20%)</span></div>
+      <div class="f"><span class="fn">fiscalYear</span><span class="ft">string</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="note" style="margin-top:8px">
+  <strong>EPF as instrument:</strong> type=<code>epf</code>, class=<code>govt_scheme</code>. Employee PF deduction from salary creates an <code>InstrumentEvent</code> (type=<code>deposit</code>). Employer contribution is info-only. UAN number goes in <code>accountNumber</code> field.<br><br>
+  <strong>Fiscal year helper:</strong> all date queries for Indian tax purposes should use Apr 1–Mar 31 boundaries. Store <code>fiscalYear: "2024-25"</code> as a denormalized field on transactions and instrument events so FY-scoped queries don't need date range math every time.
+</div>
+
+</div>
+
+<div id="tab-currency" class="tab-panel">
+
+<div class="callout green">For Indian users, 99%+ of transactions are in INR. Storing <code>currency: "INR"</code> on every single document is redundant and adds noise. The strategy: store currency only as an explicit override when it differs from the user's base currency.</div>
+
+<div class="sl">Currency inheritance model</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+  <div class="rrow">
+    <span class="re">user_settings</span>
+    <span class="ra">root</span>
+    <span class="rd"><code>baseCurrency: "INR"</code> — the authoritative default. All reads resolve currency as: <code>doc.currency ?? user.baseCurrency</code>. This single change cuts storage and makes INR implicit everywhere.</span>
+  </div>
+  <div class="rrow">
+    <span class="re">accounts</span>
+    <span class="ra">inherit / override</span>
+    <span class="rd">HDFC savings account = no <code>currency</code> field → implicitly INR. A foreign currency account (USD NRE account) sets <code>currency: "USD"</code> explicitly. This is the only level where override makes structural sense.</span>
+  </div>
+  <div class="rrow">
+    <span class="re">transactions</span>
+    <span class="ra">inherit from account</span>
+    <span class="rd">A transaction's currency is inherited from its <code>debitAccountId</code>'s currency. Only store <code>currency</code> on a transaction when it differs from the account (e.g. a USD payment from an INR card — stores exchange rate too).</span>
+  </div>
+  <div class="rrow">
+    <span class="re">instruments</span>
+    <span class="ra">inherit / override</span>
+    <span class="rd">Most instruments are INR. A US stock or international MF sets <code>currency: "USD"</code>. <code>currentValueInr</code> is a computed field using a stored exchange rate snapshot.</span>
+  </div>
+</div>
+
+<div class="sl">Multi-currency fields (only when needed)</div>
+<div class="card" style="margin-bottom:10px">
+  <div class="ch"><div class="dot" style="background:#0891b2"></div><div class="lbl">Currency override fields</div></div>
+  <div class="fields" style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px">
+    <div class="f"><span class="fn">currency</span><span class="ft">string?  (omit = base currency)</span></div>
+    <div class="f"><span class="fn">amountInBaseCurrency</span><span class="ft">number?</span></div>
+    <div class="f"><span class="fn">exchangeRate</span><span class="ft">number?</span></div>
+    <div class="f"><span class="fn">rateAt</span><span class="ft">epoch?  (rate snapshot time)</span></div>
+  </div>
+</div>
+
+<div class="sl">UPI as a payment method, not an account type</div>
+<div class="note">
+  UPI is not an account — it's a payment rail. A UPI payment debits a linked bank account. Model it as <code>transactions.paymentMethod = "upi"</code> with <code>transactions.upiRefId</code> for reconciliation. The underlying account (HDFC savings) is still the <code>debitAccountId</code>. This avoids the common mistake of creating a "UPI account" that doesn't have a balance.<br><br>
+  Similarly, <strong>credit card spending</strong> debits the credit card account (liability), not the bank account. The bank account is only debited when the card bill is paid (that's a separate transfer transaction).
+</div>
+
+<div class="sl">Dashboard currency display</div>
+<div class="note">
+  When computing totals (net worth, portfolio value), always reduce to <code>baseCurrency</code>. For Indian users this means: sum instruments in INR directly, convert foreign instruments using their stored <code>exchangeRate</code> snapshot (updated by background job). Never rely on a live FX call for display-time calculations — store the converted value at write time.
+</div>
+
+</div>
+
+</div>
+
+<script>
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
