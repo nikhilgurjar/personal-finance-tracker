@@ -128,7 +128,7 @@ export function Navbar() {
         )}
 
         {/* Bottom Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 pb-safe">
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 pt-2" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
           <div className="flex items-center justify-around h-16">
             <Link href="/dashboard" className={`flex flex-col items-center justify-center gap-1 flex-1 py-2 ${pathname === '/dashboard' ? 'text-blue-500' : 'text-gray-600'}`}>
               <Home className="w-6 h-6" />
