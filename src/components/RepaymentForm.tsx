@@ -1,181 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  TextField,
-  Typography,
-} from '@mui/material';
 import { Loan } from '@/lib/types';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
 import { useAuthContext } from '@/components/AuthProvider';
 
-interface RepaymentFormProps {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
-  loan?: Loan | null;
-  personName?: string;
-  loanType?: Loan['loanType'];
-  outstandingAmount?: number;
-  currency?: string;
-}
-
-export function RepaymentForm({
-  open,
-  onClose,
-  onSubmit,
-  loan,
-  personName,
-  loanType,
-  outstandingAmount,
-  currency,
-}: RepaymentFormProps) {
+export function RepaymentForm({ open, onClose, onSubmit, loan, personName, loanType, outstandingAmount, currency }: {open:boolean;onClose:()=>void;onSubmit:(d:any)=>Promise<void>;loan?:Loan|null;personName?:string;loanType?:Loan['loanType'];outstandingAmount?:number;currency?:string;}) {
   const { user } = useAuthContext();
   const effectivePersonName = personName || loan?.personName || '';
   const effectiveLoanType = loanType || loan?.loanType;
   const effectiveOutstanding = outstandingAmount ?? loan?.outstandingAmount ?? 0;
   const effectiveCurrency = currency || loan?.currency || 'INR';
-
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [accountId, setAccountId] = useState('');
-  const [note, setNote] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
+  const [amount, setAmount] = useState(''); const [date, setDate] = useState(new Date().toISOString().split('T')[0]); const [accountId, setAccountId] = useState(''); const [note, setNote] = useState(''); const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
   const { data: accounts = [] } = useAuthedQuery(user, ['accounts', user?.uid], '/api/accounts');
-
-  useEffect(() => {
-    if (open && effectivePersonName) {
-      setAmount('');
-      setDate(new Date().toISOString().split('T')[0]);
-      setAccountId('');
-      setNote('');
-      setError('');
-    }
-  }, [open, effectivePersonName]);
-
-  if (!effectivePersonName || !effectiveLoanType) return null;
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!amount || !accountId) {
-      setError('Amount and account are required.');
-      return;
-    }
-
-    const parsedAmount = Number(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setError('Enter a valid repayment amount.');
-      return;
-    }
-
-    if (parsedAmount > effectiveOutstanding) {
-      setError('Repayment amount cannot exceed outstanding balance for this person.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError('');
-      await onSubmit({
-        repayment: {
-          personName: effectivePersonName,
-          loanType: effectiveLoanType,
-          amount: parsedAmount,
-          currency: effectiveCurrency,
-          date: new Date(date).getTime(),
-          accountId,
-          note,
-        },
-      });
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to record repayment.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <form onSubmit={handleSubmit}>
-        <DialogTitle>Record Person Repayment</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            {error && <Alert severity="error">{error}</Alert>}
-
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Recording repayment against <strong>{effectivePersonName}</strong>
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                This will be allocated across this person's active {effectiveLoanType} loans, oldest first.
-              </Typography>
-            </Box>
-
-            <TextField
-              label="Amount"
-              type="number"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              required
-              fullWidth
-              inputProps={{ max: effectiveOutstanding, step: 'any' }}
-              helperText={`Outstanding for person: INR ${effectiveOutstanding.toLocaleString('en-IN')}`}
-            />
-
-            <TextField
-              label="Date"
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              required
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-
-            <TextField
-              select
-              label={effectiveLoanType === 'lent' ? 'Account Received To' : 'Account Paid From'}
-              value={accountId}
-              onChange={(event) => setAccountId(event.target.value)}
-              required
-              fullWidth
-            >
-              {accounts.map((account: any) => (
-                <MenuItem key={account.id} value={account.id}>
-                  {account.name} (INR {account.currentBalance?.toLocaleString('en-IN') || 0})
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <TextField
-              label="Note (Optional)"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              multiline
-              rows={2}
-              fullWidth
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={loading}>
-            {loading ? 'Saving...' : 'Save Repayment'}
-          </Button>
-        </DialogActions>
-      </form>
-    </Dialog>
-  );
+  useEffect(() => { if (open) { setAmount(''); setDate(new Date().toISOString().split('T')[0]); setAccountId(''); setNote(''); setError(''); } }, [open]);
+  if (!open || !effectivePersonName || !effectiveLoanType) return null;
+  return <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4'><form className='w-full max-w-md space-y-3 rounded-xl bg-neutral-900 p-4' onSubmit={async e=>{e.preventDefault();const n=Number(amount); if(!n||!accountId){setError('Amount and account required');return;} if(n>effectiveOutstanding){setError('Repayment exceeds outstanding');return;} try{setLoading(true);setError('');await onSubmit({repayment:{personName:effectivePersonName,loanType:effectiveLoanType,amount:n,currency:effectiveCurrency,date:new Date(date).getTime(),accountId,note}}); onClose();}catch(err:any){setError(err.message||'Failed');}finally{setLoading(false);}}}><h3 className='text-lg font-semibold'>Record Repayment</h3><p className='text-sm text-neutral-400'>Against <strong>{effectivePersonName}</strong>. Outstanding: INR {effectiveOutstanding.toLocaleString('en-IN')}</p>{error&&<p className='text-sm text-red-400'>{error}</p>}<input className='w-full rounded bg-neutral-800 p-2' type='number' value={amount} onChange={e=>setAmount(e.target.value)} placeholder='Amount' required/><input className='w-full rounded bg-neutral-800 p-2' type='date' value={date} onChange={e=>setDate(e.target.value)} required/><select className='w-full rounded bg-neutral-800 p-2' value={accountId} onChange={e=>setAccountId(e.target.value)} required><option value=''>Select account</option>{(accounts as any[]).map((a:any)=><option key={a.id} value={a.id}>{a.name}</option>)}</select><textarea className='w-full rounded bg-neutral-800 p-2' rows={2} placeholder='Note' value={note} onChange={e=>setNote(e.target.value)} /><div className='flex justify-end gap-2'><button type='button' className='rounded border px-3 py-2' onClick={onClose}>Cancel</button><button className='rounded bg-emerald-600 px-3 py-2' disabled={loading}>{loading?'Saving...':'Save'}</button></div></form></div>;
 }
