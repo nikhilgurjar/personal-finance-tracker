@@ -44,3 +44,8 @@ export async function DELETE() {
 
   return response;
 }
+
+export async function GET(req: NextRequest) {
+  const hasSession = Boolean(req.cookies.get(SESSION_COOKIE_NAME)?.value);
+  return NextResponse.json({ hasSession });
+}

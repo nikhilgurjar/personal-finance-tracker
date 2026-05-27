@@ -19,7 +19,7 @@ export default function HomePage() {
   const goToDashboard = useCallback(() => {
     if (hasRedirected.current) return;
     hasRedirected.current = true;
-    router.replace('/dashboard');
+    window.location.assign('/dashboard');
   }, [router]);
 
   useEffect(() => {

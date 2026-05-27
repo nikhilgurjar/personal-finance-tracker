@@ -24,6 +24,21 @@ const syncSessionCookie = async (user: User | null) => {
   });
 };
 
+const waitForSessionCookie = async (timeoutMs = 2000) => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.hasSession) return true;
+      }
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  return false;
+};
+
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +76,7 @@ export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, provider);
     await syncSessionCookie(result.user);
+    await waitForSessionCookie();
     return result.user;
   } catch (error) {
     console.error('Error signing in with Google:', error);
@@ -72,6 +88,7 @@ export const signInWithEmail = async (email: string, password: string) => {
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
     await syncSessionCookie(result.user);
+    await waitForSessionCookie();
     return result.user;
   } catch (error) {
     console.error('Error signing in with email:', error);
@@ -83,6 +100,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await syncSessionCookie(result.user);
+    await waitForSessionCookie();
     return result.user;
   } catch (error) {
     console.error('Error signing up with email:', error);
