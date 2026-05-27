@@ -6,7 +6,24 @@ import { Account } from '@/lib/types';
 interface FormFields { amount: string; date: Date | null; note?: string; fromAccountId?: string; toAccountId?: string; [key: string]: any; }
 type InitialFormFields = Partial<Omit<FormFields, 'date'> & { date: Date | null; }>;
 
-export const BaseTransactionForm: React.FC<any> = ({ title, accounts, fromAccounts, toAccounts, onSubmit, isLoading, error, additionalFields, initialValues = {}, hideFromAccount = false, hideToAccount = false }) => {
+export interface BaseTransactionFormProps {
+  accounts: Account[];
+  onSubmit: (formData: any) => void;
+  onClose?: () => void;
+  isLoading?: boolean;
+  error?: Error | null;
+  editingTransaction?: any;
+  initialValues?: InitialFormFields;
+  fromAccounts?: Account[];
+  toAccounts?: Account[];
+}
+
+export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
+  title: string;
+  additionalFields?: React.ReactNode;
+  hideFromAccount?: boolean;
+  hideToAccount?: boolean;
+}> = ({ title, accounts, fromAccounts, toAccounts, onSubmit, isLoading, error, additionalFields, initialValues = {}, hideFromAccount = false, hideToAccount = false }) => {
   const [formData, setFormData] = useState<FormFields>({ ...initialValues, amount: initialValues.amount || '', date: initialValues.date ? new Date(initialValues.date) : new Date(), note: initialValues.note || '', fromAccountId: initialValues.fromAccountId || '', toAccountId: initialValues.toAccountId || '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const validateForm = () => { const e: Record<string, string> = {}; if (!formData.amount || isNaN(Number(formData.amount)) || Number(formData.amount) <= 0) e.amount = 'Amount must be a positive number'; if (!formData.date) e.date = 'Date is required'; if (!hideFromAccount && !formData.fromAccountId) e.fromAccountId = 'From Account is required'; if (!hideToAccount && !formData.toAccountId) e.toAccountId = 'To Account is required'; setErrors(e); return Object.keys(e).length===0; };
