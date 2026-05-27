@@ -48,7 +48,7 @@ export default function ForecastPage() {
     return params.toString();
   }, [days, extraSavings, earlyRepayment, whatIfAccountId]);
 
-  const { data, isLoading, error, refetch } = useAuthedQuery<any>(user, ['forecast', user?.uid, queryString], `/api/forecast?${queryString}`);
+  const { data, isLoading, error, mutate } = useAuthedQuery<any>(user, ['forecast', user?.uid, queryString], `/api/forecast?${queryString}`);
   if (!user) return null;
 
   const accounts: any[] = data?.accounts ?? [];
@@ -75,7 +75,7 @@ export default function ForecastPage() {
           {error && (
             <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
               <span>Failed to load forecast: {(error as any)?.message || 'Unknown error.'}</span>
-              <button onClick={() => refetch()} className="inline-flex items-center gap-1 text-red-700 underline"><RefreshCw size={14} />Retry</button>
+              <button onClick={() => mutate()} className="inline-flex items-center gap-1 text-red-700 underline"><RefreshCw size={14} />Retry</button>
             </div>
           )}
 
@@ -181,4 +181,3 @@ export default function ForecastPage() {
     </ResponsiveLayout>
   );
 }
-

@@ -18,7 +18,7 @@ import {
   Settings,
   LogOut,
 } from 'lucide-react';
-import { signOut } from '@/lib/auth';
+import { logout } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
 export default function BottomNav() {
@@ -45,7 +45,7 @@ export default function BottomNav() {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
+      await logout();
       router.replace('/');
     } catch (err) {
       console.error('Error signing out', err);

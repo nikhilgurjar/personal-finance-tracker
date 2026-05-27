@@ -48,7 +48,7 @@ export default function BudgetsPage() {
   
   const { data: userCategories = [] } = useSWR('/api/categories', fetcher);
 
-  const categories = useMemo(() => {
+  const categories = useMemo<string[]>(() => {
     if (userCategories && userCategories.length > 0) {
       return userCategories.map((c: any) => c.name);
     }
@@ -157,7 +157,7 @@ export default function BudgetsPage() {
               className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-xs text-text focus:outline-none focus:border-cyan capitalize"
             >
               <option value="">Select Category</option>
-              {categories.map((cat) => (
+              {categories.map((cat: string) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
