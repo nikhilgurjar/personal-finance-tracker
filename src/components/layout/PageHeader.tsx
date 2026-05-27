@@ -1,6 +1,3 @@
-'use client';
-
-import { useAuthContext } from '@/components/AuthProvider';
 import { User, Bell } from 'lucide-react';
 
 interface PageHeaderProps {
@@ -8,13 +5,6 @@ interface PageHeaderProps {
 }
 
 export default function PageHeader({ title }: PageHeaderProps) {
-  const { user } = useAuthContext();
-
-  const getInitials = (email?: string | null) => {
-    if (!email) return 'U';
-    return email.substring(0, 2).toUpperCase();
-  };
-
   return (
     <header className="flex items-center justify-between py-5 border-b border-border mb-6">
       <div>
@@ -35,10 +25,10 @@ export default function PageHeader({ title }: PageHeaderProps) {
         {/* User Profile */}
         <div className="flex items-center gap-3 bg-card border border-border px-3 py-1.5 rounded-lg">
           <div className="w-6 h-6 rounded-full bg-cyan/10 text-cyan flex items-center justify-center text-xs font-semibold font-mono">
-            {getInitials(user?.email)}
+            <User className="w-3.5 h-3.5" />
           </div>
           <span className="text-[12px] font-medium text-text hidden sm:inline-block max-w-[120px] truncate">
-            {user?.email || 'User'}
+            Workspace User
           </span>
         </div>
       </div>
