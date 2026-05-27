@@ -1,9 +1,8 @@
 'use client';
 
-import { Box, Typography, Paper, Avatar, Button, Divider, Switch, List, ListItem, ListItemText, ListItemSecondaryAction } from '@mui/material';
 import { useAuthContext } from '@/components/AuthProvider';
 import { logout } from '@/lib/auth';
-import { Logout, AccountCircle, Notifications, DarkMode, Language } from '@mui/icons-material';
+import { LogOut, UserCircle2, Bell, Moon, Languages } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user } = useAuthContext();
@@ -19,89 +18,62 @@ export default function SettingsPage() {
   if (!user) return null;
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 800, mx: 'auto' }}>
-      <Typography variant="h4" fontWeight={800} color="primary" sx={{ mb: 4 }}>
-        Settings
-      </Typography>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <h1 className="mb-6 text-3xl font-extrabold text-blue-600">Settings</h1>
 
-      <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3 }}>
-          <Avatar
-            sx={{
-              width: 80,
-              height: 80,
-              background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
-              fontSize: '2rem',
-              fontWeight: 600,
-            }}
-          >
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-3xl font-semibold text-white">
             {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
-          </Avatar>
-          <Box>
-            <Typography variant="h6" fontWeight={700}>
-              {user.displayName || user.email?.split('@')[0] || 'User'}
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              {user.email}
-            </Typography>
-          </Box>
-        </Box>
-        <Divider sx={{ my: 2 }} />
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<Logout />}
+          </div>
+          <div>
+            <p className="text-lg font-bold text-slate-900">{user.displayName || user.email?.split('@')[0] || 'User'}</p>
+            <p className="text-slate-500">{user.email}</p>
+          </div>
+        </div>
+        <div className="my-3 h-px bg-slate-200" />
+        <button
           onClick={handleLogout}
-          fullWidth
-          sx={{ mt: 1 }}
+          className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
         >
-          Logout
-        </Button>
-      </Paper>
+          <LogOut size={16} /> Logout
+        </button>
+      </div>
 
-      <Paper sx={{ borderRadius: 3, overflow: 'hidden' }}>
-        <List disablePadding>
-          <ListItem sx={{ py: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <AccountCircle color="action" />
-              <ListItemText primary="Profile Information" secondary="Update your name and email" />
-            </Box>
-            <ListItemSecondaryAction>
-              <Button size="small" variant="text">Edit</Button>
-            </ListItemSecondaryAction>
-          </ListItem>
-          <Divider />
-          <ListItem sx={{ py: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <DarkMode color="action" />
-              <ListItemText primary="Dark Mode" secondary="Toggle dark theme (Coming soon)" />
-            </Box>
-            <ListItemSecondaryAction>
-              <Switch edge="end" disabled />
-            </ListItemSecondaryAction>
-          </ListItem>
-          <Divider />
-          <ListItem sx={{ py: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Language color="action" />
-              <ListItemText primary="Currency" secondary="Base currency for tracking (INR)" />
-            </Box>
-            <ListItemSecondaryAction>
-              <Button size="small" variant="text">Change</Button>
-            </ListItemSecondaryAction>
-          </ListItem>
-          <Divider />
-          <ListItem sx={{ py: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Notifications color="action" />
-              <ListItemText primary="Notifications" secondary="Manage email alerts" />
-            </Box>
-            <ListItemSecondaryAction>
-              <Switch edge="end" defaultChecked />
-            </ListItemSecondaryAction>
-          </ListItem>
-        </List>
-      </Paper>
-    </Box>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {[{
+          icon: <UserCircle2 size={18} className="text-slate-500" />,
+          title: 'Profile Information',
+          subtitle: 'Update your name and email',
+          action: <button className="text-sm font-medium text-blue-600">Edit</button>,
+        },{
+          icon: <Moon size={18} className="text-slate-500" />,
+          title: 'Dark Mode',
+          subtitle: 'Toggle dark theme (Coming soon)',
+          action: <input type="checkbox" disabled className="h-4 w-4" />,
+        },{
+          icon: <Languages size={18} className="text-slate-500" />,
+          title: 'Currency',
+          subtitle: 'Base currency for tracking (INR)',
+          action: <button className="text-sm font-medium text-blue-600">Change</button>,
+        },{
+          icon: <Bell size={18} className="text-slate-500" />,
+          title: 'Notifications',
+          subtitle: 'Manage email alerts',
+          action: <input type="checkbox" defaultChecked className="h-4 w-4" />,
+        }].map((item, idx) => (
+          <div key={item.title} className={`flex items-center justify-between px-4 py-4 ${idx !== 3 ? 'border-b border-slate-200' : ''}`}>
+            <div className="flex items-center gap-2">
+              {item.icon}
+              <div>
+                <p className="font-medium text-slate-900">{item.title}</p>
+                <p className="text-sm text-slate-500">{item.subtitle}</p>
+              </div>
+            </div>
+            {item.action}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

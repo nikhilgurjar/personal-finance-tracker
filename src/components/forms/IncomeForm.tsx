@@ -1,6 +1,5 @@
 'use client';
 
-import { Grid, FormControl, InputLabel, Select, MenuItem, TextField } from '@mui/material';
 import { BaseTransactionForm, BaseTransactionFormProps } from './BaseTransactionForm';
 
 const INCOME_CATEGORIES = [
@@ -20,30 +19,21 @@ export const IncomeForm: React.FC<BaseTransactionFormProps> = (props) => {
       hideFromAccount
       additionalFields={
         <>
-          <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel>Category</InputLabel>
-              <Select
-                defaultValue=""
-                name="category"
-                required
-              >
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Category</label>
+            <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2" defaultValue="" name="category" required>
+              <option value="">Select category</option>
                 {INCOME_CATEGORIES.map((category) => (
-                  <MenuItem key={category} value={category}>
+                  <option key={category} value={category}>
                     {category}
-                  </MenuItem>
+                  </option>
                 ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Source"
-              name="source"
-              placeholder="Income source"
-            />
-          </Grid>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Source</label>
+            <input className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2" name="source" placeholder="Income source" />
+          </div>
         </>
       }
     />

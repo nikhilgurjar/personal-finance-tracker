@@ -3,19 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Container,
-  Grid,
-  Skeleton,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { AutoAwesome, QuestionAnswer, Summarize } from '@mui/icons-material';
+import { Sparkles, MessageCircleQuestion, FileText } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useAuthContext } from '@/components/AuthProvider';
 import { ResponsiveLayout } from '@/components/ResponsiveLayout';
@@ -51,91 +39,65 @@ export default function AiPage() {
 
   return (
     <ResponsiveLayout>
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', bgcolor: 'background.default' }}>
-        <Container maxWidth="lg">
-          <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ p: 1.5, bgcolor: 'primary.main', color: 'white', borderRadius: 2, display: 'flex' }}>
-              <AutoAwesome />
-            </Box>
-            <Box>
-              <Typography variant="h4" fontWeight={800}>AI Insights</Typography>
-              <Typography variant="body2" color="text.secondary">
+      <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-6 flex items-center gap-2">
+            <div className="rounded-lg bg-blue-600 p-2 text-white"><Sparkles size={18} /></div>
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900">AI Insights</h1>
+              <p className="text-sm text-slate-500">
                 Optional Gemini-powered review and natural language finance questions.
-              </Typography>
-            </Box>
-          </Box>
+              </p>
+            </div>
+          </div>
 
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <Summarize color="primary" />
-                    <Typography variant="h6" fontWeight={800}>Monthly Review</Typography>
-                  </Box>
-                  <TextField
-                    label="Month"
-                    type="month"
-                    value={month}
-                    onChange={(event) => setMonth(event.target.value)}
-                    size="small"
-                    sx={{ mb: 2 }}
-                    InputLabelProps={{ shrink: true }}
-                  />
-                  {error && <Alert severity="error">Failed to load review.</Alert>}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <FileText size={18} className="text-blue-600" />
+                <h2 className="text-xl font-extrabold text-slate-900">Monthly Review</h2>
+              </div>
+              <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="mb-2 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                  {error && <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">Failed to load review.</div>}
                   {isLoading || !data ? (
-                    <Skeleton variant="rounded" height={220} />
+                    <div className="h-[220px] animate-pulse rounded-lg bg-slate-200" />
                   ) : (
                     <>
                       {!data.aiEnabled && (
-                        <Alert severity="info" sx={{ mb: 2 }}>
+                        <div className="mb-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-700">
                           Add GEMINI_API_KEY to enable AI wording. Showing deterministic review.
-                        </Alert>
+                        </div>
                       )}
-                      <Typography component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', m: 0 }}>
+                      <pre className="m-0 whitespace-pre-wrap font-sans text-sm text-slate-700">
                         {data.review}
-                      </Typography>
+                      </pre>
                     </>
                   )}
-                </CardContent>
-              </Card>
-            </Grid>
+            </div>
 
-            <Grid item xs={12} md={6}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <QuestionAnswer color="primary" />
-                    <Typography variant="h6" fontWeight={800}>Ask Your Finances</Typography>
-                  </Box>
-                  <TextField
-                    fullWidth
-                    multiline
-                    minRows={3}
-                    label="Question"
-                    value={question}
-                    onChange={(event) => setQuestion(event.target.value)}
-                    sx={{ mb: 2 }}
-                  />
-                  <Button
-                    variant="contained"
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <MessageCircleQuestion size={18} className="text-blue-600" />
+                <h2 className="text-xl font-extrabold text-slate-900">Ask Your Finances</h2>
+              </div>
+              <textarea className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" rows={3} value={question} onChange={(event) => setQuestion(event.target.value)} />
+              <button
                     onClick={() => queryMutation.mutate()}
                     disabled={queryMutation.isPending || !question.trim()}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
                   >
                     Ask
-                  </Button>
-                  {queryMutation.isError && <Alert severity="error" sx={{ mt: 2 }}>Failed to answer question.</Alert>}
+                  </button>
+                  {queryMutation.isError && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">Failed to answer question.</div>}
                   {answer && (
-                    <Alert severity="info" sx={{ mt: 2 }}>
+                    <div className="mt-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-700">
                       {answer}
-                    </Alert>
+                    </div>
                   )}
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+            </div>
+          </div>
+        </div>
+      </div>
     </ResponsiveLayout>
   );
 }

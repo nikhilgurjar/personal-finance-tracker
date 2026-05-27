@@ -6,12 +6,7 @@ import { ResponsiveLayout } from '@/components/ResponsiveLayout';
 import { TimelineView, TimelineEventData } from '@/components/TimelineView';
 import { useQuery } from '@tanstack/react-query';
 import { getIdToken } from '@/lib/auth';
-import {
-  Box, Container, Typography, Grid, Card, CardContent, Chip,
-  Alert, Skeleton, FormControl, InputLabel, Select, MenuItem, TextField,
-  InputAdornment,
-} from '@mui/material';
-import { History, Search } from '@mui/icons-material';
+import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 async function apiFetch(path: string, user: any) {
@@ -90,83 +85,63 @@ export default function HistoryPage() {
 
   return (
     <ResponsiveLayout>
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh' }}>
-        <Container maxWidth="lg">
+      <div className="min-h-screen p-4 md:p-8">
+        <div className="mx-auto max-w-6xl">
           {/* Header */}
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h4" fontWeight={800}>History & Audit Log</Typography>
-            <Typography variant="body2" color="text.secondary">Full timeline of all financial events</Typography>
-          </Box>
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold text-slate-900">History & Audit Log</h1>
+            <p className="text-sm text-slate-500">Full timeline of all financial events</p>
+          </div>
 
           {/* Stats */}
-          <Grid container spacing={2} sx={{ mb: 4 }}>
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
               { label: 'Total Events', value: counts.total, color: '#3b82f6' },
               { label: 'Created', value: counts.creates, color: '#10b981' },
               { label: 'Updated', value: counts.updates, color: '#f59e0b' },
               { label: 'Deleted', value: counts.deletes, color: '#ef4444' },
             ].map(c => (
-              <Grid item xs={6} sm={3} key={c.label}>
-                <Card elevation={0} sx={{ border: 1, borderColor: 'divider', borderTop: 4, borderTopColor: c.color }}>
-                  <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                    <Typography variant="caption" color="text.secondary">{c.label}</Typography>
-                    <Typography variant="h5" fontWeight={700} sx={{ color: c.color }}>{c.value}</Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
+              <div key={c.label} className="rounded-xl border border-slate-200 border-t-4 bg-white p-3" style={{ borderTopColor: c.color }}>
+                <p className="text-xs text-slate-500">{c.label}</p>
+                <p className="text-2xl font-bold" style={{ color: c.color }}>{c.value}</p>
+              </div>
             ))}
-          </Grid>
+          </div>
 
           {/* Filters */}
-          <Card elevation={0} sx={{ mb: 4, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-            <CardContent>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    size="small" fullWidth label="Search"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} fontSize="small" /> }}
-                  />
-                </Grid>
-                <Grid item xs={6} sm={4}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Entity Type</InputLabel>
-                    <Select value={entityFilter} onChange={e => setEntityFilter(e.target.value)} label="Entity Type">
-                      <MenuItem value="">All</MenuItem>
-                      {Object.entries(ENTITY_LABELS).map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6} sm={4}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Action</InputLabel>
-                    <Select value={actionFilter} onChange={e => setActionFilter(e.target.value)} label="Action">
-                      <MenuItem value="">All</MenuItem>
-                      <MenuItem value="create">Create</MenuItem>
-                      <MenuItem value="update">Update</MenuItem>
-                      <MenuItem value="delete">Delete</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="relative">
+                <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                <input className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm" placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} />
+              </label>
+              <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm" value={entityFilter} onChange={e => setEntityFilter(e.target.value)}>
+                <option value="">All Entities</option>
+                {Object.entries(ENTITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <select className="rounded-lg border border-slate-300 px-3 py-2 text-sm" value={actionFilter} onChange={e => setActionFilter(e.target.value)}>
+                <option value="">All Actions</option>
+                <option value="create">Create</option>
+                <option value="update">Update</option>
+                <option value="delete">Delete</option>
+              </select>
+            </div>
+          </div>
 
-          {error && <Alert severity="warning" sx={{ mb: 3 }}>Could not load audit logs. The audit logs API may need to be set up.</Alert>}
+          {error && <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">Could not load audit logs. The audit logs API may need to be set up.</div>}
 
           {isLoading ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {[1,2,3,4,5].map(i => <Skeleton key={i} variant="rounded" height={70} />)}
-            </Box>
+            <div className="flex flex-col gap-2">
+              {[1,2,3,4,5].map(i => <div key={i} className="h-[70px] animate-pulse rounded-lg bg-slate-200" />)}
+            </div>
           ) : (
             <TimelineView
               events={events}
               emptyMessage="No audit history yet. Start adding transactions to see them here."
             />
           )}
-        </Container>
-      </Box>
+        </div>
+      </div>
     </ResponsiveLayout>
   );
 }

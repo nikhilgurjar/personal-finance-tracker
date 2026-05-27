@@ -1,22 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  TextField,
-  Button,
-  Grid,
-  Paper,
-  Typography,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Alert,
-} from '@mui/material';
-import { DatePicker } from '@mui/x-date-pickers';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import { Account } from '@/lib/types';
 
@@ -131,122 +115,97 @@ export const BaseTransactionForm: React.FC<BaseTransactionFormProps & {
   const resolvedToAccounts = toAccounts ?? accounts;
 
   return (
-    <Paper elevation={0} sx={{ p: 3, mb: 3, backgroundColor: 'transparent' }}>
-      <Typography variant="h6" gutterBottom>
-        {title}
-      </Typography>
+    <div className="mb-3 rounded-xl border border-slate-200 bg-white p-6">
+      <h2 className="mb-4 text-lg font-semibold text-slate-900">{title}</h2>
       <form onSubmit={handleSubmit}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Amount"
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Amount</label>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
               type="number"
               value={formData.amount}
               onChange={handleChange('amount')}
               required
-              inputProps={{ step: '0.01' }}
-              error={!!errors.amount}
-              helperText={errors.amount}
+              step="0.01"
             />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <DatePicker
-                label="Date"
-                value={formData.date}
-                onChange={(newValue) =>
-                  setFormData((prev) => ({ ...prev, date: newValue }))
-                }
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    error: !!errors.date,
-                    helperText: errors.date,
-                  }
-                }}
-              />
-            </LocalizationProvider>
-          </Grid>
+            {errors.amount && <p className="mt-1 text-xs text-red-600">{errors.amount}</p>}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Date</label>
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
+              type="date"
+              value={formData.date ? formData.date.format('YYYY-MM-DD') : ''}
+              onChange={(e) => setFormData((prev) => ({ ...prev, date: dayjs(e.target.value) }))}
+              required
+            />
+            {errors.date && <p className="mt-1 text-xs text-red-600">{errors.date}</p>}
+          </div>
           {!hideFromAccount && (
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth error={!!errors.fromAccountId}>
-                <InputLabel>From Account</InputLabel>
-                <Select
-                  value={formData.fromAccountId}
-                  onChange={handleChange('fromAccountId')}
-                  required
-                  error={!!errors.fromAccountId}
-                  label="From Account"
-                >
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">From Account</label>
+              <select
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
+                value={formData.fromAccountId}
+                onChange={handleChange('fromAccountId')}
+                required
+              >
+                <option value="">Select account</option>
                   {resolvedFromAccounts.map((account) => (
-                    <MenuItem key={account.id} value={account.id}>
+                    <option key={account.id} value={account.id}>
                       {account.name}
-                    </MenuItem>
+                    </option>
                   ))}
-                </Select>
-                {errors.fromAccountId && (
-                  <Typography color="error" variant="caption" sx={{ mt: 1 }}>
-                    {errors.fromAccountId}
-                  </Typography>
-                )}
-              </FormControl>
-            </Grid>
+              </select>
+              {errors.fromAccountId && <p className="mt-1 text-xs text-red-600">{errors.fromAccountId}</p>}
+            </div>
           )}
           {!hideToAccount && (
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth error={!!errors.toAccountId}>
-                <InputLabel>To Account</InputLabel>
-                <Select
-                  value={formData.toAccountId}
-                  onChange={handleChange('toAccountId')}
-                  required
-                  error={!!errors.toAccountId}
-                  label="To Account"
-                >
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">To Account</label>
+              <select
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
+                value={formData.toAccountId}
+                onChange={handleChange('toAccountId')}
+                required
+              >
+                <option value="">Select account</option>
                   {resolvedToAccounts.map((account) => (
-                    <MenuItem key={account.id} value={account.id}>
+                    <option key={account.id} value={account.id}>
                       {account.name}
-                    </MenuItem>
+                    </option>
                   ))}
-                </Select>
-                {errors.toAccountId && (
-                  <Typography color="error" variant="caption" sx={{ mt: 1 }}>
-                    {errors.toAccountId}
-                  </Typography>
-                )}
-              </FormControl>
-            </Grid>
+              </select>
+              {errors.toAccountId && <p className="mt-1 text-xs text-red-600">{errors.toAccountId}</p>}
+            </div>
           )}
           {additionalFields}
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Note"
-              multiline
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Note</label>
+            <textarea
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-blue-500 focus:ring-2"
               rows={2}
               value={formData.note}
               onChange={handleChange('note')}
             />
-          </Grid>
+          </div>
           {error && (
-            <Grid item xs={12}>
-              <Alert severity="error">{error.message}</Alert>
-            </Grid>
+            <div className="sm:col-span-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error.message}
+            </div>
           )}
-          <Grid item xs={12}>
-            <Button
+          <div className="sm:col-span-2">
+            <button
               type="submit"
-              variant="contained"
-              color="primary"
               disabled={isLoading}
-              fullWidth
+              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? 'Saving...' : 'Save'}
-            </Button>
-          </Grid>
-        </Grid>
+            </button>
+          </div>
+        </div>
       </form>
-    </Paper>
+    </div>
   );
 };

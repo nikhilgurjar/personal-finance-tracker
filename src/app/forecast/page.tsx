@@ -1,79 +1,30 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Container,
-  Grid,
-  LinearProgress,
-  MenuItem,
-  Skeleton,
-  Slider,
-  TextField,
-  Typography,
-} from '@mui/material';
-import {
-  AccountBalanceWallet,
-  AutoGraph,
-  CalendarMonth,
-  Flag,
-  Refresh,
-  Savings,
-  WarningAmber,
-} from '@mui/icons-material';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Wallet, ChartLine, PiggyBank, Flag, RefreshCw, AlertTriangle, CalendarDays } from 'lucide-react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuthContext } from '@/components/AuthProvider';
 import { ResponsiveLayout } from '@/components/ResponsiveLayout';
 import { useAuthedQuery } from '@/hooks/useAuthedQuery';
 
 function formatCurrency(value = 0) {
-  return `₹${Math.round(value).toLocaleString('en-IN')}`;
+  return `Rs ${Math.round(value).toLocaleString('en-IN')}`;
 }
 
 function formatDate(value: number | string) {
   return new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-function StatCard({
-  title,
-  value,
-  icon,
-  color,
-}: {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  color: string;
-}) {
+function StatCard({ title, value, icon, color }: { title: string; value: string; icon: React.ReactNode; color: string }) {
   return (
-    <Card sx={{ height: '100%', borderTop: 4, borderTopColor: color }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="body2" color="text.secondary" fontWeight={700}>
-            {title}
-          </Typography>
-          <Box sx={{ color }}>{icon}</Box>
-        </Box>
-        <Typography variant="h5" fontWeight={800}>
-          {value}
-        </Typography>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl border border-slate-200 border-t-4 bg-white p-4" style={{ borderTopColor: color }}>
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-sm font-bold text-slate-500">{title}</p>
+        <div style={{ color }}>{icon}</div>
+      </div>
+      <p className="text-2xl font-extrabold text-slate-900">{value}</p>
+    </div>
   );
 }
 
@@ -97,15 +48,9 @@ export default function ForecastPage() {
     return params.toString();
   }, [days, extraSavings, earlyRepayment, whatIfAccountId]);
 
-  const { data, isLoading, error, refetch } = useAuthedQuery<any>(
-    user,
-    ['forecast', user?.uid, queryString],
-    `/api/forecast?${queryString}`
-  );
-
+  const { data, isLoading, error, refetch } = useAuthedQuery<any>(user, ['forecast', user?.uid, queryString], `/api/forecast?${queryString}`);
   if (!user) return null;
 
-  // Safe destructure with defaults
   const accounts: any[] = data?.accounts ?? [];
   const daily: any[] = data?.daily ?? [];
   const upcoming: any[] = data?.upcoming ?? [];
@@ -114,244 +59,126 @@ export default function ForecastPage() {
 
   return (
     <ResponsiveLayout>
-      <Box sx={{ p: { xs: 2, md: 4 }, minHeight: '100vh', bgcolor: 'background.default' }}>
-        <Container maxWidth="xl">
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 4 }}>
-            <Box>
-              <Typography variant="h4" fontWeight={800} color="text.primary">
-                AI Forecast
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Project balances, upcoming obligations, goal timing, and what-if decisions.
-              </Typography>
-            </Box>
-            <Box sx={{ minWidth: 220 }}>
-              <Typography variant="caption" color="text.secondary" fontWeight={700}>
-                Horizon: {days} days
-              </Typography>
-              <Slider
-                value={days}
-                min={30}
-                max={180}
-                step={30}
-                marks
-                onChange={(_, value) => setDays(value as number)}
-              />
-            </Box>
-          </Box>
+      <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900">AI Forecast</h1>
+              <p className="text-sm text-slate-500">Project balances, upcoming obligations, goal timing, and what-if decisions.</p>
+            </div>
+            <div className="min-w-[240px] rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold text-slate-500">Horizon: {days} days</p>
+              <input type="range" min={30} max={180} step={30} value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-full" />
+            </div>
+          </div>
 
           {error && (
-            <Alert
-              severity="error"
-              sx={{ mb: 3 }}
-              action={
-                <Button color="inherit" size="small" startIcon={<Refresh />} onClick={() => refetch()}>
-                  Retry
-                </Button>
-              }
-            >
-              Failed to load forecast: {(error as any)?.message || 'Unknown error. Check your internet connection.'}
-            </Alert>
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <span>Failed to load forecast: {(error as any)?.message || 'Unknown error.'}</span>
+              <button onClick={() => refetch()} className="inline-flex items-center gap-1 text-red-700 underline"><RefreshCw size={14} />Retry</button>
+            </div>
           )}
 
           {isLoading || (!data && !error) ? (
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
-              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
-              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
-              <Grid item xs={12} sm={6} md={3}><Skeleton variant="rounded" height={100} /></Grid>
-              <Grid item xs={12} lg={8}><Skeleton variant="rounded" height={400} /></Grid>
-              <Grid item xs={12} lg={4}><Skeleton variant="rounded" height={400} /></Grid>
-            </Grid>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-lg bg-slate-200" />)}
+            </div>
           ) : data ? (
             <>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <StatCard title="Starting Balance" value={formatCurrency(data.startingBalance)} icon={<AccountBalanceWallet />} color="#2563eb" />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <StatCard title="Projected Ending" value={formatCurrency(data.endingBalance)} icon={<AutoGraph />} color="#059669" />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <StatCard title="Forecast Outflow" value={formatCurrency(data.outflowTotal)} icon={<Savings />} color="#dc2626" />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <StatCard title="Net Worth Snapshot" value={formatCurrency(data.netWorth)} icon={<Flag />} color="#7c3aed" />
-                </Grid>
-              </Grid>
+              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard title="Starting Balance" value={formatCurrency(data.startingBalance)} icon={<Wallet size={18} />} color="#2563eb" />
+                <StatCard title="Projected Ending" value={formatCurrency(data.endingBalance)} icon={<ChartLine size={18} />} color="#059669" />
+                <StatCard title="Forecast Outflow" value={formatCurrency(data.outflowTotal)} icon={<PiggyBank size={18} />} color="#dc2626" />
+                <StatCard title="Net Worth Snapshot" value={formatCurrency(data.netWorth)} icon={<Flag size={18} />} color="#7c3aed" />
+              </div>
 
-              <Grid container spacing={3}>
-                <Grid item xs={12} lg={8}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                        Balance Projection
-                      </Typography>
-                      {daily.length > 0 ? (
-                        <Box sx={{ height: 360 }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={daily}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="date" tickFormatter={formatDate} minTickGap={28} />
-                              <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
-                              <Tooltip
-                                labelFormatter={(label) => formatDate(label)}
-                                formatter={(value) => [formatCurrency(Number(value)), 'Balance']}
-                              />
-                              <Line type="monotone" dataKey="totalBalance" stroke="#2563eb" strokeWidth={3} dot={false} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </Box>
-                      ) : (
-                        <Box sx={{ textAlign: 'center', py: 6 }}>
-                          <Typography color="text.secondary">No projection data available. Add accounts and schedules to see forecasts.</Typography>
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-8">
+                  <h2 className="mb-2 text-lg font-extrabold text-slate-900">Balance Projection</h2>
+                  {daily.length > 0 ? (
+                    <div className="h-[360px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={daily}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tickFormatter={formatDate} minTickGap={28} />
+                          <YAxis tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`} />
+                          <Tooltip labelFormatter={(label) => formatDate(label)} formatter={(value) => [formatCurrency(Number(value)), 'Balance']} />
+                          <Line type="monotone" dataKey="totalBalance" stroke="#2563eb" strokeWidth={3} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : <p className="py-8 text-center text-slate-500">No projection data available.</p>}
+                </div>
 
-                <Grid item xs={12} lg={4}>
-                  <Card sx={{ mb: 3 }}>
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                        What-If Controls
-                      </Typography>
-                      <TextField
-                        select
-                        fullWidth
-                        size="small"
-                        label="Source Account"
-                        value={whatIfAccountId}
-                        onChange={(event) => setWhatIfAccountId(event.target.value)}
-                        sx={{ mb: 2 }}
-                      >
-                        <MenuItem value="">No account selected</MenuItem>
-                        {accounts.map((account: any) => (
-                          <MenuItem key={account.id} value={account.id}>
-                            {account.name} ({formatCurrency(account.balance)})
-                          </MenuItem>
+                <div className="space-y-4 lg:col-span-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <h2 className="mb-2 text-lg font-extrabold text-slate-900">What-If Controls</h2>
+                    <select value={whatIfAccountId} onChange={(e) => setWhatIfAccountId(e.target.value)} className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                      <option value="">No account selected</option>
+                      {accounts.map((a: any) => <option key={a.id} value={a.id}>{a.name} ({formatCurrency(a.balance)})</option>)}
+                    </select>
+                    <input type="number" placeholder="Extra savings contribution" value={extraSavings} onChange={(e) => setExtraSavings(Number(e.target.value || 0))} className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                    <input type="number" placeholder="Early loan repayment" value={earlyRepayment} onChange={(e) => setEarlyRepayment(Number(e.target.value || 0))} className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                    <button onClick={() => { setExtraSavings(0); setEarlyRepayment(0); setWhatIfAccountId(''); }} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Reset Scenario</button>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <h2 className="mb-2 text-lg font-extrabold text-slate-900">Risk Alerts</h2>
+                    {alerts.length === 0 ? (
+                      <div className="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700">No major forecast risks in this horizon.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {alerts.map((alert: any, i: number) => (
+                          <div key={`${alert.title}-${i}`} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                            <div className="flex items-center gap-1 font-bold"><AlertTriangle size={14} />{alert.title}</div>
+                            <p>{alert.message}</p>
+                          </div>
                         ))}
-                      </TextField>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        type="number"
-                        label="Extra savings contribution"
-                        value={extraSavings}
-                        onChange={(event) => setExtraSavings(Number(event.target.value || 0))}
-                        sx={{ mb: 2 }}
-                      />
-                      <TextField
-                        fullWidth
-                        size="small"
-                        type="number"
-                        label="Early loan repayment"
-                        value={earlyRepayment}
-                        onChange={(event) => setEarlyRepayment(Number(event.target.value || 0))}
-                        sx={{ mb: 2 }}
-                      />
-                      <Button
-                        fullWidth
-                        variant="outlined"
-                        onClick={() => {
-                          setExtraSavings(0);
-                          setEarlyRepayment(0);
-                          setWhatIfAccountId('');
-                        }}
-                      >
-                        Reset Scenario
-                      </Button>
-                    </CardContent>
-                  </Card>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                        Risk Alerts
-                      </Typography>
-                      {alerts.length === 0 ? (
-                        <Alert severity="success">No major forecast risks in this horizon.</Alert>
-                      ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                          {alerts.map((alert: any, index: number) => (
-                            <Alert
-                              key={`${alert.title}-${index}`}
-                              severity={alert.severity === 'critical' ? 'error' : alert.severity}
-                              icon={<WarningAmber />}
-                            >
-                              <Typography variant="body2" fontWeight={800}>{alert.title}</Typography>
-                              <Typography variant="caption">{alert.message}</Typography>
-                            </Alert>
-                          ))}
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
+                <div className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-6">
+                  <h2 className="mb-2 text-lg font-extrabold text-slate-900">Upcoming Forecast Events</h2>
+                  <div className="space-y-2">
+                    {upcoming.slice(0, 10).map((event: any, i: number) => (
+                      <div key={event.id ?? i} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{event.title}</p>
+                          <p className="text-xs text-slate-500">{formatDate(event.date)}</p>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{formatCurrency(event.amount)}</span>
+                      </div>
+                    ))}
+                    {upcoming.length === 0 && <p className="py-6 text-center text-slate-500"><CalendarDays className="mx-auto mb-1" size={28} />No upcoming scheduled events.</p>}
+                  </div>
+                </div>
 
-                <Grid item xs={12} md={6}>
-                  <Card sx={{ height: '100%' }}>
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                        Upcoming Forecast Events
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        {upcoming.slice(0, 10).map((event: any, i: number) => (
-                          <Box key={event.id ?? i} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-                            <Box>
-                              <Typography variant="body2" fontWeight={800}>{event.title}</Typography>
-                              <Typography variant="caption" color="text.secondary">{formatDate(event.date)}</Typography>
-                            </Box>
-                            <Chip size="small" label={formatCurrency(event.amount)} color={event.type === 'income' ? 'success' : 'default'} />
-                          </Box>
-                        ))}
-                        {upcoming.length === 0 && (
-                          <Box sx={{ textAlign: 'center', py: 4 }}>
-                            <CalendarMonth sx={{ color: 'text.disabled', fontSize: 40 }} />
-                            <Typography color="text.secondary" sx={{ mt: 1 }}>No upcoming scheduled events.</Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <Card sx={{ height: '100%' }}>
-                    <CardContent>
-                      <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-                        Goal Impact
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {goalImpact.map((goal: any) => (
-                          <Box key={goal.id}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 0.75 }}>
-                              <Typography variant="body2" fontWeight={800}>{goal.name}</Typography>
-                              <Typography variant="body2" color="primary.main" fontWeight={800}>{goal.progress}%</Typography>
-                            </Box>
-                            <LinearProgress variant="determinate" value={goal.progress} sx={{ height: 8, borderRadius: 1, mb: 0.75 }} />
-                            <Typography variant="caption" color="text.secondary">
-                              Remaining {formatCurrency(goal.remaining)}
-                              {goal.projectedDate ? `, projected around ${formatDate(goal.projectedDate)}` : ', needs more surplus to project a date'}
-                            </Typography>
-                          </Box>
-                        ))}
-                        {goalImpact.length === 0 && (
-                          <Box sx={{ textAlign: 'center', py: 4 }}>
-                            <Flag sx={{ color: 'text.disabled', fontSize: 40 }} />
-                            <Typography color="text.secondary" sx={{ mt: 1 }}>No goals available for impact projection.</Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
+                <div className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-6">
+                  <h2 className="mb-2 text-lg font-extrabold text-slate-900">Goal Impact</h2>
+                  <div className="space-y-3">
+                    {goalImpact.map((goal: any) => (
+                      <div key={goal.id}>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <p className="text-sm font-bold text-slate-900">{goal.name}</p>
+                          <p className="text-sm font-bold text-blue-600">{goal.progress}%</p>
+                        </div>
+                        <div className="mb-1 h-2 rounded-full bg-slate-200">
+                          <div className="h-2 rounded-full bg-blue-600" style={{ width: `${goal.progress}%` }} />
+                        </div>
+                        <p className="text-xs text-slate-500">Remaining {formatCurrency(goal.remaining)}{goal.projectedDate ? `, projected around ${formatDate(goal.projectedDate)}` : ', needs more surplus to project a date'}</p>
+                      </div>
+                    ))}
+                    {goalImpact.length === 0 && <p className="py-6 text-center text-slate-500">No goals available for impact projection.</p>}
+                  </div>
+                </div>
+              </div>
             </>
           ) : null}
-        </Container>
-      </Box>
+        </div>
+      </div>
     </ResponsiveLayout>
   );
 }
+
