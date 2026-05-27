@@ -1,11 +1,33 @@
 @import "tailwindcss";
+@config "../../tailwind.config.js";
 
-html,
-body {
-  min-height: 100%;
+@layer base {
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    font-size: 14.5px;
+    line-height: 1.75;
+  }
 }
 
-body {
-  background: #080c17;
-  color: #dde4f0;
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
