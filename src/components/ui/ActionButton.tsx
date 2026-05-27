@@ -1,108 +1,59 @@
 'use client';
 
-import { Button, ButtonProps } from '@mui/material';
 import { ReactNode } from 'react';
 
-interface ActionButtonProps extends Omit<ButtonProps, 'variant'> {
+interface ActionButtonProps {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'success' | 'error' | 'outlined' | 'ghost';
   size?: 'small' | 'medium' | 'large';
   icon?: ReactNode;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
+  onClick?: () => void;
+  className?: string;
 }
 
-const variantStyles = {
-  primary: {
-    background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
-    color: 'white',
-    '&:hover': {
-      background: 'linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)',
-    },
-  },
-  secondary: {
-    background: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
-    color: 'white',
-    '&:hover': {
-      background: 'linear-gradient(135deg, #7C3AED 0%, #DB2777 100%)',
-    },
-  },
-  success: {
-    background: 'linear-gradient(135deg, #10B981 0%, #14B8A6 100%)',
-    color: 'white',
-    '&:hover': {
-      background: 'linear-gradient(135deg, #059669 0%, #0D9488 100%)',
-    },
-  },
-  error: {
-    background: 'linear-gradient(135deg, #EF4444 0%, #F97316 100%)',
-    color: 'white',
-    '&:hover': {
-      background: 'linear-gradient(135deg, #DC2626 0%, #EA580C 100%)',
-    },
-  },
-  outlined: {
-    background: 'white',
-    color: 'primary.main',
-    border: '1px solid',
-    borderColor: 'primary.main',
-    '&:hover': {
-      background: 'primary.lighter',
-    },
-  },
-  ghost: {
-    background: 'transparent',
-    color: 'text.primary',
-    '&:hover': {
-      background: 'grey.100',
-    },
-  },
+const variantClasses = {
+  primary: 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700',
+  secondary: 'bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:from-purple-600 hover:to-pink-700',
+  success: 'bg-gradient-to-r from-green-500 to-teal-600 text-white hover:from-green-600 hover:to-teal-700',
+  error: 'bg-gradient-to-r from-red-500 to-orange-600 text-white hover:from-red-600 hover:to-orange-700',
+  outlined: 'border-2 border-blue-500 text-blue-600 bg-white hover:bg-blue-50',
+  ghost: 'bg-transparent text-gray-900 hover:bg-gray-100',
 };
 
-const sizeStyles = {
-  small: {
-    padding: '8px 16px',
-    fontSize: '0.875rem',
-    minHeight: '36px',
-  },
-  medium: {
-    padding: '12px 24px',
-    fontSize: '1rem',
-    minHeight: '44px',
-  },
-  large: {
-    padding: '16px 32px',
-    fontSize: '1.125rem',
-    minHeight: '52px',
-  },
+const sizeClasses = {
+  small: 'px-4 py-2 text-sm h-9',
+  medium: 'px-6 py-3 text-base h-11',
+  large: 'px-8 py-4 text-lg h-13',
 };
 
-export function ActionButton({ 
-  children, 
-  variant = 'primary', 
+export function ActionButton({
+  children,
+  variant = 'primary',
   size = 'medium',
   icon,
-  sx,
-  ...props 
+  disabled = false,
+  type = 'button',
+  onClick,
+  className = '',
 }: ActionButtonProps) {
   return (
-    <Button
-      sx={{
-        borderRadius: 2,
-        fontWeight: 600,
-        textTransform: 'none',
-        boxShadow: 'none',
-        ...variantStyles[variant],
-        ...sizeStyles[size],
-        ...(icon && {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-        }),
-        ...sx,
-      }}
-      {...props}
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`
+        font-semibold rounded-lg transition-all duration-200
+        ${variantClasses[variant]}
+        ${sizeClasses[size]}
+        ${icon ? 'flex items-center gap-2' : ''}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+        ${className}
+      `}
     >
       {icon}
       {children}
-    </Button>
+    </button>
   );
 }

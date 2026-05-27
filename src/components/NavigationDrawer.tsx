@@ -1,41 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Box,
-  Typography,
-  Divider,
-  IconButton,
-  useTheme,
-  useMediaQuery,
-} from '@mui/material';
-import {
-  Dashboard,
-  AccountBalanceWallet,
-  AccountBalance,
-  Analytics as AnalyticsIcon,
-  AutoGraph,
-  AutoAwesome,
-  SavingsOutlined,
-  Flag,
-  Schedule,
-  Close,
-  Menu,
-  Savings,
-  Handshake,
-  People,
-  TrendingDown,
-  History,
-  Settings,
-} from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { X } from 'lucide-react';
+import {
+  Home, Wallet, History, TrendingDown, DollarSign, Handshake,
+  Users, PieChart, Target, Calendar, BarChart3, Sparkles, TrendingUp, Settings
+} from 'lucide-react';
 
 interface NavigationDrawerProps {
   open: boolean;
@@ -46,162 +17,117 @@ const navigationGroups = [
   {
     subheader: 'Core',
     items: [
-      { title: 'Dashboard', path: '/dashboard', icon: <Dashboard /> },
-      { title: 'Accounts', path: '/accounts', icon: <AccountBalance /> },
-      { title: 'History', path: '/history', icon: <History /> },
+      { title: 'Dashboard', path: '/dashboard', icon: Home },
+      { title: 'Accounts', path: '/accounts', icon: Wallet },
+      { title: 'History', path: '/history', icon: History },
     ]
   },
   {
     subheader: 'Money In/Out',
     items: [
-      { title: 'Expenses', path: '/expenses', icon: <TrendingDown /> },
-      { title: 'Incomes', path: '/incomes', icon: <AccountBalanceWallet /> },
-      { title: 'Loans', path: '/loans', icon: <Handshake /> },
-      { title: 'People Ledger', path: '/people', icon: <People /> },
+      { title: 'Expenses', path: '/expenses', icon: TrendingDown },
+      { title: 'Incomes', path: '/incomes', icon: DollarSign },
+      { title: 'Loans', path: '/loans', icon: Handshake },
+      { title: 'People Ledger', path: '/people', icon: Users },
     ]
   },
   {
     subheader: 'Planning',
     items: [
-      { title: 'Budgets', path: '/budgets', icon: <SavingsOutlined /> },
-      { title: 'Savings', path: '/savings', icon: <Savings /> },
-      { title: 'Goals', path: '/goals', icon: <Flag /> },
-      { title: 'Schedules', path: '/schedules', icon: <Schedule /> },
+      { title: 'Budgets', path: '/budgets', icon: PieChart },
+      { title: 'Savings', path: '/savings', icon: Wallet },
+      { title: 'Goals', path: '/goals', icon: Target },
+      { title: 'Schedules', path: '/schedules', icon: Calendar },
     ]
   },
   {
     subheader: 'Tracking & Insights',
     items: [
-      { title: 'Analytics', path: '/analytics', icon: <AnalyticsIcon /> },
-      { title: 'AI Insights', path: '/ai', icon: <AutoAwesome /> },
-      { title: 'Forecast', path: '/forecast', icon: <AutoGraph /> },
+      { title: 'Analytics', path: '/analytics', icon: BarChart3 },
+      { title: 'AI Insights', path: '/ai', icon: Sparkles },
+      { title: 'Forecast', path: '/forecast', icon: TrendingUp },
     ]
   },
   {
     subheader: 'Settings',
     items: [
-      { title: 'Settings', path: '/settings', icon: <Settings /> },
+      { title: 'Settings', path: '/settings', icon: Settings },
     ]
   }
 ];
 
 export function NavigationDrawer({ open, onClose }: NavigationDrawerProps) {
-  const theme = useTheme();
   const pathname = usePathname();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  const drawerWidth = 280;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   const drawerContent = (
-    <Box sx={{ width: drawerWidth, height: '100%' }}>
+    <div className="w-80 h-full flex flex-col bg-white">
       {/* Header */}
-      <Box
-        sx={{
-          p: 3,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Typography variant="h6" fontWeight={700} color="primary">
-          Finance Tracker
-        </Typography>
+      <div className="p-6 flex items-center justify-between border-b border-gray-200">
+        <h2 className="font-bold text-lg text-blue-600">Finance Tracker</h2>
         {isMobile && (
-          <IconButton onClick={onClose} size="small">
-            <Close />
-          </IconButton>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5" />
+          </button>
         )}
-      </Box>
+      </div>
 
       {/* Navigation Items */}
-      <List sx={{ px: 1, py: 1 }}>
+      <nav className="flex-1 px-2 py-2 overflow-y-auto">
         {navigationGroups.map((group) => (
-          <Box key={group.subheader} sx={{ mb: 1.5 }}>
-            <Typography
-              variant="caption"
-              fontWeight={700}
-              sx={{ px: 3, py: 0.5, display: 'block', color: 'text.secondary', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}
-            >
+          <div key={group.subheader} className="mb-3">
+            <p className="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
               {group.subheader}
-            </Typography>
-            {group.items.map((item) => {
-              const isActive = pathname === item.path;
-              return (
-                <ListItem key={item.title} disablePadding>
-                  <ListItemButton
-                    component={Link}
+            </p>
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
                     href={item.path}
                     onClick={onClose}
-                    selected={isActive}
-                    sx={{
-                      borderRadius: 2,
-                      mx: 1,
-                      mb: 0.5,
-                      py: 0.5,
-                      '&.Mui-selected': {
-                        backgroundColor: theme.palette.primary.main,
-                        color: 'white',
-                        '&:hover': {
-                          backgroundColor: theme.palette.primary.dark,
-                        },
-                        '& .MuiListItemIcon-root': {
-                          color: 'white',
-                        },
-                      },
-                    }}
+                    className={`flex items-center gap-3 rounded-lg mx-1 mb-1 py-2 px-3 transition ${
+                      isActive
+                        ? 'bg-blue-600 text-white font-semibold'
+                        : 'text-gray-700 hover:bg-gray-100 font-medium'
+                    }`}
                   >
-                    <ListItemIcon
-                      sx={{
-                        minWidth: 36,
-                        color: isActive ? 'white' : theme.palette.text.secondary,
-                      }}
-                    >
-                      {item.icon}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={item.title}
-                      primaryTypographyProps={{
-                        fontWeight: isActive ? 600 : 500,
-                        fontSize: '0.85rem',
-                      }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              );
-            })}
-          </Box>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-sm">{item.title}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         ))}
-      </List>
+      </nav>
 
-      <Divider sx={{ mx: 2 }} />
+      <div className="border-t border-gray-200"></div>
 
       {/* Footer */}
-      <Box sx={{ p: 3, mt: 'auto' }}>
-        <Typography variant="caption" color="text.secondary">
-          © 2024 Finance Tracker
-        </Typography>
-      </Box>
-    </Box>
+      <div className="p-6">
+        <p className="text-xs text-gray-600">© 2024 Finance Tracker</p>
+      </div>
+    </div>
   );
 
   return (
-    <Drawer
-      variant={isMobile ? 'temporary' : 'persistent'}
-      anchor="left"
-      open={open}
-      onClose={onClose}
-      sx={{
-        width: drawerWidth,
-        flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: drawerWidth,
-          boxSizing: 'border-box',
-          borderRight: `1px solid ${theme.palette.divider}`,
-        },
-      }}
-    >
-      {drawerContent}
-    </Drawer>
+    <>
+      {/* Backdrop for mobile */}
+      {isMobile && open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-30" onClick={onClose}></div>
+      )}
+      
+      {/* Drawer */}
+      <div
+        className={`fixed left-0 top-0 z-40 h-screen bg-white border-r border-gray-200 transition-transform ${
+          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        } md:relative md:translate-x-0 md:z-auto`}
+      >
+        {drawerContent}
+      </div>
+    </>
   );
 }

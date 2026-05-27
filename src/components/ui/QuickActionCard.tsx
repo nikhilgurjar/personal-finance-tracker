@@ -1,107 +1,47 @@
 'use client';
 
-import { Box, Typography, BoxProps } from '@mui/material';
 import { ReactNode } from 'react';
 
-interface QuickActionCardProps extends BoxProps {
+interface QuickActionCardProps {
   title: string;
   icon: ReactNode;
   color?: 'blue' | 'red' | 'green' | 'purple' | 'orange' | 'teal';
   onClick?: () => void;
+  className?: string;
 }
 
 const colorStyles = {
-  blue: {
-    background: '#EBF8FF',
-    hoverBackground: '#DBEAFE',
-    iconColor: '#3B82F6',
-    textColor: '#1E40AF',
-  },
-  red: {
-    background: '#FEF2F2',
-    hoverBackground: '#FEE2E2',
-    iconColor: '#EF4444',
-    textColor: '#B91C1C',
-  },
-  green: {
-    background: '#F0FDF4',
-    hoverBackground: '#DCFCE7',
-    iconColor: '#10B981',
-    textColor: '#047857',
-  },
-  purple: {
-    background: '#FAF5FF',
-    hoverBackground: '#F3E8FF',
-    iconColor: '#8B5CF6',
-    textColor: '#7C3AED',
-  },
-  orange: {
-    background: '#FFF7ED',
-    hoverBackground: '#FFEDD5',
-    iconColor: '#F59E0B',
-    textColor: '#D97706',
-  },
-  teal: {
-    background: '#F0FDFA',
-    hoverBackground: '#CCFBF1',
-    iconColor: '#14B8A6',
-    textColor: '#0D9488',
-  },
+  blue: { bg: 'bg-blue-50', hover: 'hover:bg-blue-100', icon: 'text-blue-500', text: 'text-blue-900' },
+  red: { bg: 'bg-red-50', hover: 'hover:bg-red-100', icon: 'text-red-500', text: 'text-red-900' },
+  green: { bg: 'bg-green-50', hover: 'hover:bg-green-100', icon: 'text-green-500', text: 'text-green-900' },
+  purple: { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', icon: 'text-purple-500', text: 'text-purple-900' },
+  orange: { bg: 'bg-orange-50', hover: 'hover:bg-orange-100', icon: 'text-orange-500', text: 'text-orange-900' },
+  teal: { bg: 'bg-teal-50', hover: 'hover:bg-teal-100', icon: 'text-teal-500', text: 'text-teal-900' },
 };
 
-export function QuickActionCard({ 
-  title, 
-  icon, 
+export function QuickActionCard({
+  title,
+  icon,
   color = 'blue',
   onClick,
-  sx,
-  ...props 
+  className = '',
 }: QuickActionCardProps) {
   const styles = colorStyles[color];
-  
+
   return (
-    <Box
+    <button
       onClick={onClick}
-      sx={{
-        background: styles.background,
-        borderRadius: 2,
-        p: 3,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          background: styles.hoverBackground,
-          transform: 'translateY(-2px)',
-        },
-        ...sx,
-      }}
-      {...props}
+      className={`
+        ${styles.bg} ${styles.hover}
+        rounded-lg p-4 flex flex-col items-center gap-2
+        cursor-pointer transition-all hover:-translate-y-0.5
+        ${className}
+      `}
     >
-      <Box
-        sx={{
-          color: styles.iconColor,
-          mb: 1,
-          '& svg': {
-            width: 24,
-            height: 24,
-          },
-        }}
-      >
+      <div className={`${styles.icon}`}>
         {icon}
-      </Box>
-      <Typography
-        variant="body2"
-        sx={{
-          color: styles.textColor,
-          fontWeight: 600,
-          textAlign: 'center',
-          fontSize: '0.875rem',
-        }}
-      >
-        {title}
-      </Typography>
-    </Box>
+      </div>
+      <p className={`text-sm font-semibold ${styles.text} text-center`}>{title}</p>
+    </button>
   );
 }

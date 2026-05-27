@@ -1,9 +1,8 @@
 'use client';
 
-import { Box, Typography, BoxProps } from '@mui/material';
 import { ReactNode } from 'react';
 
-interface StatCardProps extends BoxProps {
+interface StatCardProps {
   title: string;
   value: string | number;
   icon?: ReactNode;
@@ -12,85 +11,45 @@ interface StatCardProps extends BoxProps {
     isPositive: boolean;
   };
   gradient?: 'blue' | 'green' | 'red' | 'purple' | 'teal' | 'orange';
+  className?: string;
 }
 
 const gradientStyles = {
-  blue: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
-  green: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-  red: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
-  purple: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
-  teal: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-  orange: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+  blue: 'from-blue-500 to-blue-700',
+  green: 'from-green-500 to-green-700',
+  red: 'from-red-500 to-red-700',
+  purple: 'from-purple-500 to-purple-700',
+  teal: 'from-teal-500 to-teal-700',
+  orange: 'from-orange-500 to-orange-700',
 };
 
-export function StatCard({ 
-  title, 
-  value, 
-  icon, 
+export function StatCard({
+  title,
+  value,
+  icon,
   trend,
   gradient = 'blue',
-  sx,
-  ...props 
+  className = '',
 }: StatCardProps) {
   return (
-    <Box
-      sx={{
-        background: gradientStyles[gradient],
-        borderRadius: 3,
-        p: 3,
-        color: 'white',
-        position: 'relative',
-        overflow: 'hidden',
-        ...sx,
-      }}
-      {...props}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-        <Typography 
-          variant="body2" 
-          sx={{ 
-            opacity: 0.9, 
-            fontWeight: 500,
-            fontSize: '0.875rem',
-          }}
-        >
-          {title}
-        </Typography>
-        {icon && (
-          <Box sx={{ opacity: 0.8 }}>
-            {icon}
-          </Box>
-        )}
-      </Box>
-      
-      <Typography 
-        variant="h4" 
-        sx={{ 
-          fontWeight: 800, 
-          mb: trend ? 1 : 0,
-          fontSize: '1.875rem',
-          lineHeight: 1.2,
-        }}
-      >
+    <div className={`bg-gradient-to-br ${gradientStyles[gradient]} rounded-lg p-6 text-white relative overflow-hidden ${className}`}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium opacity-90">{title}</p>
+        {icon && <div className="opacity-80">{icon}</div>}
+      </div>
+
+      <h3 className="text-3xl font-bold mb-2 leading-tight">
         {typeof value === 'number' ? value.toLocaleString() : value}
-      </Typography>
-      
+      </h3>
+
       {trend && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Typography 
-            variant="caption" 
-            sx={{ 
-              color: trend.isPositive ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)',
-              fontWeight: 600,
-            }}
-          >
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-semibold ${trend.isPositive ? 'text-white' : 'opacity-70'}`}>
             {trend.isPositive ? '+' : ''}{trend.value}%
-          </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>
-            vs last month
-          </Typography>
-        </Box>
+          </span>
+          <span className="text-xs opacity-70">vs last month</span>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

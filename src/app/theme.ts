@@ -1,3 +1,5 @@
 'use client';
 
-export { default as ThemeProvider } from '../theme';
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}

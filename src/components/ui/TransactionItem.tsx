@@ -1,10 +1,8 @@
 'use client';
 
-import { Box, Typography, IconButton, BoxProps } from '@mui/material';
-import { TrendingUp, TrendingDown, MoreVert, Edit, Delete } from '@mui/icons-material';
-import { ReactNode } from 'react';
+import { TrendingUp, TrendingDown, Pencil, Trash2 } from 'lucide-react';
 
-interface TransactionItemProps extends BoxProps {
+interface TransactionItemProps {
   id: string;
   type: 'income' | 'expense';
   amount: number;
@@ -13,127 +11,76 @@ interface TransactionItemProps extends BoxProps {
   date: string;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
+  className?: string;
 }
 
-export function TransactionItem({ 
+export function TransactionItem({
   id,
-  type, 
-  amount, 
-  description, 
-  category, 
+  type,
+  amount,
+  description,
+  category,
   date,
   onEdit,
   onDelete,
-  sx,
-  ...props 
+  className = '',
 }: TransactionItemProps) {
   const isIncome = type === 'income';
   const Icon = isIncome ? TrendingUp : TrendingDown;
-  
+
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        p: 2,
-        background: 'white',
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: 'grey.200',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-          transform: 'translateY(-1px)',
-        },
-        ...sx,
-      }}
-      {...props}
+    <div
+      className={`flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 transition-all hover:shadow-md hover:-translate-y-0.5 ${className}`}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isIncome ? '#D1FAE5' : '#FEE2E2',
-          }}
+      <div className="flex items-center gap-3">
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center ${
+            isIncome ? 'bg-green-100' : 'bg-red-100'
+          }`}
         >
           <Icon
-            sx={{
-              color: isIncome ? '#10B981' : '#EF4444',
-              width: 20,
-              height: 20,
-            }}
+            className={`w-5 h-5 ${isIncome ? 'text-green-600' : 'text-red-600'}`}
           />
-        </Box>
-        
-        <Box>
-          <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary' }}>
-            {description}
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {category}
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              •
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {date}
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
-      
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 700,
-            color: isIncome ? 'success.main' : 'error.main',
-            fontSize: '1.125rem',
-          }}
+        </div>
+
+        <div>
+          <p className="font-semibold text-gray-900">{description}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-sm text-gray-600">{category}</span>
+            <span className="text-sm text-gray-400">•</span>
+            <span className="text-sm text-gray-600">{date}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <p
+          className={`font-bold text-lg ${
+            isIncome ? 'text-green-600' : 'text-red-600'
+          }`}
         >
           {isIncome ? '+' : '-'}₹{amount.toLocaleString()}
-        </Typography>
-        
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+        </p>
+
+        <div className="flex gap-1">
           {onEdit && (
-            <IconButton
-              size="small"
+            <button
               onClick={() => onEdit(id)}
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  color: 'primary.main',
-                  background: 'primary.lighter',
-                },
-              }}
+              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
             >
-              <Edit sx={{ width: 16, height: 16 }} />
-            </IconButton>
+              <Pencil className="w-4 h-4" />
+            </button>
           )}
           {onDelete && (
-            <IconButton
-              size="small"
+            <button
               onClick={() => onDelete(id)}
-              sx={{
-                color: 'text.secondary',
-                '&:hover': {
-                  color: 'error.main',
-                  background: 'error.lighter',
-                },
-              }}
+              className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
             >
-              <Delete sx={{ width: 16, height: 16 }} />
-            </IconButton>
+              <Trash2 className="w-4 h-4" />
+            </button>
           )}
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

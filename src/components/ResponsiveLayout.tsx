@@ -1,32 +1,34 @@
 'use client';
 
-import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { Navbar } from './Navbar';
+import { useEffect, useState } from 'react';
 
 interface ResponsiveLayoutProps {
   children: React.ReactNode;
 }
 
 export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="flex min-h-screen">
       <Navbar />
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: '100vh',
-          backgroundColor: 'background.default',
-          ...(isMobile ? { pt: '72px', pb: '72px' } : { marginLeft: '280px' }),
-        }}
+      <main
+        className={`flex-1 flex flex-col min-h-screen bg-gray-50 ${
+          isMobile ? 'pt-16 pb-20' : 'md:ml-80'
+        }`}
       >
         {children}
-      </Box>
-    </Box>
+      </main>
+    </div>
   );
 }

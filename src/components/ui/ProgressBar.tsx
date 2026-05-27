@@ -1,89 +1,69 @@
 'use client';
 
-import { Box, Typography, BoxProps } from '@mui/material';
-
-interface ProgressBarProps extends BoxProps {
+interface ProgressBarProps {
   value: number;
   max?: number;
   label?: string;
   showPercentage?: boolean;
   color?: 'blue' | 'green' | 'red' | 'purple' | 'teal' | 'orange';
   size?: 'small' | 'medium' | 'large';
+  className?: string;
 }
 
-const colorStyles = {
-  blue: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
-  green: 'linear-gradient(135deg, #10B981 0%, #14B8A6 100%)',
-  red: 'linear-gradient(135deg, #EF4444 0%, #F97316 100%)',
-  purple: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
-  teal: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 100%)',
-  orange: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+const colorClasses = {
+  blue: 'from-blue-500 to-purple-500',
+  green: 'from-green-500 to-teal-500',
+  red: 'from-red-500 to-orange-500',
+  purple: 'from-purple-500 to-pink-500',
+  teal: 'from-teal-500 to-teal-700',
+  orange: 'from-amber-500 to-orange-600',
 };
 
-const sizeStyles = {
-  small: { height: 6 },
-  medium: { height: 8 },
-  large: { height: 12 },
+const sizeClasses = {
+  small: 'h-1.5',
+  medium: 'h-2',
+  large: 'h-3',
 };
 
-export function ProgressBar({ 
-  value, 
-  max = 100, 
+export function ProgressBar({
+  value,
+  max = 100,
   label,
   showPercentage = true,
   color = 'blue',
   size = 'medium',
-  sx,
-  ...props 
+  className = '',
 }: ProgressBarProps) {
   const percentage = Math.min((value / max) * 100, 100);
   const isCompleted = percentage >= 100;
-  
+
   return (
-    <Box sx={{ ...sx }} {...props}>
+    <div className={className}>
       {(label || showPercentage) && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          {label && (
-            <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              {label}
-            </Typography>
-          )}
+        <div className="flex justify-between items-center mb-2">
+          {label && <p className="font-semibold text-gray-900">{label}</p>}
           {showPercentage && (
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                fontWeight: 700, 
-                color: isCompleted ? 'success.main' : 'primary.main',
-                fontSize: '0.875rem',
-              }}
+            <p
+              className={`font-bold text-sm ${
+                isCompleted ? 'text-green-600' : 'text-blue-600'
+              }`}
             >
               {Math.round(percentage)}%
-            </Typography>
+            </p>
           )}
-        </Box>
+        </div>
       )}
-      
-      <Box
-        sx={{
-          width: '100%',
-          background: 'grey.200',
-          borderRadius: 1,
-          overflow: 'hidden',
-          ...sizeStyles[size],
-        }}
-      >
-        <Box
-          sx={{
-            width: `${percentage}%`,
-            height: '100%',
-            background: isCompleted 
-              ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
-              : colorStyles[color],
-            borderRadius: 1,
-            transition: 'width 0.5s ease-in-out',
-          }}
+
+      <div className={`w-full bg-gray-200 rounded overflow-hidden ${sizeClasses[size]}`}>
+        <div
+          className={`h-full bg-gradient-to-r ${
+            isCompleted
+              ? 'from-green-500 to-green-700'
+              : colorClasses[color]
+          } rounded transition-all duration-500 ease-in-out`}
+          style={{ width: `${percentage}%` }}
         />
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
