@@ -140,7 +140,7 @@ export default function HomePage() {
                   <Lock className="w-4 h-4" />
                 </span>
                 <input
-                  type="password"
+                  type="password" autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-[#0a0f1c] border border-border rounded-lg py-2.5 pl-10 pr-4 text-sm text-text focus:outline-none focus:border-cyan transition-colors"

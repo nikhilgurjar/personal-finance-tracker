@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/components/AuthProvider';
 import { QueryProvider } from '@/components/QueryProvider';
-import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,10 +16,14 @@ export const viewport = {
 export const metadata: Metadata = {
   title: 'Finance Tracker',
   description: 'Track your income, expenses, savings, and financial goals',
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'Finance Tracker',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
   },
 };
 
