@@ -1,6 +1,6 @@
 import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
-import { RRule } from 'rrule';
+import { getNextRunAt } from '@/lib/utils/schedule';
 
 type ForecastEventType = 'income' | 'expense' | 'transfer' | 'savings' | 'loan_due' | 'what_if';
 type AlertSeverity = 'info' | 'warning' | 'critical';
@@ -58,18 +58,18 @@ function parseNumber(value: string | null, fallback = 0) {
 }
 
 function getScheduleOccurrences(schedule: any, start: Date, end: Date) {
-  try {
-    const parsed = RRule.parseString(schedule.rrule);
-    const rule = new RRule({
-      ...parsed,
-      dtstart: new Date(schedule.nextRunAt || start.getTime()),
-    });
+  const occurrences: Date[] = [];
+  let cursor = Math.max(Number(schedule.nextRunAt || 0), start.getTime());
+  let guard = 0;
 
-    return rule.between(start, end, true).slice(0, 100);
-  } catch {
-    const nextRun = new Date(schedule.nextRunAt);
-    return nextRun >= start && nextRun <= end ? [nextRun] : [];
+  while (cursor <= end.getTime() && guard < 100) {
+    const date = new Date(cursor);
+    if (date >= start && date <= end) occurrences.push(date);
+    cursor = getNextRunAt(schedule.rrule || 'FREQ=MONTHLY', cursor + 1000);
+    guard += 1;
   }
+
+  return occurrences;
 }
 
 function scheduleToEvents(schedule: any, start: Date, end: Date): ForecastEvent[] {

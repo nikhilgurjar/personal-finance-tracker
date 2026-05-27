@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthContext } from '@/components/AuthProvider';
@@ -20,3 +20,4 @@ export default function AiPage() {
 
   return <ResponsiveLayout><main className='min-h-screen p-4 md:p-8'><h1 className='text-2xl font-bold'>AI Insights</h1><input type='month' className='mt-3 rounded border px-2 py-1' value={month} onChange={e=>setMonth(e.target.value)} /><div className='mt-3 rounded border p-3'>{isLoading ? 'Loading review...' : (data?.review || 'No review')}</div><textarea className='mt-3 w-full rounded border p-2' rows={3} value={question} onChange={e=>setQuestion(e.target.value)} /><button className='mt-2 rounded bg-blue-600 px-3 py-2 text-white' disabled={asking} onClick={async ()=>{setAsking(true); try { const res=await authedJson<any>(user,'/api/ai/query',{method:'POST',body:JSON.stringify({question})}); setAnswer(res.answer||''); } finally { setAsking(false); }}}>Ask</button>{answer && <div className='mt-2 rounded border p-2'>{answer}</div>}</main></ResponsiveLayout>;
 }
+

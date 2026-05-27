@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import useSWR from 'swr';
 import { useEffect } from 'react';
@@ -77,7 +77,7 @@ export default function SavingsPage() {
                       <p className="text-xs text-neutral-500">
                         {instrument.provider || 'Unknown provider'}
                         {instrument.maturityDate
-                          ? ` � Matures ${new Date(instrument.maturityDate).toLocaleDateString('en-IN')}`
+                          ? ` • Matures ${new Date(instrument.maturityDate).toLocaleDateString('en-IN')}`
                           : ''}
                       </p>
                     </div>
@@ -92,3 +92,4 @@ export default function SavingsPage() {
     </ResponsiveLayout>
   );
 }
+

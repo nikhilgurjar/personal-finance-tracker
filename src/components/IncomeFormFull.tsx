@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { Account } from '@/lib/types';
 
@@ -8,3 +8,4 @@ export function IncomeFormFull({ open, onClose, onSubmit, accounts, editingIncom
   if(!open) return null;
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><form className="w-full max-w-lg space-y-3 rounded-xl bg-neutral-900 p-4" onSubmit={async e=>{e.preventDefault(); await onSubmit({...form,amount:Number(form.amount),date:new Date(form.date),currency:'INR'}); onClose();}}><h3 className="text-lg font-semibold">{editingIncome?'Edit':'Add'} Income</h3><input className="w-full rounded bg-neutral-800 p-2" type="number" placeholder="Amount" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/><input className="w-full rounded bg-neutral-800 p-2" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/><select className="w-full rounded bg-neutral-800 p-2" value={form.toAccountId} onChange={e=>setForm({...form,toAccountId:e.target.value})}><option value="">Select account</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><input className="w-full rounded bg-neutral-800 p-2" placeholder="Source name" value={form.sourceName} onChange={e=>setForm({...form,sourceName:e.target.value})}/><input className="w-full rounded bg-neutral-800 p-2" placeholder="Salary month (YYYY-MM)" value={form.month} onChange={e=>setForm({...form,month:e.target.value})}/><div className="flex justify-end gap-2"><button type="button" className="rounded border px-3 py-2" onClick={onClose}>Cancel</button><button className="rounded bg-emerald-600 px-3 py-2">Save</button></div></form></div>;
 }
+

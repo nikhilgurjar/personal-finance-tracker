@@ -1,6 +1,5 @@
-import { db, authAdmin } from '@/lib/firebaseAdmin';
+﻿import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
-import { RRule } from 'rrule';
 
 async function getUserId(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -13,14 +12,15 @@ async function getUserId(req: NextRequest) {
   }
 }
 
-function nextOccurrence(rrule: string, after: Date) {
-  try {
-    const parsed = RRule.parseString(rrule);
-    const rule = new RRule({ ...parsed, dtstart: after });
-    return rule.after(after, false)?.getTime();
-  } catch {
-    return after.getTime() + 30 * 24 * 60 * 60 * 1000;
-  }
+function nextOccurrence(rule: string, after: Date) {
+  const base = new Date(after);
+  const safe = (days: number) => base.getTime() + days * 24 * 60 * 60 * 1000;
+  const normalized = String(rule || '').toUpperCase();
+
+  if (normalized.includes('FREQ=DAILY')) return safe(1);
+  if (normalized.includes('FREQ=WEEKLY')) return safe(7);
+  if (normalized.includes('FREQ=YEARLY')) return safe(365);
+  return safe(30);
 }
 
 function collectionFor(type: string) {

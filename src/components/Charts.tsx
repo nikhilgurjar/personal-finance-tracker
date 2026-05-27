@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart } from 'recharts';
 
 export function Charts({ monthlyData, categoryData, goalProgress }: any) {
@@ -10,3 +10,4 @@ export function Charts({ monthlyData, categoryData, goalProgress }: any) {
     <div className='rounded-xl border border-neutral-800 bg-neutral-900 p-4 lg:col-span-2'><h3 className='mb-3 text-lg font-semibold'>Cash Flow Analysis</h3><ResponsiveContainer width='100%' height={280}><LineChart data={monthlyData}><CartesianGrid strokeDasharray='3 3' /><XAxis dataKey='month' /><YAxis /><Tooltip /><Legend /><Line type='monotone' dataKey='income' stroke='#22c55e' /><Line type='monotone' dataKey='expenses' stroke='#ef4444' /><Line type='monotone' dataKey='savings' stroke='#3b82f6' /></LineChart></ResponsiveContainer></div>
   </div>;
 }
+
