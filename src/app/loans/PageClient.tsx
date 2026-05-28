@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { fetcher } from '@/lib/swr';
+import { auth } from '@/lib/firebase';
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatIndianDate } from '@/lib/utils/date';
 import {
@@ -163,7 +164,11 @@ export default function LoansPage() {
     if (!confirm('Are you sure you want to delete this loan?')) return;
 
     try {
-      const res = await fetch(`/api/loans/${id}`, { method: 'DELETE' });
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/loans/${id}`, { 
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Deletion failed');
       mutateLoans();
     } catch (err: any) {

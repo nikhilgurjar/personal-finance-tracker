@@ -74,6 +74,18 @@ export const getIdToken = async (user: User | null): Promise<string | null> => {
   }
 };
 
+export const authenticatedFetch = async (
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> => {
+  const token = await auth.currentUser?.getIdToken();
+  const headers = {
+    ...options.headers,
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+  return fetch(url, { ...options, headers });
+};
+
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   provider.addScope('https://www.googleapis.com/auth/drive.file');

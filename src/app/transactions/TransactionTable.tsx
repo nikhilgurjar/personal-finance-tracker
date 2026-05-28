@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowRight, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatIndianDate } from '@/lib/utils/date';
+import { auth } from '@/lib/firebase';
 
 export default function TransactionTable({ accounts, filteredTransactions, onDeleteDone }: any) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -19,7 +20,11 @@ export default function TransactionTable({ accounts, filteredTransactions, onDel
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this transaction?')) return;
     try {
-      const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/transactions/${id}`, { 
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Deletion failed');
       onDeleteDone();
     } catch (err: any) {

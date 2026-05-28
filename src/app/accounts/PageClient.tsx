@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { fetcher } from '@/lib/swr';
+import { auth } from '@/lib/firebase';
 import { formatCurrency } from '@/lib/utils/currency';
 import {
   Plus,
@@ -152,7 +153,11 @@ export default function AccountsPage() {
     if (!confirm('Are you sure you want to delete this account? Any associated transactions will not be deleted.')) return;
 
     try {
-      const res = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/accounts/${id}`, { 
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
       if (!res.ok) throw new Error('Deletion failed');
       mutateAccounts();
     } catch (err: any) {

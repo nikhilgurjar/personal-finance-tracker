@@ -1,7 +1,8 @@
-import { db, authAdmin } from '@/lib/firebaseAdmin';
+import { db } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteTransactionWithSummary, updateTransactionWithSummary } from '@/lib/transactionBatch';
 import { z } from 'zod';
+import { getUserIdFromRequest } from '@/lib/serverAuth';
 
 const TransactionSchema = z.object({
   date: z.number(),
@@ -27,19 +28,9 @@ const TransactionSchema = z.object({
   }).optional(),
 });
 
-async function getUserId(req: NextRequest) {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  try {
-    const decoded = await authAdmin.verifyIdToken(token);
-    return decoded.uid;
-  } catch {
-    return null;
-  }
-}
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const userId = await getUserId(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -63,7 +54,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const userId = await getUserId(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

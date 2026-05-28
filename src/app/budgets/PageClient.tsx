@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import { fetcher } from '@/lib/swr';
+import { authenticatedFetch } from '@/lib/auth';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getCurrentMonthStr } from '@/lib/utils/date';
 import {
@@ -91,7 +92,7 @@ export default function BudgetsPage() {
         { revalidate: false }
       );
 
-      const res = await fetch('/api/budgets', {
+      const res = await authenticatedFetch('/api/budgets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -113,7 +114,9 @@ export default function BudgetsPage() {
     if (!confirm('Are you sure you want to delete this budget?')) return;
 
     try {
-      const res = await fetch(`/api/budgets/${id}`, { method: 'DELETE' });
+      const res = await authenticatedFetch(`/api/budgets/${id}`, { 
+        method: 'DELETE'
+      });
       if (!res.ok) throw new Error('Failed to delete budget');
       mutateBudgets();
     } catch (err: any) {

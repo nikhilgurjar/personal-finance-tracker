@@ -7,6 +7,7 @@ import PageHeader from '@/components/layout/PageHeader';
 import { FrequencySelector } from '@/components/FrequencySelector';
 import { CalendarDatePicker } from '@/components/CalendarDatePicker';
 import { fetcher } from '@/lib/swr';
+import { authenticatedFetch } from '@/lib/auth';
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatIndianDate } from '@/lib/utils/date';
 import { scheduleLabel } from '@/lib/utils/schedule';
@@ -64,7 +65,7 @@ export default function SchedulesPage() {
   const handleToggleStatus = async (s: any) => {
     try {
       const nextStatus = s.status === 'active' ? 'paused' : 'active';
-      const res = await fetch(`/api/schedules/${s.id}`, {
+      const res = await authenticatedFetch(`/api/schedules/${s.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -79,7 +80,7 @@ export default function SchedulesPage() {
   const handleApproveSuggestion = async (suggestion: any) => {
     try {
       setLoadingAction(true);
-      const res = await fetch('/api/schedule-suggestions', {
+      const res = await authenticatedFetch('/api/schedule-suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scheduleId: suggestion.scheduleId, action: 'approve' }),
@@ -98,7 +99,7 @@ export default function SchedulesPage() {
   const handleSkipSuggestion = async (suggestion: any) => {
     try {
       setLoadingAction(true);
-      const res = await fetch('/api/schedule-suggestions', {
+      const res = await authenticatedFetch('/api/schedule-suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scheduleId: suggestion.scheduleId, action: 'skip' }),
@@ -137,7 +138,7 @@ export default function SchedulesPage() {
         priority: 1,
       };
 
-      const res = await fetch('/api/schedules', {
+      const res = await authenticatedFetch('/api/schedules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -161,7 +162,9 @@ export default function SchedulesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this schedule?')) return;
     try {
-      const res = await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
+      const res = await authenticatedFetch(`/api/schedules/${id}`, { 
+        method: 'DELETE'
+      });
       if (!res.ok) throw new Error('Deletion failed');
       mutateSchedules();
     } catch (err: any) {

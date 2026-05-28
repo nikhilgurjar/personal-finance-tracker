@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { CalendarDatePicker } from '@/components/CalendarDatePicker';
 import { formatCurrency } from '@/lib/utils/currency';
 import { DEFAULT_CATEGORIES } from '@/lib/constants';
+import { authenticatedFetch } from '@/lib/auth';
 
 const TRANSACTION_TYPES = ['expense', 'income', 'transfer', 'savings', 'salary'];
 const PAYMENT_METHODS = ['upi', 'neft', 'imps', 'rtgs', 'cash', 'card', 'cheque'];
@@ -42,7 +43,7 @@ export default function TransactionFormPanel({ accounts, onSaved, onCancel, muta
         return [{ ...firstPage, data: [optimisticTx, ...(firstPage.data || [])] }, ...current.slice(1)];
       }, { revalidate: false });
 
-      const res = await fetch('/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await authenticatedFetch('/api/transactions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error('Failed to save transaction');
       onSaved();
     } catch (err: any) {
