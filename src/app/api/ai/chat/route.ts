@@ -97,8 +97,7 @@ SUPPORTED INTENTS  (detect automatically from user message)
 User says: spent, bought, paid, bill, expense, cost me
 Required:  amount, category, date, fromAccountName(ask as "which account?"), paymentMethod
 Optional:  note
-category options: Food & Dining, Rent, Utilities, Transport, Shopping, Entertainment,
-                  Medical, Education, Subscriptions, Fuel, Personal Care, Travel, Other
+category options: Get it by calling categories api using get method
 
 ── 2. add_income ───────────────────
 User says: received, earned, got paid, income, credited
