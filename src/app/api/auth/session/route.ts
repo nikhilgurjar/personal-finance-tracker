@@ -46,6 +46,12 @@ export async function DELETE() {
 }
 
 export async function GET(req: NextRequest) {
-  const hasSession = Boolean(req.cookies.get(SESSION_COOKIE_NAME)?.value);
-  return NextResponse.json({ hasSession });
+  try {
+    const hasSession = Boolean(req.cookies.get(SESSION_COOKIE_NAME)?.value);
+    return NextResponse.json({ hasSession }, { status: 200 });
+  } catch (error) {
+    // On error, return false instead of crashing
+    console.error('Error checking session:', error);
+    return NextResponse.json({ hasSession: false }, { status: 200 });
+  }
 }

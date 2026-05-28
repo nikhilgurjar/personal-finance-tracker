@@ -2,7 +2,7 @@
   "name": "Finance Tracker",
   "short_name": "FinanceTracker",
   "description": "Track your income, expenses, savings, and financial goals",
-  "start_url": "/dashboard",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#3B82F6",

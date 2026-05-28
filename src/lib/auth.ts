@@ -28,12 +28,18 @@ const waitForSessionCookie = async (timeoutMs = 2000) => {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      const res = await fetch('/api/auth/session', { 
+        cache: 'no-store',
+        signal: AbortSignal.timeout(1000)
+      });
       if (res.ok) {
         const data = await res.json();
         if (data?.hasSession) return true;
       }
-    } catch {}
+    } catch (error) {
+      // Network error, continue retrying
+      console.debug('Session check failed, retrying...', error);
+    }
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
   return false;
