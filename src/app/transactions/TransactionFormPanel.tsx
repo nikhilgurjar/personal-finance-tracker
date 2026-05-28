@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CalendarDatePicker } from '@/components/CalendarDatePicker';
 import { formatCurrency } from '@/lib/utils/currency';
 
 const TRANSACTION_TYPES = ['expense', 'income', 'transfer', 'savings', 'salary'];
@@ -50,11 +51,188 @@ export default function TransactionFormPanel({ accounts, onSaved, onCancel, muta
     }
   };
 
-  return <div className="mb-6 rounded-xl border border-border bg-card p-6"><h3 className="mb-4 font-syne text-md font-bold text-white">New Money Flow</h3><form onSubmit={handleAddTransaction} className="space-y-4">{/* unchanged form */}
-  <div className="grid grid-cols-5 gap-1.5 rounded-lg border border-border bg-[#0a0f1c] p-1">{TRANSACTION_TYPES.map((type) => <button key={type} type="button" onClick={() => { setTxType(type as any); setCategory(''); }} className={`rounded py-1.5 text-xs font-semibold capitalize transition-all ${txType === type ? 'bg-cyan/15 text-cyan' : 'text-text-muted hover:text-text'}`}>{type}</button>)}</div>
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><input type="number" required min="0.01" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text" placeholder="0.00" /><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text" /><select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm capitalize text-text">{PAYMENT_METHODS.map((pm) => <option key={pm} value={pm}>{pm}</option>)}</select></div>
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{(txType === 'expense' || txType === 'transfer' || txType === 'savings') && <select required value={fromAccountId} onChange={(e) => setFromAccountId(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text"><option value="">Select Account</option>{accounts.map((acc: any) => <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>)}</select>}{(txType === 'income' || txType === 'salary' || txType === 'transfer' || txType === 'savings') && <select required value={toAccountId} onChange={(e) => setToAccountId(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text"><option value="">Select Account</option>{accounts.map((acc: any) => <option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>)}</select>}{(txType === 'expense' || txType === 'income') && <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text"><option value="">Select Category</option>{CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}</select>}{paymentMethod === 'upi' && <input type="text" value={upiRefId} onChange={(e) => setUpiRefId(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text" placeholder="UPI ref" />}</div>
-  {txType === 'salary' && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><input type="number" value={netTakeHome} onChange={(e) => setNetTakeHome(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text" placeholder={amount || '0.00'} /><input type="number" value={employeePf} onChange={(e) => setEmployeePf(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text" placeholder="0.00" /></div>}
-  <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2.5 text-sm text-text" placeholder="Description of the transaction..." />
-  <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={onCancel} className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text">Cancel</button><button type="submit" disabled={loadingAction} className="rounded-lg bg-cyan px-5 py-2 text-sm font-bold text-bg">{loadingAction ? 'Saving...' : 'Add Transaction'}</button></div></form></div>;
+  return (
+    <div className="mb-6 rounded-xl border border-border bg-card p-6">
+      <h3 className="mb-4 font-syne text-md font-bold text-white">New Money Flow</h3>
+      <form onSubmit={handleAddTransaction} className="space-y-4">
+        <div className="grid grid-cols-5 gap-1.5 rounded-lg border border-border bg-[#0a0f1c] p-1">
+          {TRANSACTION_TYPES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => {
+                setTxType(type as any);
+                setCategory('');
+              }}
+              className={`rounded py-1.5 text-xs font-semibold capitalize transition-all ${
+                txType === type ? 'bg-cyan/15 text-cyan' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Amount</label>
+            <input
+              type="number"
+              required
+              min="0.01"
+              step="any"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+              placeholder="0.00"
+            />
+          </div>
+          
+          <div>
+            <CalendarDatePicker
+              label="Date"
+              value={date}
+              onChange={setDate}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Payment Method</label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm capitalize text-text focus:outline-none focus:border-cyan"
+            >
+              {PAYMENT_METHODS.map((pm) => (
+                <option key={pm} value={pm}>{pm}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {(txType === 'expense' || txType === 'transfer' || txType === 'savings') && (
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Source Account</label>
+              <select
+                required
+                value={fromAccountId}
+                onChange={(e) => setFromAccountId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+              >
+                <option value="">Select Account</option>
+                {accounts.map((acc: any) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({formatCurrency(acc.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(txType === 'income' || txType === 'salary' || txType === 'transfer' || txType === 'savings') && (
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Destination Account</label>
+              <select
+                required
+                value={toAccountId}
+                onChange={(e) => setToAccountId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+              >
+                <option value="">Select Account</option>
+                {accounts.map((acc: any) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({formatCurrency(acc.balance)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(txType === 'expense' || txType === 'income') && (
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+              >
+                <option value="">Select Category</option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {paymentMethod === 'upi' && (
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">UPI Reference</label>
+              <input
+                type="text"
+                value={upiRefId}
+                onChange={(e) => setUpiRefId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                placeholder="UPI ref (optional)"
+              />
+            </div>
+          )}
+        </div>
+
+        {txType === 'salary' && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Net Take Home</label>
+              <input
+                type="number"
+                value={netTakeHome}
+                onChange={(e) => setNetTakeHome(e.target.value)}
+                className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                placeholder={amount || '0.00'}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Employee PF</label>
+              <input
+                type="number"
+                value={employeePf}
+                onChange={(e) => setEmployeePf(e.target.value)}
+                className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Description</label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full rounded-lg border border-border bg-[#0a0f1c] px-3 py-2.5 text-sm text-text focus:outline-none focus:border-cyan"
+            placeholder="Description of the transaction..."
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text hover:bg-white/5 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loadingAction}
+            className="rounded-lg bg-cyan hover:bg-cyan/95 px-5 py-2 text-sm font-bold text-bg transition-colors disabled:opacity-50"
+          >
+            {loadingAction ? 'Saving...' : 'Add Transaction'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }

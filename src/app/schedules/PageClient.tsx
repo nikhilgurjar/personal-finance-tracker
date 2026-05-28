@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
+import { FrequencySelector } from '@/components/FrequencySelector';
+import { CalendarDatePicker } from '@/components/CalendarDatePicker';
 import { fetcher } from '@/lib/swr';
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatIndianDate } from '@/lib/utils/date';
@@ -24,13 +26,6 @@ import {
 } from 'lucide-react';
 
 const TRANSACTION_TYPES = ['expense', 'income', 'transfer', 'savings'];
-
-const FREQ_OPTIONS = [
-  { value: 'FREQ=DAILY', label: 'Daily' },
-  { value: 'FREQ=WEEKLY;BYDAY=MO', label: 'Weekly on Monday' },
-  { value: 'FREQ=MONTHLY;BYMONTHDAY=5', label: 'Monthly on the 5th' },
-  { value: 'FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=1', label: 'Annually on April 1st' },
-];
 
 export default function SchedulesPage() {
   const [showForm, setShowForm] = useState(false);
@@ -270,31 +265,13 @@ export default function SchedulesPage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Frequency</label>
-                <select
-                  value={frequency}
-                  onChange={(e) => setFrequency(e.target.value)}
-                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
-                >
-                  {FREQ_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">First Execution Date</label>
-                <input
-                  type="date"
-                  required
+                <CalendarDatePicker
+                  label="First Execution Date"
                   value={nextRun}
-                  onChange={(e) => setNextRun(e.target.value)}
-                  className="w-full bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
+                  onChange={setNextRun}
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Amount (INR)</label>
                 <input
@@ -306,7 +283,14 @@ export default function SchedulesPage() {
                   placeholder="0.00"
                 />
               </div>
+            </div>
 
+            {/* Dynamic Frequency Selector */}
+            <div className="bg-[#0a0f1c] border border-border rounded-lg p-4">
+              <FrequencySelector frequency={frequency} onChange={setFrequency} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-text-dim uppercase tracking-wider mb-1.5">Flow Type</label>
                 <select
