@@ -1,577 +1,388 @@
 ﻿'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuthContext } from '@/components/AuthProvider';
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/swr';
-import { formatCurrency } from '@/lib/utils/currency';
-import { Send, Loader, AlertCircle, CheckCircle, HelpCircle } from 'lucide-react';
+import { Send, Loader2, CheckCircle2, XCircle, Sparkles, HelpCircle } from 'lucide-react';
 
-interface Message {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
-  action?: {
-    type: string;
-    data: any;
-    status?: 'pending' | 'success' | 'error';
-    message?: string;
-  };
+  variant?: 'success' | 'error';
 }
 
-interface FormField {
-  name: string;
-  label: string;
-  type: 'text' | 'number' | 'date' | 'select' | 'textarea';
-  required: boolean;
-  options?: { label: string; value: string }[];
-  value?: string;
-  error?: string;
+/** Shape returned inside __ACTION__:{...} */
+interface PendingAction {
+  intent: 'add_goal' | 'add_investment' | 'add_schedule' | 'add_transaction';
+  fields: Record<string, string | number>;
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const uid = () => Math.random().toString(36).slice(2);
+
+/** Convert YYYY-MM-DD to Unix ms timestamp */
+const toMs = (dateStr: string): number => new Date(dateStr).getTime();
+
+/** rrule string from plain frequency */
+const toRRule = (freq: string): string => ({
+  daily:     'FREQ=DAILY',
+  weekly:    'FREQ=WEEKLY;BYDAY=MO',
+  monthly:   'FREQ=MONTHLY;BYMONTHDAY=1',
+  quarterly: 'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=1',
+  yearly:    'FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1',
+}[freq] ?? 'FREQ=MONTHLY;BYMONTHDAY=1');
+
+/** Instrument class from type */
+const toInstrumentClass = (type: string): string =>
+  ['fd', 'rd', 'bond'].includes(type) ? 'fixed_return' :
+  ['stock', 'mf', 'etf'].includes(type) ? 'market_linked' : 'govt_scheme';
+
+/** Parse __ACTION__:{...} from AI response, return clean text + action */
+const parseAIResponse = (raw: string): { text: string; action: PendingAction | null } => {
+  const match = raw.match(/__ACTION__:(\{[\s\S]*?\})\s*$/);
+  if (!match) return { text: raw.trim(), action: null };
+
+  let action: PendingAction | null = null;
+  try {
+    action = JSON.parse(match[1]) as PendingAction;
+  } catch {
+    /* malformed JSON — ignore action, show full text */
+  }
+
+  const text = raw.replace(/__ACTION__:[\s\S]*$/, '').trim();
+  return { text, action };
+};
+
+/** Human-readable label for a field key */
+const fieldLabel = (key: string): string =>
+  key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AiPage() {
   const { user } = useAuthContext();
-  const [messages, setMessages] = useState<Message[]>([
+
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
       role: 'assistant',
-      content: "Hi! 👋 I'm your Finance AI Assistant. I can help you:\n\n📝 **Add Goals** - Set financial targets\n💎 **Add Investments** - Track FDs, mutual funds, stocks, etc.\n💾 **Create Savings** - Set up savings instruments\n📅 **Schedule Payments** - Automate recurring transactions\n💳 **Log Transactions** - Record income/expenses\n\nWhat would you like to do?",
+      content:
+        'Hi! 👋 I\'m your Finance AI Assistant.\n\nI can help you:\n📝 Add Goals — set a savings target\n💎 Add Investments — FD, MF, stocks, PPF…\n📅 Schedule Payments — recurring bills or SIPs\n💳 Log Transactions — income or expenses\n\nJust tell me what you\'d like to do in plain language!',
       timestamp: Date.now(),
     },
   ]);
+
+  /** Full conversation history sent to the AI on every turn */
+  const [history, setHistory] = useState<{ role: string; content: string }[]>([]);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [formFields, setFormFields] = useState<FormField[]>([]);
+
+  /** Action parsed from AI response — shown as inline confirm card */
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch necessary data
   const { data: accounts = [] } = useSWR(user ? '/api/accounts' : null, fetcher);
-  const { data: providers = [] } = useSWR('/api/providers', fetcher);
-  const { data: platforms = [] } = useSWR('/api/platforms', fetcher);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Scroll to bottom whenever messages or pending action changes
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, pendingAction, isLoading]);
 
-  const parseUserIntent = (text: string): string => {
-    const lower = text.toLowerCase();
+  // ── Auth token ──────────────────────────────────────────────────────────────
+  const getToken = useCallback(async (): Promise<string> => {
+    if (!user) throw new Error('Not authenticated');
+    return user.getIdToken();
+  }, [user]);
 
-    if (
-      lower.includes('goal') ||
-      lower.includes('target') ||
-      lower.includes('save')
-    ) {
-      return 'add_goal';
-    }
-    if (
-      lower.includes('invest') ||
-      lower.includes('mutual fund') ||
-      lower.includes('fd') ||
-      lower.includes('fixed deposit')
-    ) {
-      return 'add_investment';
-    }
-    if (
-      lower.includes('schedule') ||
-      lower.includes('recurring') ||
-      lower.includes('automate')
-    ) {
-      return 'add_schedule';
-    }
-    if (lower.includes('transaction') || lower.includes('expense')) {
-      return 'add_transaction';
-    }
-    if (lower.includes('savings') || lower.includes('savings account')) {
-      return 'add_savings';
-    }
+  // ── Add a message to the visible chat ──────────────────────────────────────
+  const pushMessage = useCallback(
+    (role: 'user' | 'assistant', content: string, variant?: 'success' | 'error') => {
+      setMessages((prev) => [...prev, { id: uid(), role, content, timestamp: Date.now(), variant }]);
+    },
+    []
+  );
 
-    return 'unknown';
-  };
-
-  const generateFormFields = (intent: string, context: any): FormField[] => {
-    switch (intent) {
-      case 'add_goal':
-        return [
-          {
-            name: 'name',
-            label: 'Goal Name',
-            type: 'text',
-            required: true,
-            value: context.name || '',
-          },
-          {
-            name: 'targetAmount',
-            label: 'Target Amount (INR)',
-            type: 'number',
-            required: true,
-            value: context.targetAmount || '',
-          },
-          {
-            name: 'targetDate',
-            label: 'Target Date',
-            type: 'date',
-            required: true,
-            value: context.targetDate || '',
-          },
-          {
-            name: 'priority',
-            label: 'Priority',
-            type: 'select',
-            required: true,
-            options: [
-              { label: 'Low', value: '1' },
-              { label: 'Medium', value: '2' },
-              { label: 'High', value: '3' },
-            ],
-            value: context.priority || '2',
-          },
-          {
-            name: 'description',
-            label: 'Description (optional)',
-            type: 'textarea',
-            required: false,
-            value: context.description || '',
-          },
-        ];
-
-      case 'add_investment':
-        return [
-          {
-            name: 'name',
-            label: 'Investment Name',
-            type: 'text',
-            required: true,
-            value: context.name || '',
-          },
-          {
-            name: 'type',
-            label: 'Investment Type',
-            type: 'select',
-            required: true,
-            options: [
-              { label: 'Fixed Deposit (FD)', value: 'fd' },
-              { label: 'Recurring Deposit (RD)', value: 'rd' },
-              { label: 'Mutual Fund', value: 'mf' },
-              { label: 'Stock', value: 'stock' },
-              { label: 'ETF', value: 'etf' },
-              { label: 'Bond', value: 'bond' },
-              { label: 'PPF', value: 'ppf' },
-              { label: 'NPS', value: 'nps' },
-            ],
-            value: context.type || 'mf',
-          },
-          {
-            name: 'principal',
-            label: 'Principal Amount (INR)',
-            type: 'number',
-            required: true,
-            value: context.principal || '',
-          },
-          {
-            name: 'currentValue',
-            label: 'Current Value (INR)',
-            type: 'number',
-            required: true,
-            value: context.currentValue || '',
-          },
-          {
-            name: 'openedAt',
-            label: 'Date Opened',
-            type: 'date',
-            required: true,
-            value: context.openedAt || new Date().toISOString().split('T')[0],
-          },
-          {
-            name: 'provider',
-            label: 'Provider/Bank Name',
-            type: 'text',
-            required: true,
-            value: context.provider || '',
-          },
-          {
-            name: 'interestRate',
-            label: 'Interest Rate (%) [if fixed]',
-            type: 'number',
-            required: false,
-            value: context.interestRate || '',
-          },
-        ];
-
-      case 'add_schedule':
-        return [
-          {
-            name: 'name',
-            label: 'Schedule Name',
-            type: 'text',
-            required: true,
-            value: context.name || '',
-          },
-          {
-            name: 'amount',
-            label: 'Amount (INR)',
-            type: 'number',
-            required: true,
-            value: context.amount || '',
-          },
-          {
-            name: 'frequency',
-            label: 'Frequency',
-            type: 'select',
-            required: true,
-            options: [
-              { label: 'Daily', value: 'daily' },
-              { label: 'Weekly', value: 'weekly' },
-              { label: 'Monthly', value: 'monthly' },
-              { label: 'Quarterly', value: 'quarterly' },
-              { label: 'Yearly', value: 'yearly' },
-            ],
-            value: context.frequency || 'monthly',
-          },
-          {
-            name: 'type',
-            label: 'Type',
-            type: 'select',
-            required: true,
-            options: [
-              { label: 'Expense', value: 'expense' },
-              { label: 'Income', value: 'income' },
-              { label: 'Savings/Investment', value: 'savings' },
-            ],
-            value: context.type || 'expense',
-          },
-          {
-            name: 'description',
-            label: 'Description',
-            type: 'textarea',
-            required: false,
-            value: context.description || '',
-          },
-        ];
-
-      default:
-        return [];
-    }
-  };
-
+  // ── Send user message → call AI ────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    const text = input.trim();
+    if (!text || isLoading || isSubmitting) return;
 
-    // Add user message
-    const userMessage: Message = {
-      id: Math.random().toString(),
-      role: 'user',
-      content: input,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    pushMessage('user', text);
+
+    const newHistory = [...history, { role: 'user', content: text }];
+    setHistory(newHistory);
     setIsLoading(true);
 
     try {
-      // Parse user intent
-      const intent = parseUserIntent(input);
-
-      if (intent === 'unknown') {
-        const response: Message = {
-          id: Math.random().toString(),
-          role: 'assistant',
-          content:
-            "I didn't quite understand that. I can help you with:\n- **Add Goals** (e.g., 'I want to set a goal to buy a car')\n- **Add Investments** (e.g., 'I invested in a mutual fund')\n- **Schedule Payments** (e.g., 'Setup monthly broadband bill')\n- **Log Transactions** (e.g., 'I spent 500 on groceries')\n\nWhat would you like to do?",
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, response]);
-      } else {
-        // Extract entities from user input
-        const context = extractContext(input, intent);
-
-        // Generate form fields
-        const fields = generateFormFields(intent, context);
-        setFormFields(fields);
-
-        // Ask for missing required fields
-        const missingFields = fields.filter(
-          (f) => f.required && !f.value && f.type !== 'select'
-        );
-
-        let responseText = '';
-        if (missingFields.length > 0) {
-          responseText = `Great! I'll help you add a ${intent.replace('add_', '')}. \n\nI need a few details:\n\n`;
-          missingFields.forEach((field, i) => {
-            responseText += `${i + 1}. **${field.label}**\n`;
-          });
-          responseText += '\nPlease provide these details so I can create it for you.';
-        } else {
-          responseText = `Perfect! I have all the details. Let me create this ${intent.replace('add_', '')} for you...`;
-
-          // Auto-submit if we have all fields
-          setTimeout(() => {
-            handleCreateEntity(intent, fields);
-          }, 1000);
-        }
-
-        const response: Message = {
-          id: Math.random().toString(),
-          role: 'assistant',
-          content: responseText,
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, response]);
-      }
-    } catch (error) {
-      const errorMessage: Message = {
-        id: Math.random().toString(),
-        role: 'assistant',
-        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const extractContext = (text: string, intent: string): any => {
-    const context: any = {};
-
-    // Extract amounts
-    const amountMatch = text.match(/₹?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-    if (amountMatch) {
-      context.principal = context.targetAmount = context.amount = amountMatch[1]
-        .replace(',', '')
-        .replace('₹', '');
-    }
-
-    // Extract names/descriptions
-    if (intent === 'add_goal') {
-      const nameMatch = text.match(/goal (?:to|for|of) (.+?)(?:\.|$)/i);
-      if (nameMatch) context.name = nameMatch[1];
-    }
-
-    if (intent === 'add_investment') {
-      const typeMatches = ['mutual fund', 'fd', 'fixed deposit', 'stock', 'bond', 'ppf'];
-      const matched = typeMatches.find((t) => text.toLowerCase().includes(t));
-      if (matched) {
-        context.type = matched === 'mutual fund' ? 'mf' : matched === 'fixed deposit' ? 'fd' : matched;
-      }
-    }
-
-    if (intent === 'add_schedule') {
-      const nameMatch = text.match(/(?:schedule|bill|payment) (?:for|of) (.+?)(?:\s*monthly|\s*daily|\.)?/i);
-      if (nameMatch) context.name = nameMatch[1];
-    }
-
-    return context;
-  };
-
-  const handleCreateEntity = async (intent: string, fields: FormField[]) => {
-    setIsLoading(true);
-    try {
-      const payload: any = {};
-
-      fields.forEach((field) => {
-        if (field.value) {
-          if (field.type === 'number') {
-            payload[field.name] = Number(field.value);
-          } else if (field.type === 'date') {
-            payload[field.name] = new Date(field.value).getTime();
-          } else {
-            payload[field.name] = field.value;
-          }
-        }
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newHistory }),
       });
 
+      if (!res.ok) throw new Error(`AI service returned ${res.status}`);
+
+      const { content }: { content: string } = await res.json();
+      const { text: displayText, action } = parseAIResponse(content);
+
+      if (displayText) pushMessage('assistant', displayText);
+
+      // Record the raw AI response in history (includes __ACTION__ if present)
+      setHistory((prev) => [...prev, { role: 'assistant', content }]);
+
+      if (action) {
+        // Clear any previous pending action and surface the new one
+        setPendingAction(action);
+      }
+    } catch (err) {
+      pushMessage('assistant', '❌ Couldn\'t reach the AI right now. Please try again.', 'error');
+    } finally {
+      setIsLoading(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  // ── User confirms the pending action → create entity ───────────────────────
+  const handleConfirm = async () => {
+    if (!pendingAction) return;
+    setIsSubmitting(true);
+
+    try {
+      const token = await getToken();
+      const { intent, fields } = pendingAction;
+
       let endpoint = '';
-      let method = 'POST';
-      let body: any = payload;
+      let body: Record<string, unknown> = {};
 
       switch (intent) {
         case 'add_goal':
           endpoint = '/api/goals';
           body = {
-            name: payload.name,
-            targetAmount: payload.targetAmount,
-            targetDate: payload.targetDate,
-            priority: Number(payload.priority),
+            name: fields.name,
+            targetAmount: Number(fields.targetAmount),
+            targetDate: toMs(String(fields.targetDate)),
+            priority: Number(fields.priority),
           };
           break;
 
         case 'add_investment':
           endpoint = '/api/instruments';
           body = {
-            name: payload.name,
-            type: payload.type,
-            principal: payload.principal,
-            currentValue: payload.currentValue,
-            openedAt: payload.openedAt,
-            provider: payload.provider,
-            interestRate: payload.interestRate,
-            instrumentClass: ['fd', 'rd', 'bond'].includes(payload.type)
-              ? 'fixed_return'
-              : ['stock', 'mf', 'etf'].includes(payload.type)
-              ? 'market_linked'
-              : 'govt_scheme',
+            name: fields.name,
+            type: fields.type,
+            principal: Number(fields.principal),
+            currentValue: Number(fields.currentValue),
+            openedAt: toMs(String(fields.openedAt)),
+            provider: fields.provider,
+            interestRate: fields.interestRate ? Number(fields.interestRate) : undefined,
+            instrumentClass: toInstrumentClass(String(fields.type)),
           };
           break;
 
-        case 'add_schedule':
+        case 'add_schedule': {
           endpoint = '/api/schedules';
-          const rrule = generateRRule(payload.frequency);
+          const firstAccount = (accounts as { id: string }[])[0];
           body = {
-            name: payload.name,
-            rrule,
+            name: fields.name,
+            rrule: toRRule(String(fields.frequency)),
             template: {
-              amount: payload.amount,
-              type: payload.type,
+              amount: Number(fields.amount),
+              type: fields.type,
               currency: 'INR',
-              fromAccountId: accounts[0]?.id || '',
-              toAccountId: accounts[0]?.id || '',
-              note: payload.description,
+              fromAccountId: firstAccount?.id ?? '',
+              toAccountId: firstAccount?.id ?? '',
+              note: fields.note ?? '',
             },
             nextRunAt: Date.now(),
             status: 'active',
           };
           break;
+        }
+
+        case 'add_transaction': {
+          endpoint = '/api/transactions';
+          const firstAccount = (accounts as { id: string }[])[0];
+          body = {
+            amount: Number(fields.amount),
+            type: fields.type,
+            category: fields.category,
+            date: toMs(String(fields.date)),
+            note: fields.note ?? '',
+            accountId: firstAccount?.id ?? '',
+            currency: 'INR',
+          };
+          break;
+        }
       }
 
-      const response = await fetch(endpoint, {
-        method,
+      const res = await fetch(endpoint, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${await getToken()}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to create: ${response.statusText}`);
-      }
+      if (!res.ok) throw new Error(res.statusText);
 
-      const result = await response.json();
-
-      const successMessage: Message = {
-        id: Math.random().toString(),
-        role: 'assistant',
-        content: `✅ Successfully created! I've added your ${intent.replace('add_', '')} to the system.`,
-        timestamp: Date.now(),
-        action: {
-          type: intent,
-          data: result,
-          status: 'success',
-          message: 'Created successfully',
-        },
-      };
-
-      setMessages((prev) => [...prev, successMessage]);
-      setFormFields([]);
-    } catch (error) {
-      const errorMessage: Message = {
-        id: Math.random().toString(),
-        role: 'assistant',
-        content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or fill in the details manually.`,
-        timestamp: Date.now(),
-        action: {
-          type: intent,
-          data: {},
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        },
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
+      const successText = `✅ Done! Your ${intent.replace('add_', '')} has been saved. Anything else I can help with?`;
+      pushMessage('assistant', successText, 'success');
+      setHistory((prev) => [...prev, { role: 'assistant', content: successText }]);
+      setPendingAction(null);
+    } catch (err) {
+      const errText = `❌ Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}. Want to try again?`;
+      pushMessage('assistant', errText, 'error');
+      setPendingAction(null);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const generateRRule = (frequency: string): string => {
-    switch (frequency) {
-      case 'daily':
-        return 'FREQ=DAILY';
-      case 'weekly':
-        return 'FREQ=WEEKLY;BYDAY=MO';
-      case 'monthly':
-        return 'FREQ=MONTHLY;BYMONTHDAY=1';
-      case 'quarterly':
-        return 'FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=1';
-      case 'yearly':
-        return 'FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1';
-      default:
-        return 'FREQ=MONTHLY;BYMONTHDAY=1';
-    }
+  // ── User wants to change something ─────────────────────────────────────────
+  const handleCancel = () => {
+    const msg = "No problem! What would you like to change?";
+    pushMessage('assistant', msg);
+    setHistory((prev) => [...prev, { role: 'assistant', content: msg }]);
+    setPendingAction(null);
+    inputRef.current?.focus();
   };
 
-  const getToken = async () => {
-    if (!user) throw new Error('Not authenticated');
-    return await user.getIdToken();
-  };
+  // ── Quick-fill examples ─────────────────────────────────────────────────────
+  const quickExamples = [
+    { emoji: '🎯', label: 'Save 5L for a car by end of year' },
+    { emoji: '💎', label: 'I opened an FD of 1L in SBI today' },
+    { emoji: '📅', label: 'Schedule my Jio bill ₹999 monthly' },
+    { emoji: '💳', label: 'Spent 2500 on groceries today' },
+  ];
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
       <PageHeader title="AI Finance Assistant" />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Chat Section */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-xl overflow-hidden flex flex-col h-[600px]">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* ── Chat panel ─────────────────────────────────────────────────── */}
+        <div className="lg:col-span-2 bg-card border border-border rounded-xl flex flex-col h-[640px] overflow-hidden">
+
+          {/* Message list */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                key={msg.id}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
                 <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                  className={[
+                    'max-w-[80%] px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed',
                     msg.role === 'user'
-                      ? 'bg-cyan text-bg'
-                      : 'bg-white/5 border border-border text-text'
-                  }`}
+                      ? 'bg-cyan text-bg rounded-br-sm'
+                      : msg.variant === 'success'
+                        ? 'bg-green-500/10 border border-green-500/30 text-text rounded-bl-sm'
+                        : msg.variant === 'error'
+                          ? 'bg-red-500/10 border border-red-500/30 text-text rounded-bl-sm'
+                          : 'bg-white/5 border border-border text-text rounded-bl-sm',
+                  ].join(' ')}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  {msg.action && (
-                    <div className="mt-2 text-xs opacity-75">
-                      {msg.action.status === 'success' && (
-                        <CheckCircle className="w-4 h-4 inline mr-1" />
-                      )}
-                      {msg.action.status === 'error' && (
-                        <AlertCircle className="w-4 h-4 inline mr-1" />
-                      )}
-                      {msg.action.message}
-                    </div>
-                  )}
+                  {msg.content}
                 </div>
               </div>
             ))}
-            {isLoading && (
+
+            {/* ── Inline confirmation card ── */}
+            {pendingAction && !isSubmitting && (
               <div className="flex justify-start">
-                <div className="bg-white/5 border border-border text-text px-4 py-2 rounded-lg">
-                  <Loader className="w-4 h-4 animate-spin" />
+                <div className="max-w-[80%] bg-cyan/10 border border-cyan/40 rounded-2xl rounded-bl-sm p-4 space-y-3">
+                  <p className="text-[11px] font-semibold text-cyan uppercase tracking-widest">
+                    Ready to Save
+                  </p>
+
+                  {/* Field summary */}
+                  <div className="space-y-1.5">
+                    {Object.entries(pendingAction.fields).map(([key, val]) => (
+                      <div key={key} className="flex gap-3 text-sm">
+                        <span className="text-text-muted w-28 shrink-0 capitalize">
+                          {fieldLabel(key)}
+                        </span>
+                        <span className="font-medium text-text">{String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={handleConfirm}
+                      className="flex items-center gap-1.5 bg-cyan text-bg px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-cyan/90 active:scale-95 transition-all"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Confirm &amp; Save
+                    </button>
+                    <button
+                      onClick={handleCancel}
+                      className="flex items-center gap-1.5 bg-white/5 border border-border text-text-muted px-4 py-1.5 rounded-lg text-sm hover:bg-white/10 active:scale-95 transition-all"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Change
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
+
+            {/* ── Loading / submitting indicator ── */}
+            {(isLoading || isSubmitting) && (
+              <div className="flex justify-start">
+                <div className="bg-white/5 border border-border px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan" />
+                  <span className="text-sm text-text-muted">
+                    {isSubmitting ? 'Saving…' : 'Thinking…'}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
+          {/* ── Input bar ── */}
           <div className="border-t border-border p-4">
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Tell me what you want to do..."
-                className="flex-1 bg-[#0a0f1c] border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-cyan"
-                disabled={isLoading}
+                placeholder={
+                  pendingAction
+                    ? "Say 'yes' to confirm, or describe what to change…"
+                    : "Tell me what you'd like to do…"
+                }
+                className="flex-1 bg-[#0a0f1c] border border-border rounded-xl px-4 py-2.5 text-sm text-text placeholder-text-muted focus:outline-none focus:border-cyan transition-colors"
+                disabled={isLoading || isSubmitting}
+                autoComplete="off"
               />
               <button
                 type="submit"
-                disabled={isLoading || !input.trim()}
-                className="bg-cyan hover:bg-cyan/95 text-bg px-4 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50"
+                disabled={isLoading || isSubmitting || !input.trim()}
+                className="bg-cyan hover:bg-cyan/90 disabled:opacity-40 text-bg px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -579,48 +390,53 @@ export default function AiPage() {
           </div>
         </div>
 
-        {/* Quick Actions & Tips */}
+        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
         <div className="space-y-4">
+
+          {/* Quick examples */}
           <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="font-bold text-text mb-3 flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-cyan" />
-              Quick Examples
+            <h3 className="font-bold text-text mb-3 flex items-center gap-2 text-sm">
+              <Sparkles className="w-4 h-4 text-cyan" />
+              Try saying…
             </h3>
-            <div className="space-y-2 text-xs text-text-muted">
-              <button
-                onClick={() => setInput('I want to set a goal to buy a car for ₹5 lakhs')}
-                className="block w-full text-left p-2 rounded hover:bg-white/5 transition-colors"
-              >
-                💰 "Set a goal to buy a car"
-              </button>
-              <button
-                onClick={() => setInput('I invested ₹50000 in a mutual fund')}
-                className="block w-full text-left p-2 rounded hover:bg-white/5 transition-colors"
-              >
-                💎 "Add investment in mutual fund"
-              </button>
-              <button
-                onClick={() => setInput('Schedule my broadband bill of ₹999 monthly')}
-                className="block w-full text-left p-2 rounded hover:bg-white/5 transition-colors"
-              >
-                📅 "Schedule a recurring payment"
-              </button>
-              <button
-                onClick={() => setInput('Create a savings account')}
-                className="block w-full text-left p-2 rounded hover:bg-white/5 transition-colors"
-              >
-                💾 "Create savings account"
-              </button>
+            <div className="space-y-1">
+              {quickExamples.map((ex) => (
+                <button
+                  key={ex.label}
+                  onClick={() => {
+                    setInput(ex.label);
+                    inputRef.current?.focus();
+                  }}
+                  className="block w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-xs text-text-muted"
+                >
+                  {ex.emoji} &ldquo;{ex.label}&rdquo;
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="bg-green/10 border border-green/20 rounded-xl p-4">
-            <h3 className="font-bold text-green mb-2">💡 Tips</h3>
-            <ul className="text-xs text-text-muted space-y-1">
-              <li>✓ Be specific with amounts</li>
-              <li>✓ Mention the type/category</li>
-              <li>✓ I'll ask for details I need</li>
-              <li>✓ Confirm before creating</li>
+          {/* Natural language hints */}
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h3 className="font-bold text-text mb-3 flex items-center gap-2 text-sm">
+              <HelpCircle className="w-4 h-4 text-cyan" />
+              Natural Language
+            </h3>
+            <ul className="text-xs text-text-muted space-y-2">
+              <li>
+                <span className="text-text font-medium">Amounts</span>
+                <br />
+                1 lakh · 1L · 50k · 1.5L · 1 crore
+              </li>
+              <li>
+                <span className="text-text font-medium">Dates</span>
+                <br />
+                end of June · 26 July · 1 month from now · end of year
+              </li>
+              <li>
+                <span className="text-text font-medium">How it works</span>
+                <br />
+                I'll ask one question at a time, then show you a summary to confirm before saving anything.
+              </li>
             </ul>
           </div>
         </div>
@@ -628,4 +444,3 @@ export default function AiPage() {
     </AppLayout>
   );
 }
-
