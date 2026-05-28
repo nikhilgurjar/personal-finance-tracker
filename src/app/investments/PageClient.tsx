@@ -9,30 +9,10 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { formatIndianDate } from '@/lib/utils/date';
 import {
   Plus,
-  TrendingUp,
-  Percent,
-  Calendar,
-  Lock,
-  Landmark,
-  Layers,
-  Coins,
-  ChevronRight,
-  X,
-  PlusCircle,
-  HelpCircle,
+  X
 } from 'lucide-react';
 
-const INSTRUMENT_TYPES = [
-  { value: 'fd', label: 'Fixed Deposit (FD)', class: 'fixed_return' },
-  { value: 'rd', label: 'Recurring Deposit (RD)', class: 'fixed_return' },
-  { value: 'bond', label: 'Bond / Debenture', class: 'fixed_return' },
-  { value: 'mf', label: 'Mutual Fund', class: 'market_linked' },
-  { value: 'stock', label: 'Direct Stock / Equity', class: 'market_linked' },
-  { value: 'etf', label: 'ETF', class: 'market_linked' },
-  { value: 'ppf', label: 'Public Provident Fund (PPF)', class: 'govt_scheme' },
-  { value: 'nps', label: 'National Pension System (NPS)', class: 'govt_scheme' },
-  { value: 'epf', label: 'Employees\' Provident Fund (EPF)', class: 'govt_scheme' },
-];
+import { INSTRUMENT_TYPES } from '@/lib/constants';
 
 export default function InvestmentsPage() {
   const [formOpen, setFormOpen] = useState(false);

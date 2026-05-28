@@ -1,6 +1,7 @@
 import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { DEFAULT_CATEGORIES } from '@/lib/constants';
 
 const CategorySchema = z.object({
   name: z.string().min(1),
@@ -9,46 +10,7 @@ const CategorySchema = z.object({
   nature: z.enum(['fixed', 'dynamic', 'both']).default('both'),
 });
 
-// Predefined default categories to seed for new users
-const DEFAULT_CATEGORIES = [
-  { name: 'Rent / EMI', icon: '🏠', color: '#ef4444', nature: 'fixed' },
-  { name: 'Groceries', icon: '🛒', color: '#f97316', nature: 'dynamic' },
-  { name: 'Dining Out', icon: '🍽️', color: '#eab308', nature: 'dynamic' },
-  { name: 'Transport', icon: '🚗', color: '#3b82f6', nature: 'dynamic' },
-  { name: 'Fuel', icon: '⛽', color: '#2563eb', nature: 'dynamic' },
-  { name: 'Utilities', icon: '⚡', color: '#8b5cf6', nature: 'fixed' },
-  { name: 'Mobile & Internet', icon: '📶', color: '#7c3aed', nature: 'fixed' },
-  { name: 'Subscriptions', icon: '📱', color: '#06b6d4', nature: 'fixed' },
-  { name: 'Health & Medical', icon: '🏥', color: '#10b981', nature: 'dynamic' },
-  { name: 'Pharmacy', icon: '💊', color: '#22c55e', nature: 'dynamic' },
-  { name: 'Entertainment', icon: '🎬', color: '#f43f5e', nature: 'dynamic' },
-  { name: 'Shopping', icon: '🛍️', color: '#a855f7', nature: 'dynamic' },
-  { name: 'Insurance', icon: '🛡️', color: '#64748b', nature: 'fixed' },
-  { name: 'Education', icon: '📚', color: '#0ea5e9', nature: 'fixed' },
-  { name: 'Travel', icon: '✈️', color: '#14b8a6', nature: 'dynamic' },
-  { name: 'Hotels & Stay', icon: '🏨', color: '#0f766e', nature: 'dynamic' },
-  { name: 'Flight Tickets', icon: '🛫', color: '#06b6d4', nature: 'dynamic' },
-  { name: 'Investments', icon: '📈', color: '#16a34a', nature: 'both' },
-  { name: 'Savings', icon: '💰', color: '#15803d', nature: 'both' },
-  { name: 'Credit Card Payment', icon: '💳', color: '#1d4ed8', nature: 'fixed' },
-  { name: 'Loan Payment', icon: '🏦', color: '#475569', nature: 'fixed' },
-  { name: 'Bank Charges', icon: '🏛️', color: '#334155', nature: 'dynamic' },
-  { name: 'Taxes', icon: '🧾', color: '#b45309', nature: 'fixed' },
-  { name: 'Salary', icon: '💼', color: '#059669', nature: 'fixed' },
-  { name: 'Freelance Income', icon: '🧑‍💻', color: '#0284c7', nature: 'dynamic' },
-  { name: 'Business Income', icon: '🏢', color: '#0369a1', nature: 'dynamic' },
-  { name: 'Cash Withdrawal', icon: '🏧', color: '#6b7280', nature: 'dynamic' },
-  { name: 'Family', icon: '👨‍👩‍👧', color: '#db2777', nature: 'dynamic' },
-  { name: 'Kids', icon: '🧸', color: '#f59e0b', nature: 'dynamic' },
-  { name: 'Pets', icon: '🐶', color: '#84cc16', nature: 'dynamic' },
-  { name: 'Personal Care', icon: '💇', color: '#ec4899', nature: 'dynamic' },
-  { name: 'Gym & Fitness', icon: '🏋️', color: '#dc2626', nature: 'fixed' },
-  { name: 'Gifts & Donations', icon: '🎁', color: '#ec4899', nature: 'dynamic' },
-  { name: 'Home Maintenance', icon: '🛠️', color: '#78716c', nature: 'dynamic' },
-  { name: 'Office Expenses', icon: '🖥️', color: '#4b5563', nature: 'dynamic' },
-  { name: 'Miscellaneous', icon: '📦', color: '#94a3b8', nature: 'both' },
-  { name: 'Other', icon: '📂', color: '#64748b', nature: 'both' },
-];
+
 
 async function getUserId(req: NextRequest) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '');

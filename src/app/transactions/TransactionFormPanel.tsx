@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { CalendarDatePicker } from '@/components/CalendarDatePicker';
 import { formatCurrency } from '@/lib/utils/currency';
+import { DEFAULT_CATEGORIES } from '@/lib/constants';
 
 const TRANSACTION_TYPES = ['expense', 'income', 'transfer', 'savings', 'salary'];
 const PAYMENT_METHODS = ['upi', 'neft', 'imps', 'rtgs', 'cash', 'card', 'cheque'];
-const CATEGORIES = ['Food & Dining', 'Rent & Home', 'Utilities', 'Shopping', 'Travel & Transport', 'Entertainment', 'Medical & Health', 'Education', 'Investment', 'Salary', 'Others'];
+const CATEGORIES = DEFAULT_CATEGORIES.map(c => c.name);
 
 export default function TransactionFormPanel({ accounts, onSaved, onCancel, mutateTransactions }: any) {
   const [loadingAction, setLoadingAction] = useState(false);

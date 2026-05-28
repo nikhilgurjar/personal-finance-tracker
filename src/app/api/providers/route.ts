@@ -1,6 +1,7 @@
 import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { DEFAULT_PROVIDERS } from '@/lib/constants';
 
 const ProviderSchema = z.object({
   name: z.string().min(1),
@@ -19,19 +20,6 @@ async function getUserId(req: NextRequest) {
     return null;
   }
 }
-
-const DEFAULT_PROVIDERS = [
-  { name: 'HDFC Bank', type: 'bank', shortCode: 'HDFCBANK' },
-  { name: 'SBI', type: 'bank', shortCode: 'SBI' },
-  { name: 'ICICI Bank', type: 'bank', shortCode: 'ICICI' },
-  { name: 'Axis Bank', type: 'bank', shortCode: 'AXIS' },
-  { name: 'Mirae Asset', type: 'amc', shortCode: 'MIRAE' },
-  { name: 'Nippon India', type: 'amc', shortCode: 'NIPPON' },
-  { name: 'SBI Mutual Fund', type: 'amc', shortCode: 'SBIMF' },
-  { name: 'UTI AMC', type: 'amc', shortCode: 'UTI' },
-  { name: 'NSDL', type: 'broker', shortCode: 'NSDL' },
-  { name: 'CDSL', type: 'broker', shortCode: 'CDSL' },
-];
 
 export async function GET(req: NextRequest) {
   const userId = await getUserId(req);

@@ -1,6 +1,7 @@
 import { db, authAdmin } from '@/lib/firebaseAdmin';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { DEFAULT_PLATFORMS } from '@/lib/constants';
 
 const PlatformSchema = z.object({
   name: z.string().min(1),
@@ -19,17 +20,6 @@ async function getUserId(req: NextRequest) {
   }
 }
 
-const DEFAULT_PLATFORMS = [
-  { name: 'Groww', type: 'mf_invest', isActive: true },
-  { name: 'Zerodha Kite', type: 'trading', isActive: true },
-  { name: 'Zerodha Coin', type: 'mf_invest', isActive: true },
-  { name: 'Upstox', type: 'trading', isActive: true },
-  { name: 'Angel One', type: 'trading', isActive: true },
-  { name: 'HDFC Sky', type: 'trading', isActive: true },
-  { name: 'Paytm Money', type: 'mf_invest', isActive: true },
-  { name: 'PhonePe', type: 'mf_invest', isActive: true },
-  { name: 'ET Money', type: 'mf_invest', isActive: true },
-];
 
 export async function GET(req: NextRequest) {
   const userId = await getUserId(req);
