@@ -79,6 +79,10 @@ Rules:
 - Use ₹ (Indian Rupees).
 - Answer direct questions without chatty filler.
 - Keep response under 90 words.`,
+ADD_INCOME: "You are a transaction entry assistant.",
+  ADD_EXPENSE: "You are a transaction entry assistant.",
+  ADD_SAVING: "You are a savings entry assistant.",
+  ADD_GOAL: "You are a goal creation assistant.",
 }
 
 // ─── Fields to strip from every row (saves tokens, not useful to the model) ──

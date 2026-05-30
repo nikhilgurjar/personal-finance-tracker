@@ -1,8 +1,7 @@
 // lib/ai/contextRouter.ts
 // Pure JS/regex intent classifier. Zero API calls, zero cost.
 // v2: multi-intent scoring, temporal filter parsing, compound question support.
-
-export type Intent =
+export type QueryIntent =
   | "EXPENSE_QUERY"
   | "INCOME_QUERY"
   | "SIP_QUERY"
@@ -10,12 +9,16 @@ export type Intent =
   | "BALANCE_QUERY"
   | "DEBT_QUERY"
   | "SAVINGS_QUERY"
-  | "GENERAL"
-  // ── Write intents ──
+  | "GENERAL";
+
+export type WriteIntent =
   | "ADD_INCOME"
   | "ADD_EXPENSE"
   | "ADD_SAVING"
-  | "ADD_GOAL"
+  | "ADD_GOAL";
+
+export type Intent = QueryIntent | WriteIntent;
+
 
 export interface TimeFilter {
   start: Date
@@ -124,6 +127,10 @@ const INTENT_TO_CONTEXT: Record<Intent, { collections: string[]; limit: number }
   DEBT_QUERY:     { collections: ["debts"],                          limit: 20 },
   SAVINGS_QUERY:  { collections: ["savings"],                        limit: 15 },
   GENERAL:        { collections: ["accounts", "expenses", "income"], limit: 5  },
+   ADD_INCOME: { collections: ["income"], limit: 1 },
+  ADD_EXPENSE: { collections: ["expenses"], limit: 1 },
+  ADD_SAVING: { collections: ["savings"], limit: 1 },
+  ADD_GOAL: { collections: ["goals"], limit: 1 },
 }
 
 // ─── Temporal filter parser ───────────────────────────────────────────────────

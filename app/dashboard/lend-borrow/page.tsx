@@ -12,9 +12,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select"
 import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger
-} from "@/components/ui/accordion"
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog"
 import {
@@ -320,38 +317,36 @@ export default function LendBorrowPage() {
         </Button>
       </div>
 
-      {/* ── Accordion Add Form ── */}
-      <Accordion
-        type="single"
-        collapsible
-        value={accordionValue}
-        onValueChange={setAccordionValue}
-        className="w-full"
-      >
-        <AccordionItem value="add" className="border border-border/70 rounded-xl overflow-hidden shadow-sm bg-background/60 backdrop-blur-md">
-          <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors [&>svg]:hidden">
-            <div className="flex items-center gap-2.5 w-full">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
-                <Plus className="h-4 w-4 text-primary" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-bold">Log New Debt / Repayment</p>
-                <p className="text-[11px] text-muted-foreground font-medium">Click to expand the entry form</p>
-              </div>
-              <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${accordionValue === "add" ? "rotate-180" : ""}`} />
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-5 pb-5 pt-2 border-t border-border/40">
+      {/* ── Add Form (plain div toggle — no Accordion height constraints) ── */}
+      <div className="border border-border/70 rounded-xl shadow-sm bg-background/60 backdrop-blur-md">
+        {/* Header row — click to toggle */}
+        <button
+          type="button"
+          onClick={() => setAccordionValue(v => v === "add" ? "" : "add")}
+          className="w-full flex items-center gap-2.5 px-5 py-4 hover:bg-muted/40 transition-colors rounded-xl text-left"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+            <Plus className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-bold">Log New Debt / Repayment</p>
+            <p className="text-[11px] text-muted-foreground font-medium">Click to expand the entry form</p>
+          </div>
+          <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${accordionValue === "add" ? "rotate-180" : ""}`} />
+        </button>
+
+        {/* Form — no overflow-hidden, grows freely with content */}
+        {accordionValue === "add" && (
+          <div className="px-5 pb-5 pt-2 border-t border-border/40">
             <InlineDebtForm
               existingPeople={existingPeople}
               onSubmit={handleAddSubmit}
               onCancel={() => { setAccordionValue(""); setPrefillPerson("") }}
-              // re-mount with correct prefill when person changes
               key={prefillPerson + accordionValue}
             />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+          </div>
+        )}
+      </div>
 
       {/* ── Summary Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
