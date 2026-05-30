@@ -19,10 +19,26 @@ const dmMono = DM_Mono({
   display: "swap",
 })
 
-export const metadata = {
-  title: "Finio — Personal Finance",
-  description: "Track income, expenses, goals and investments in one place.",
+import type { Metadata, Viewport } from "next"
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1, // Prevents auto-zooming on form inputs in iOS
 }
+
+export const metadata: Metadata = {
+ title: "Finio — Personal Finance",
+  description: "Track income, expenses, goals and investments in one place.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true, // Enables "Add to Home Screen" standalone mode
+    title: "Finance", // The name under the icon on the home screen
+    statusBarStyle: "default", // Can be "default", "black", or "black-translucent"
+  },
+}
+
 
 export default function RootLayout({
   children,
