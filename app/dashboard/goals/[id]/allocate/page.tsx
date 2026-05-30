@@ -116,6 +116,7 @@ export default function AllocateSavingsPage({
   }
 
   async function handleSave() {
+    if (!goal) return          // ← add this
     setSaving(true)
     const validAllocations = allocations.filter((a) => safeNumber(a.amount) > 0)
     await updateGoal(goal.id, {
