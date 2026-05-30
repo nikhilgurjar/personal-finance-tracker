@@ -1,7 +1,7 @@
 // app/dashboard/goals/[id]/allocate/page.tsx
 "use client"
 
-import { use, useState, useEffect } from "react"
+import { use, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useFinanceData, Goal, Saving, SavingAllocation } from "@/hooks/use-finance-data"
@@ -28,6 +28,7 @@ import {
   Search,
   Save,
   ShieldAlert,
+  Sparkles,
 } from "lucide-react"
 
 export default function AllocateSavingsPage({
@@ -48,6 +49,9 @@ export default function AllocateSavingsPage({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Auto-focus search input element ref
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
   // Seed local state from goal once loaded
   useEffect(() => {
     if (goal) {
@@ -60,7 +64,14 @@ export default function AllocateSavingsPage({
             })
       setAllocations(existing)
     }
-  }, [goal?.id]) // only re-seed when goal id changes
+  }, [goal?.id])
+
+  // Focus search input on sheet entry
+  useEffect(() => {
+    if (addSheetOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 150)
+    }
+  }, [addSheetOpen])
 
   if (!goal) {
     return (
@@ -77,6 +88,27 @@ export default function AllocateSavingsPage({
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const allocatedSavingIds = new Set(allocations.map((a) => a.id))
+  const unallocatedSavings = savings.filter((s) => !allocatedSavingIds.has(s.id))
+
+  // Autocomplete Match Engine: Filters against Title, Application context, or Provider tags
+  const filteredUnallocated = unallocatedSavings.filter((s) => {
+    const query = searchQuery.toLowerCase().trim()
+    if (!query) return true
+    
+    const matchedApp = apps.find((a) => a.value === s.app)?.label || s.app
+    const matchedProvider = providers.find((p) => p.value === s.provider)?.label || s.provider
+    
+    return (
+      s.name.toLowerCase().includes(query) ||
+      matchedApp.toLowerCase().includes(query) ||
+      matchedProvider.toLowerCase().includes(query)
+    )
+  })
+
+  // To prevent visual crowding when search is empty, slice list to top 4 recommendations
+  const dynamicRenderedSavings = searchQuery.trim() === "" 
+    ? filteredUnallocated.slice(0, 4) 
+    : filteredUnallocated
 
   const allocatedSavings = allocations
     .map((alloc) => {
@@ -85,16 +117,13 @@ export default function AllocateSavingsPage({
     })
     .filter((x): x is { saving: Saving; alloc: SavingAllocation } => x !== null)
 
-  const unallocatedSavings = savings.filter((s) => !allocatedSavingIds.has(s.id))
-
-  const filteredUnallocated = unallocatedSavings.filter((s) =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
   const totalAllocated = allocations.reduce((sum, a) => sum + safeNumber(a.amount), 0)
   const netSaved = safeNumber(goal.current) + totalAllocated
   const pct = Math.min(100, Math.round((netSaved / safeNumber(goal.target)) * 100))
   const done = pct >= 100
+
+  const remainingToTarget = Math.max(0, safeNumber(goal.target) - netSaved)
+  const avgAllocationPerSaving = allocations.length > 0 ? Math.round(totalAllocated / allocations.length) : 0
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -116,7 +145,7 @@ export default function AllocateSavingsPage({
   }
 
   async function handleSave() {
-    if (!goal) return          // ← add this
+    if (!goal) return
     setSaving(true)
     const validAllocations = allocations.filter((a) => safeNumber(a.amount) > 0)
     await updateGoal(goal.id, {
@@ -128,8 +157,6 @@ export default function AllocateSavingsPage({
     setTimeout(() => setSaved(false), 2500)
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
   function getSavingMeta(s: Saving) {
     const matchedApp = apps.find((a) => a.value === s.app)?.label || s.app
     const matchedProvider = providers.find((p) => p.value === s.provider)?.label || s.provider
@@ -137,7 +164,7 @@ export default function AllocateSavingsPage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[760px] mx-auto p-1">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -213,6 +240,25 @@ export default function AllocateSavingsPage({
         </div>
       </div>
 
+      {/* ── Stats Row ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="bg-background border border-border/70 rounded-xl p-4 shadow-xs">
+          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Remaining</div>
+          <div className="text-lg font-extrabold tracking-tight">₹{formatCurrency(remainingToTarget)}</div>
+          <div className="text-[10px] text-muted-foreground font-medium mt-0.5">to reach target</div>
+        </div>
+        <div className="bg-background border border-border/70 rounded-xl p-4 shadow-xs">
+          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Savings Linked</div>
+          <div className="text-lg font-extrabold tracking-tight text-primary">{allocations.length}</div>
+          <div className="text-[10px] text-muted-foreground font-medium mt-0.5">active buckets</div>
+        </div>
+        <div className="bg-background border border-border/70 rounded-xl p-4 shadow-xs">
+          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Avg. per Saving</div>
+          <div className="text-lg font-extrabold tracking-tight text-teal-600">₹{formatCurrency(avgAllocationPerSaving)}</div>
+          <div className="text-[10px] text-muted-foreground font-medium mt-0.5">per bucket</div>
+        </div>
+      </div>
+
       {/* ── Allocation List ── */}
       <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
         <CardHeader className="pb-3">
@@ -231,7 +277,7 @@ export default function AllocateSavingsPage({
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-4">
           {allocations.length === 0 ? (
             <div className="text-center py-10 border border-dashed rounded-xl">
               <ShieldAlert className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -244,10 +290,12 @@ export default function AllocateSavingsPage({
             <div className="space-y-2">
               {allocatedSavings.map(({ saving: s, alloc }) => {
                 const { matchedApp, matchedProvider } = getSavingMeta(s)
+                const assetUtilizationPct = s.amount > 0 ? Math.min(100, Math.round((safeNumber(alloc.amount) / s.amount) * 100)) : 0
+
                 return (
                   <div
                     key={s.id}
-                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border border-border/50 bg-background/60 hover:border-primary/20 transition-all group"
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border border-border/50 bg-background/60 hover:border-primary/20 transition-all group animate-in fade-in slide-in-from-bottom-1"
                   >
                     {/* Icon + Info */}
                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -267,24 +315,32 @@ export default function AllocateSavingsPage({
 
                     {/* Amount input */}
                     <div className="flex items-center gap-2 shrink-0">
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                          ₹
-                        </span>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={s.amount}
-                          step={100}
-                          value={alloc.amount}
-                          onChange={(e) => updateAmount(s.id, Number(e.target.value))}
-                          className="pl-7 w-[140px] h-9 text-sm font-bold"
-                          placeholder="0"
-                        />
+                      <div>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                            ₹
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={s.amount}
+                            step={100}
+                            value={alloc.amount}
+                            onChange={(e) => updateAmount(s.id, Number(e.target.value))}
+                            className="pl-7 w-[140px] h-9 text-sm font-bold"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="w-[140px] h-0.5 bg-muted mt-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-primary to-teal-600 transition-all duration-300"
+                            style={{ width: `${assetUtilizationPct}%` }}
+                          />
+                        </div>
                       </div>
                       <Button
                         variant="destructive"
-                        size="icon-xs"
+                        size="icon"
                         className="h-9 w-9 rounded-lg"
                         onClick={() => removeAllocation(s.id)}
                         title="Remove from this goal"
@@ -298,111 +354,116 @@ export default function AllocateSavingsPage({
             </div>
           )}
 
-          {/* Save button */}
-          {allocations.length > 0 && (
-            <>
-              <Separator className="bg-border/30 my-2" />
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-xs text-muted-foreground font-medium">
-                  Total: <span className="text-foreground font-black">₹{formatCurrency(totalAllocated)}</span>
-                </p>
-                <Button
-                  onClick={handleSave}
-                  disabled={saving || saved}
-                  size="sm"
-                  className={`font-semibold gap-1.5 transition-all ${
-                    saved
-                      ? "bg-emerald-600 hover:bg-emerald-600 text-white"
-                      : ""
-                  }`}
-                >
-                  {saved ? (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Saved!
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      {saving ? "Saving..." : "Save Allocations"}
-                    </>
-                  )}
-                </Button>
+          {/* ── Persistent Save Bar ── */}
+          <div>
+            <Separator className="bg-border/30 my-2" />
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Allocated</p>
+                <p className="text-lg font-black tracking-tight text-foreground">₹{formatCurrency(totalAllocated)}</p>
               </div>
-            </>
-          )}
+              <Button
+                onClick={handleSave}
+                disabled={saving || saved}
+                size="sm"
+                className={`font-semibold gap-1.5 transition-all ${
+                  saved ? "bg-emerald-600 hover:bg-emerald-600 text-white" : ""
+                }`}
+              >
+                {saved ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Saved!
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    {saving ? "Saving..." : "Save Allocations"}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* ── Add Saving Sheet ── */}
+      {/* ── Autocomplete Search Sheet ── */}
       <Sheet open={addSheetOpen} onOpenChange={setAddSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md bg-background/95 backdrop-blur-lg border-border/80">
-          <SheetHeader>
-            <SheetTitle className="text-lg font-bold">Add a Saving</SheetTitle>
+        <SheetContent side="right" className="w-full sm:max-w-md bg-background/95 backdrop-blur-lg border-l border-border/80 p-0 flex flex-col">
+          <SheetHeader className="p-6 pb-4 border-b">
+            <SheetTitle className="text-lg font-bold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              Link Savings Account
+            </SheetTitle>
             <SheetDescription className="text-xs">
-              Pick a saving to link to <span className="font-semibold text-foreground">{goal.name}</span>.
-              It will be added with its full balance — adjust the amount on the main screen.
+              Type to autocomplete. Search across your asset names, application labels, or investment providers.
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-4 space-y-3">
-            {/* Search */}
+          {/* Search Box Sticky Context */}
+          <div className="p-4 bg-muted/30 border-b">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
               <Input
-                placeholder="Search savings..."
+                ref={searchInputRef}
+                placeholder="Search by name, app (e.g. Kuvera) or asset type..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 text-sm"
+                className="pl-9 h-10 text-sm bg-background border-border focus-visible:ring-primary/20 font-medium"
               />
             </div>
+          </div>
 
-            <Separator className="bg-border/30" />
+          {/* Autocomplete Content List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {searchQuery.trim() === "" && filteredUnallocated.length > 0 && (
+              <div className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-widest pl-1 mb-1">
+                Suggested Buckets ({Math.min(4, filteredUnallocated.length)} of {filteredUnallocated.length})
+              </div>
+            )}
 
-            {/* List */}
-            <div className="space-y-2 max-h-[calc(100vh-240px)] overflow-y-auto pr-1">
-              {filteredUnallocated.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted-foreground font-semibold">
-                    {unallocatedSavings.length === 0
-                      ? "All savings are already linked to this goal"
-                      : "No results for your search"}
-                  </p>
-                </div>
-              ) : (
-                filteredUnallocated.map((s) => {
-                  const { matchedApp, matchedProvider } = getSavingMeta(s)
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        addSaving(s.id)
-                        setAddSheetOpen(false)
-                        setSearchQuery("")
-                      }}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border/50 bg-background/60 hover:border-primary/30 hover:bg-primary/5 transition-all text-left group"
-                    >
-                      <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0 text-base">
-                        🐷
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-foreground truncate">{s.name}</p>
-                        <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
-                          {matchedApp} · {matchedProvider}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-black text-foreground">₹{formatCurrency(s.amount)}</p>
-                        <p className="text-[10px] text-muted-foreground font-medium mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          + Add
-                        </p>
-                      </div>
-                    </button>
-                  )
-                })
-              )}
-            </div>
+            {filteredUnallocated.length === 0 ? (
+              <div className="text-center py-12 px-4 border border-dashed rounded-xl bg-muted/10">
+                <p className="text-sm font-semibold text-muted-foreground">No matches found</p>
+                <p className="text-xs text-muted-foreground/60 mt-1 max-w-[240px] mx-auto">
+                  {unallocatedSavings.length === 0 
+                    ? "Every savings instance is already tied to this goal parameters."
+                    : "Try searching for alternative keyword terms."}
+                </p>
+              </div>
+            ) : (
+              dynamicRenderedSavings.map((s) => {
+                const { matchedApp, matchedProvider } = getSavingMeta(s)
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      addSaving(s.id)
+                      setAddSheetOpen(false)
+                      setSearchQuery("")
+                    }}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-border/50 bg-background hover:border-primary/40 hover:bg-primary/5 hover:shadow-xs transition-all text-left group"
+                  >
+                    <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0 text-base group-hover:scale-105 transition-transform">
+                      🐷
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">{s.name}</p>
+                      <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                        {matchedApp} · {matchedProvider}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-black text-foreground">₹{formatCurrency(s.amount)}</p>
+                      <p className="text-[10px] text-primary font-bold mt-0.5 opacity-0 group-hover:opacity-100 transform translate-x-1 group-hover:translate-x-0 transition-all">
+                        Select →
+                      </p>
+                    </div>
+                  </button>
+                )
+              })
+            )}
           </div>
         </SheetContent>
       </Sheet>
