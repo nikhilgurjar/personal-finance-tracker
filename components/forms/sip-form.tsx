@@ -116,7 +116,7 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
       app: values.app,
       sipStatus: values.sipStatus as "active" | "paused" | "completed",
       totalInvested: values.totalInvested,
-      linkedGoal: values.linkedGoal || undefined,
+linkedGoal: values.linkedGoal === "none" ? undefined : (values.linkedGoal || undefined),
       note: values.note || "",
     }
 
@@ -306,14 +306,15 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
               <FormField control={form.control as any} name="linkedGoal" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Link to Goal (Optional)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || ""}>
+<Select onValueChange={field.onChange} value={field.value ?? "none"}>
+                    
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="None" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+<SelectItem value="none">None</SelectItem>
                       {goals.map((goal) => (
                         <SelectItem key={goal.id} value={goal.id}>{goal.name}</SelectItem>
                       ))}
