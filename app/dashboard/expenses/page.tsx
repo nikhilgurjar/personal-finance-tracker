@@ -12,7 +12,7 @@ import { ExpenseForm } from "@/components/forms/expense-form"
 import { useFinanceData, Expense } from "@/hooks/use-finance-data"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { useState } from "react"
-import { Trash2, Edit2, Wallet, Calendar, Plus, ChevronDown, TrendingDown } from "lucide-react"
+import { Trash2, Edit2, Wallet, Calendar, Plus, ChevronDown, TrendingDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import {
   Select,
@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
 
 const COLORS = ["#3b82f6", "#0ea5e9", "#6366f1", "#06b6d4", "#14b8a6", "#a855f7", "#ec4899"]
 
@@ -29,6 +31,14 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [accountFilter, setAccountFilter] = useState("all")
+
+  // Sorting, Filtering, Pagination State
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [sortBy, setSortBy] = useState<"date" | "category" | "amount">("date")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 5
 
   // Dynamic calculations
   const totalExpenses = expenses.reduce((s, e) => s + safeNumber(e.amount), 0)
@@ -269,11 +279,44 @@ export default function ExpensesPage() {
                   <CardDescription className="text-xs">Comprehensive log of all outgoing payments</CardDescription>
                 </div>
                 
-                {/* ACCOUNT TRANSACTION FILTER FOR EXPENSES */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Account:</span>
-                  <Select value={accountFilter} onValueChange={setAccountFilter}>
-                    <SelectTrigger className="w-[160px] h-8 text-xs rounded-lg bg-background">
+                {/* TRANSACTION FILTER FOR EXPENSES */}
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <Input
+                    placeholder="Search note or details..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="h-8 text-xs w-[160px] bg-background"
+                  />
+                  <Select
+                    value={categoryFilter}
+                    onValueChange={(val) => {
+                      setCategoryFilter(val)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs bg-background">
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">📦 All Categories</SelectItem>
+                      {EXPENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={accountFilter}
+                    onValueChange={(val) => {
+                      setAccountFilter(val)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs bg-background">
                       <SelectValue placeholder="All Accounts" />
                     </SelectTrigger>
                     <SelectContent>
@@ -288,74 +331,170 @@ export default function ExpensesPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1">
-                  {filteredExpenses.length === 0 ? (
-                    <div className="text-center py-10">
-                      <p className="text-sm text-slate-400 font-medium">No transactions match this filter.</p>
-                    </div>
-                  ) : (
-                    filteredExpenses.map((exp, i) => {
-                      const matchedAccount = accounts.find(a => a.id === exp.account)
+                {(() => {
+                  const filteredAndSortedExpenses = expenses
+                    .filter((exp) => {
+                      const matchAccount = accountFilter === "all" || exp.account === accountFilter
+                      const matchCategory = categoryFilter === "all" || exp.category === categoryFilter
+                      const matchedAccountName = accounts.find((a) => a.id === exp.account)?.name || ""
                       const fullCategory = EXPENSE_MAP[exp.category] || exp.category
-                      const icon = fullCategory.match(/[\p{Emoji}\u200d]+/gu)?.[0] || "📦"
-                      
-                      return (
-                        <div key={exp.id}>
-                          <div className="flex items-center justify-between py-3.5 px-2 hover:bg-muted/15 rounded-xl transition-all group">
-                            <div className="flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-xl bg-muted/80 flex items-center justify-center text-lg">
-                                {icon}
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold tracking-tight text-foreground">{exp.note || fullCategory.replace(icon, "").trim()}</p>
-                                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5 font-medium">
-                                  <Calendar className="h-3 w-3 shrink-0" />
-                                  <span>{exp.date}</span>
-                                  <span>·</span>
-                                  <Wallet className="h-3 w-3 shrink-0" />
-                                  <span>{matchedAccount ? matchedAccount.name : "Cash/Other"}</span>
-                                </p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-extrabold text-rose-500 tracking-tight">
-                                -₹{formatCurrency(exp.amount)}
-                              </span>
-                              
-                              <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  variant="outline"
-                                  size="icon-xs"
-                                  onClick={() => {
-                                    setEditingExpense(exp)
-                                    setFormOpen(true)
-                                  }}
-                                  className="h-7 w-7 rounded-md border-border/60"
-                                >
-                                  <Edit2 className="h-3 w-3 text-muted-foreground" />
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="icon-xs"
-                                  onClick={() => {
-                                    if (confirm("Delete this expense transaction?")) {
-                                      deleteExpense(exp.id)
-                                    }
-                                  }}
-                                  className="h-7 w-7 rounded-md"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                          {i < filteredExpenses.length - 1 && <Separator className="bg-border/30" />}
-                        </div>
-                      )
+                      const matchSearch =
+                        exp.note?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        fullCategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        matchedAccountName.toLowerCase().includes(searchTerm.toLowerCase())
+                      return matchAccount && matchCategory && matchSearch
                     })
-                  )}
-                </div>
+                    .sort((a, b) => {
+                      let comparison = 0
+                      if (sortBy === "date") {
+                        comparison = a.date.localeCompare(b.date)
+                      } else if (sortBy === "category") {
+                        const catA = EXPENSE_MAP[a.category] || a.category
+                        const catB = EXPENSE_MAP[b.category] || b.category
+                        comparison = catA.localeCompare(catB)
+                      } else if (sortBy === "amount") {
+                        comparison = safeNumber(a.amount) - safeNumber(b.amount)
+                      }
+                      return sortOrder === "asc" ? comparison : -comparison
+                    })
+
+                  const totalPages = Math.ceil(filteredAndSortedExpenses.length / rowsPerPage)
+                  const paginatedExpenses = filteredAndSortedExpenses.slice(
+                    (currentPage - 1) * rowsPerPage,
+                    currentPage * rowsPerPage
+                  )
+
+                  const handleSort = (field: "date" | "category" | "amount") => {
+                    if (sortBy === field) {
+                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setSortBy(field)
+                      setSortOrder("desc")
+                    }
+                    setCurrentPage(1)
+                  }
+
+                  if (filteredAndSortedExpenses.length === 0) {
+                    return (
+                      <div className="text-center py-10">
+                        <p className="text-sm text-slate-400 font-medium">No transactions match the filters.</p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-border/40 overflow-hidden bg-background/30">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("date")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Date</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("category")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Category</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead>Note / Source</TableHead>
+                              <TableHead>Account</TableHead>
+                              <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("amount")}>
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span>Amount</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedExpenses.map((exp) => {
+                              const matchedAccount = accounts.find(a => a.id === exp.account)
+                              const fullCategory = EXPENSE_MAP[exp.category] || exp.category
+                              const icon = fullCategory.match(/[\p{Emoji}\u200d]+/gu)?.[0] || "📦"
+
+                              return (
+                                <TableRow key={exp.id}>
+                                  <TableCell className="font-semibold text-xs text-muted-foreground">{exp.date}</TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm">{icon}</span>
+                                      <span className="font-bold text-xs">{fullCategory.replace(icon, "").trim()}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{exp.note || "—"}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {matchedAccount ? matchedAccount.name : "Cash/Other"}
+                                  </TableCell>
+                                  <TableCell className="font-black text-xs text-rose-500 text-right">
+                                    -₹{formatCurrency(exp.amount)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={() => {
+                                          setEditingExpense(exp)
+                                          setFormOpen(true)
+                                        }}
+                                      >
+                                        <Edit2 className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={() => {
+                                          if (confirm(`Delete this expense record for ₹${formatCurrency(exp.amount)}?`)) {
+                                            deleteExpense(exp.id)
+                                          }
+                                        }}
+                                      >
+                                        <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-2 py-1 text-xs">
+                          <p className="text-muted-foreground font-semibold">
+                            Showing {(currentPage - 1) * rowsPerPage + 1}–{Math.min(currentPage * rowsPerPage, filteredAndSortedExpenses.length)} of {filteredAndSortedExpenses.length} entries
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={currentPage === 1}
+                              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="font-bold px-2">{currentPage} / {totalPages}</span>
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={currentPage === totalPages}
+                              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </TabsContent>

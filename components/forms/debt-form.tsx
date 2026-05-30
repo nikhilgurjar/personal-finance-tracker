@@ -128,112 +128,113 @@ export function DebtForm({
       <Plus className="h-4 w-4" />
       <span>Log Debt Record</span>
     </Button>
-  )
-
-  return (
+  )  return (
     <Dialog open={open} onOpenChange={setOpen}>
       {!isControlled && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col p-0 backdrop-blur-lg bg-background/95 border-border/80">
+        <DialogHeader className="p-5 pb-3 border-b border-border/40">
           <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
             {isEditMode ? <><Pencil className="h-5 w-5 text-primary" /> Edit Debt Entry</> : <>🤝 Log Debt / Repayment</>}
           </DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-
-            {/* Person Name Selection */}
-            <FormField control={form.control} name="personName" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Select Person</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value} disabled={isEditMode}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select person" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {existingPeople.map((person) => (
-                      <SelectItem key={person} value={person}>👤 {person}</SelectItem>
-                    ))}
-                    {!isEditMode && <SelectItem value="new">➕ Add New Person...</SelectItem>}
-                  </SelectContent>
-                </Select>
-                {isEditMode && (
-                  <p className="text-[11px] text-muted-foreground mt-1">Person name cannot be changed when editing.</p>
-                )}
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            {/* Custom Name field if "new" is selected */}
-            {watchPerson === "new" && !isEditMode && (
-              <FormField control={form.control} name="customPerson" render={({ field }) => (
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+            {/* Scrollable Fields container */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Person Name Selection */}
+              <FormField control={form.control} name="personName" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Person's Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter full name of lender/borrower" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
-
-            {/* Transaction Type */}
-            <FormField control={form.control} name="type" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Action Type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="lent">📤 I Lent Money (Lent to them)</SelectItem>
-                    <SelectItem value="borrowed">📥 I Borrowed Money (Borrowed from them)</SelectItem>
-                    <SelectItem value="lent_repayment">💵 Lent Repayment (They repaid to me)</SelectItem>
-                    <SelectItem value="borrowed_repayment">💸 Borrowed Repayment (I repaid to them)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField control={form.control} name="date" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
+                  <FormLabel>Select Person</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isEditMode}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {existingPeople.map((person) => (
+                        <SelectItem key={person} value={person}>👤 {person}</SelectItem>
+                      ))}
+                      {!isEditMode && <SelectItem value="new">➕ Add New Person...</SelectItem>}
+                    </SelectContent>
+                  </Select>
+                  {isEditMode && (
+                    <p className="text-[11px] text-muted-foreground mt-1">Person name cannot be changed when editing.</p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />
 
-              <FormField control={form.control} name="amount" render={({ field }) => (
+              {/* Custom Name field if "new" is selected */}
+              {watchPerson === "new" && !isEditMode && (
+                <FormField control={form.control} name="customPerson" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Person's Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter full name of lender/borrower" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
+
+              {/* Transaction Type */}
+              <FormField control={form.control} name="type" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount (₹)</FormLabel>
+                  <FormLabel>Action Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="lent">📤 I Lent Money (Lent to them)</SelectItem>
+                      <SelectItem value="borrowed">📥 I Borrowed Money (Borrowed from them)</SelectItem>
+                      <SelectItem value="lent_repayment">💵 Lent Repayment (They repaid to me)</SelectItem>
+                      <SelectItem value="borrowed_repayment">💸 Borrowed Repayment (I repaid to them)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField control={form.control} name="date" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="amount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount (₹)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="0" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+
+              <FormField control={form.control} name="note" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description / Note <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
+                    <Textarea placeholder="e.g. Lent for flight tickets, partial cash repayment" rows={2} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
             </div>
 
-            <FormField control={form.control} name="note" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description / Note <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
-                <FormControl>
-                  <Textarea placeholder="e.g. Lent for flight tickets, partial cash repayment" rows={2} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-border/30">
+            {/* Sticky Actions Footer */}
+            <div className="flex justify-end gap-2 p-5 border-t border-border/40 bg-muted/10">
               <Button type="button" variant="outline" onClick={() => setOpen?.(false)}>
                 Cancel
               </Button>
@@ -246,6 +247,5 @@ export function DebtForm({
           </form>
         </Form>
       </DialogContent>
-    </Dialog>
   )
 }

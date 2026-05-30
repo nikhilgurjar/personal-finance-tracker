@@ -55,7 +55,7 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
     resolver: zodResolver(schema as any),
     defaultValues: {
       name: "", owner: "John Doe", type: "mf", app: "",
-      provider: "", amount: 0, frequency: "Monthly",
+      provider: "", amount: 0, frequency: "One-time",
     },
   })
 
@@ -73,7 +73,7 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
         provider: providers.some(p => p.value === initialData.provider) ? initialData.provider : "other",
         custom_provider: providers.some(p => p.value === initialData.provider) ? "" : initialData.provider,
         amount: initialData.amount,
-        frequency: initialData.frequency || "Monthly",
+        frequency: "One-time",
       })
       setLinkedGoals(initialData.linkedGoals || [])
     } else if (!initialData && open) {
@@ -86,7 +86,7 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
         provider: "",
         custom_provider: "",
         amount: 0,
-        frequency: "Monthly",
+        frequency: "One-time",
       })
       setLinkedGoals([])
     }
@@ -120,7 +120,7 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
       provider: finalProvider,
       amount: values.amount,
       linkedGoals: linkedGoals,
-      frequency: values.frequency || "Monthly",
+      frequency: "One-time",
       active: true
     }
 
@@ -208,7 +208,7 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
             </div>
 
             {/* App */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <FormField control={form.control as any} name="app" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Investment App</FormLabel>
@@ -223,26 +223,6 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
                         <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
                       ))}
                       <SelectItem value="other">➕ Custom (Type Manually)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              <FormField control={form.control as any} name="frequency" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Frequency</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select frequency" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="One-time">📅 One-time / Lumpsum</SelectItem>
-                      <SelectItem value="Monthly">🔄 Monthly SIP</SelectItem>
-                      <SelectItem value="Quarterly">🔄 Quarterly</SelectItem>
-                      <SelectItem value="Yearly">🔄 Yearly</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

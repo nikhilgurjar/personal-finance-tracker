@@ -59,7 +59,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-5 space-y-4 border-t border-sidebar-border/30">
+      <SidebarFooter className="p-5 pb-24 space-y-4 border-t border-sidebar-border/30">
         <FirebaseAuthButton />
         
         <SidebarMenu>

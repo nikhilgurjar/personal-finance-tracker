@@ -5,18 +5,29 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { Plus, Trash2, Edit2, TrendingUp, Calendar, DollarSign } from "lucide-react"
+import { Plus, Trash2, Edit2, TrendingUp, Calendar, DollarSign, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, CartesianGrid } from "recharts"
 import { IncomeForm } from "@/components/forms/income-form"
 import { useFinanceData, Income } from "@/hooks/use-finance-data"
 import { useState } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { INCOME_SOURCES, INCOME_FREQUENCY } from "@/constants/finance"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function IncomePage() {
   const { income, deleteIncome, accounts, isDemo } = useFinanceData()
   const [editingIncome, setEditingIncome] = useState<Income | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+
+  // Sorting, Filtering, Pagination State
+  const [searchTerm, setSearchTerm] = useState("")
+  const [sourceFilter, setSourceFilter] = useState("all")
+  const [sortBy, setSortBy] = useState<"date" | "source" | "amount">("date")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 5
 
   const totalMonthlyIncome = income
     .filter(i => i.frequency === "monthly")
@@ -269,50 +280,195 @@ export default function IncomePage() {
           {/* Ledger */}
           <TabsContent value="ledger" className="mt-0 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl font-bold">Income Records</CardTitle>
-                <CardDescription>All income transactions</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 flex-wrap gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold">Income Records</CardTitle>
+                  <CardDescription>All income transactions</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <Input
+                    placeholder="Search note or source..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="h-8 text-xs w-[180px] bg-background"
+                  />
+                  <Select
+                    value={sourceFilter}
+                    onValueChange={(val) => {
+                      setSourceFilter(val)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs bg-background">
+                      <SelectValue placeholder="All Sources" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">📁 All Sources</SelectItem>
+                      {INCOME_SOURCES.map((src) => (
+                        <SelectItem key={src.value} value={src.value}>
+                          {src.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
               <CardContent>
-                {income.length === 0 ? (
-                  <div className="flex items-center justify-center py-8">
-                    <p className="text-muted-foreground">No income records yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {income.map((inc) => (
-                      <div key={inc.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm">{SOURCE_MAP[inc.source] || inc.source}</p>
-                          <p className="text-xs text-muted-foreground">{inc.date} • {inc.note || "No note"}</p>
-                        </div>
-                        <div className="text-right mr-3">
-                          <p className="font-bold text-emerald-600">₹{formatCurrency(inc.amount)}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{inc.frequency}</p>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingIncome(inc)
-                              setFormOpen(true)
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteIncome(inc.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                          </Button>
-                        </div>
+                {(() => {
+                  const filteredAndSortedIncome = income
+                    .filter((inc) => {
+                      const matchSearch =
+                        inc.note?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (SOURCE_MAP[inc.source] || inc.source)
+                          .toLowerCase()
+                          .includes(searchTerm.toLowerCase())
+                      const matchSource = sourceFilter === "all" || inc.source === sourceFilter
+                      return matchSearch && matchSource
+                    })
+                    .sort((a, b) => {
+                      let comparison = 0
+                      if (sortBy === "date") {
+                        comparison = a.date.localeCompare(b.date)
+                      } else if (sortBy === "source") {
+                        const sourceA = SOURCE_MAP[a.source] || a.source
+                        const sourceB = SOURCE_MAP[b.source] || b.source
+                        comparison = sourceA.localeCompare(sourceB)
+                      } else if (sortBy === "amount") {
+                        comparison = safeNumber(a.amount) - safeNumber(b.amount)
+                      }
+                      return sortOrder === "asc" ? comparison : -comparison
+                    })
+
+                  const totalPages = Math.ceil(filteredAndSortedIncome.length / rowsPerPage)
+                  const paginatedIncome = filteredAndSortedIncome.slice(
+                    (currentPage - 1) * rowsPerPage,
+                    currentPage * rowsPerPage
+                  )
+
+                  const handleSort = (field: "date" | "source" | "amount") => {
+                    if (sortBy === field) {
+                      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setSortBy(field)
+                      setSortOrder("desc")
+                    }
+                    setCurrentPage(1)
+                  }
+
+                  if (filteredAndSortedIncome.length === 0) {
+                    return (
+                      <div className="flex items-center justify-center py-8">
+                        <p className="text-muted-foreground text-sm font-medium">No income records found</p>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    )
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-border/40 overflow-hidden bg-background/30">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("date")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Date</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("source")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Source</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead>Note</TableHead>
+                              <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("amount")}>
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span>Amount</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedIncome.map((inc) => (
+                              <TableRow key={inc.id}>
+                                <TableCell className="font-semibold text-xs text-muted-foreground">{inc.date}</TableCell>
+                                <TableCell>
+                                  <span className="font-bold text-xs">{SOURCE_MAP[inc.source] || inc.source}</span>
+                                  <Badge variant="outline" className="ml-2 text-[9px] capitalize py-0 bg-muted/50">
+                                    {inc.frequency}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{inc.note || "—"}</TableCell>
+                                <TableCell className="font-black text-xs text-emerald-600 text-right">
+                                  ₹{formatCurrency(inc.amount)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      onClick={() => {
+                                        setEditingIncome(inc)
+                                        setFormOpen(true)
+                                      }}
+                                    >
+                                      <Edit2 className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      onClick={() => {
+                                        if (confirm(`Delete income record for ₹${formatCurrency(inc.amount)}?`)) {
+                                          deleteIncome(inc.id)
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-2 py-1 text-xs">
+                          <p className="text-muted-foreground font-semibold">
+                            Showing {(currentPage - 1) * rowsPerPage + 1}–{Math.min(currentPage * rowsPerPage, filteredAndSortedIncome.length)} of {filteredAndSortedIncome.length} entries
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={currentPage === 1}
+                              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="font-bold px-2">{currentPage} / {totalPages}</span>
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={currentPage === totalPages}
+                              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </TabsContent>

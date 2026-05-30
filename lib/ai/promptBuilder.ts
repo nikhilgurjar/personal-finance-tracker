@@ -1,14 +1,23 @@
 // lib/ai/promptBuilder.ts
 // Assembles a tight system + user prompt based on the classified intent.
-// Each intent gets a specific instruction block — not a generic "finance assistant" blob.
-// Target: 150–800 tokens total.
+// v2: today's date injected, tabular data format, safe per-collection truncation,
+//     conversation history support, improved token estimator.
 
 import type { Intent } from "./contextRouter"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface HistoryMessage {
+  role: "user" | "assistant"
+  content: string
+}
 
 interface PromptInput {
   intent: Intent
   dataSlice: Record<string, any[]>
   question: string
+  timeFilterLabel?: string   // e.g. "this month" — injected into system prompt
+  history?: HistoryMessage[] // last N conversation turns for follow-up support
 }
 
 interface BuiltPrompt {
@@ -20,123 +29,188 @@ interface BuiltPrompt {
 // ─── Per-intent system instruction blocks ────────────────────────────────────
 
 const SYSTEM_BLOCKS: Record<Intent, string> = {
-  EXPENSE_QUERY: `You are a concise personal finance analyst. The user is asking about their expenses.
+  EXPENSE_QUERY: `You are an extremely concise personal finance analyst.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Group by category when helpful, show totals.
-- Highlight the top 3 expense categories if relevant.
-- Keep your answer under 150 words.
-- If data is missing or empty, say so clearly.`,
+- Use ₹ (Indian Rupees).
+- Show category-wise breakdown and top expenses.
+- Do NOT provide advice or suggestions. Keep it strictly to the data.
+- Keep response under 80 words.`,
 
-  INCOME_QUERY: `You are a concise personal finance analyst. The user is asking about their income.
+  INCOME_QUERY: `You are an extremely concise personal finance analyst.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Distinguish between one-time and recurring income.
-- Show monthly total if asked.
-- Keep your answer under 120 words.
-- If data is missing, say so clearly.`,
+- Use ₹ (Indian Rupees).
+- List income sources and totals.
+- Keep response under 60 words.`,
 
-  SIP_QUERY: `You are a concise investment assistant specializing in SIPs (Systematic Investment Plans).
+  SIP_QUERY: `You are an extremely concise SIP tracking assistant.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Show active SIPs, monthly commitment, and total invested.
-- Mention the investment type (MF, ETF, Gold, etc.).
-- Keep your answer under 150 words.
-- Do not give investment advice. Stick to the data.`,
+- Use ₹ (Indian Rupees).
+- List active SIPs and totals. No investment advice.
+- Keep response under 80 words.`,
 
-  GOAL_QUERY: `You are a concise personal finance coach helping track savings goals.
+  GOAL_QUERY: `You are an extremely concise savings goals tracker.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Show progress as a percentage and absolute amount (saved / target).
-- If deadline is available, mention if the user is on track.
-- Keep your answer under 150 words.`,
+- Use ₹ (Indian Rupees).
+- List each goal with progress (saved / target and %).
+- Mention which savings/mutual funds are allocated to it and their amounts if the data shows these links.
+- Keep response under 100 words.`,
 
-  BALANCE_QUERY: `You are a concise personal finance assistant providing account balance summaries.
+  BALANCE_QUERY: `You are an extremely concise account balance tracker.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- List each account with its balance and type.
-- Show net worth (total assets minus credit card balances).
-- Keep your answer under 100 words.`,
+- Use ₹ (Indian Rupees).
+- List accounts and compute net worth.
+- Keep response under 60 words.`,
 
-  DEBT_QUERY: `You are a concise personal finance assistant for tracking lend/borrow records.
+  DEBT_QUERY: `You are an extremely concise lend/borrow tracker.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Clearly distinguish "lent" (others owe you) vs "borrowed" (you owe others).
-- Show net position per person.
-- Keep your answer under 120 words.`,
+- Use ₹ (Indian Rupees).
+- IMPORTANT: Group and display net positions strictly using the "personName" field. Do NOT use the "note" or description content as the person's name.
+- Report net position per person: (lent - repayments received) or (borrowed - repayments made).
+- Keep response under 70 words.`,
 
-  SAVINGS_QUERY: `You are a concise personal finance assistant specializing in savings instruments.
+  SAVINGS_QUERY: `You are an extremely concise savings assistant.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Distinguish FD, MF, PPF, Stocks, RD, NPS, Gold, Crypto.
-- Show total savings amount.
-- Keep your answer under 120 words.`,
+- Use ₹ (Indian Rupees).
+- List savings instruments and totals.
+- Keep response under 70 words.`,
 
-  GENERAL: `You are Finio, a concise personal finance assistant for an Indian user.
+  GENERAL: `You are Finio, an extremely concise personal finance assistant.
 Rules:
-- Use ₹ (Indian Rupees) for all amounts.
-- Give a brief overview based on the provided data.
-- Be friendly, professional, and specific.
-- Keep your answer under 200 words.
-- Do not make up numbers not in the provided data.`,
+- Use ₹ (Indian Rupees).
+- Answer direct questions without chatty filler.
+- Keep response under 90 words.`,
 }
 
-// ─── Data serializer — keeps JSON compact ────────────────────────────────────
+// ─── Fields to strip from every row (saves tokens, not useful to the model) ──
 
-function serializeSlice(dataSlice: Record<string, any[]>): string {
+const SKIP_FIELDS = new Set([
+  "photoURL",
+  "userId",
+  "createdAt",
+  "updatedAt",
+  "__typename",
+])
+
+// ─── Data serializer ──────────────────────────────────────────────────────────
+
+/**
+ * Converts a data slice into a compact tabular text format.
+ * Tabular format is significantly easier for LLMs to parse than raw JSON blobs,
+ * and uses ~30% fewer tokens for the same data.
+ */
+function serializeCollection(collectionName: string, rows: any[]): string {
+  if (rows.length === 0) {
+    return `[${collectionName.toUpperCase()}]: No records found.`
+  }
+
+  // Gather all keys from all rows (union), excluding skipped fields
+  const keySet = new Set<string>()
+  for (const row of rows) {
+    for (const k of Object.keys(row)) {
+      if (!SKIP_FIELDS.has(k) && row[k] !== undefined && row[k] !== null && row[k] !== "") {
+        keySet.add(k)
+      }
+    }
+  }
+  const keys = Array.from(keySet)
+
+  const header = keys.join(" | ")
+  const rowLines = rows.map((row) =>
+    keys.map((k) => {
+      const v = row[k]
+      if (v === undefined || v === null || v === "") return "-"
+      // Flatten Firestore Timestamp objects to ISO string
+      if (typeof v === "object" && "seconds" in v) {
+        return new Date(v.seconds * 1000).toISOString().slice(0, 10)
+      }
+      if (typeof v === "object") return JSON.stringify(v)
+      return String(v)
+    }).join(" | ")
+  )
+
+  return `[${collectionName.toUpperCase()}] — ${rows.length} record(s):\n${header}\n${rowLines.join("\n")}`
+}
+
+/**
+ * Safe truncation: if a single collection exceeds its budget, reduce its rows
+ * rather than cutting mid-table or mid-JSON.
+ */
+function serializeSlice(
+  dataSlice: Record<string, any[]>,
+  maxTotalChars = 2800
+): string {
+  const collectionNames = Object.keys(dataSlice)
+  if (collectionNames.length === 0) return "No data available."
+
+  const charBudgetPerCollection = Math.floor(maxTotalChars / collectionNames.length)
   const parts: string[] = []
 
-  for (const [col, rows] of Object.entries(dataSlice)) {
-    if (rows.length === 0) {
-      parts.push(`[${col.toUpperCase()}]: No data available.`)
-      continue
+  for (const col of collectionNames) {
+    let rows = dataSlice[col]
+    let serialized = serializeCollection(col, rows)
+
+    // If over budget: reduce row count until it fits (minimum 3 rows)
+    while (serialized.length > charBudgetPerCollection && rows.length > 3) {
+      rows = rows.slice(0, Math.max(3, Math.floor(rows.length * 0.7)))
+      serialized = serializeCollection(col, rows) + "\n...[additional rows omitted for brevity]"
     }
 
-    // Strip verbose/internal fields to save tokens
-    const cleaned = rows.map((r) => {
-      const out: Record<string, any> = {}
-      const skip = ["id", "linkedGoals", "savings_ids", "savings_allocations", "photoURL"]
-      for (const [k, v] of Object.entries(r)) {
-        if (!skip.includes(k) && v !== undefined && v !== null && v !== "") {
-          out[k] = v
-        }
-      }
-      return out
-    })
-
-    parts.push(`[${col.toUpperCase()}] (${rows.length} records):\n${JSON.stringify(cleaned, null, 0)}`)
+    parts.push(serialized)
   }
 
   return parts.join("\n\n")
 }
 
-// ─── Token estimator (rough: 1 token ≈ 4 chars) ──────────────────────────────
+// ─── Token estimator ──────────────────────────────────────────────────────────
 
+/** ~3.5 chars per token is closer to reality than the old 4.0 estimate */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4)
+  return Math.ceil(text.length / 3.5)
+}
+
+// ─── History serializer ───────────────────────────────────────────────────────
+
+function serializeHistory(history: HistoryMessage[]): string {
+  if (!history.length) return ""
+  const lines = history.map(
+    (m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 300)}`
+  )
+  return `\n\n--- Conversation history (most recent last) ---\n${lines.join("\n")}\n--- End of history ---`
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
- * Builds the final system + user prompt from the classified intent and data slice.
- * Keeps total tokens between 150–800.
+ * Builds the final system + user prompt from the classified intent, data slice,
+ * optional conversation history, and time filter context.
  */
 export function buildPrompt(input: PromptInput): BuiltPrompt {
-  const { intent, dataSlice, question } = input
+  const { intent, dataSlice, question, timeFilterLabel, history = [] } = input
 
-  const systemInstruction = SYSTEM_BLOCKS[intent] ?? SYSTEM_BLOCKS.GENERAL
+  const todayStr = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })
+
+  const timeNote = timeFilterLabel
+    ? `\nThe user's question refers to: **${timeFilterLabel}**. Restrict your analysis to that period.`
+    : ""
+
+  const systemInstruction =
+    `Today's date: ${todayStr}${timeNote}\n` +
+    `Global Rules:\n` +
+    `- Be extremely direct, concise, and professional. Do NOT include greetings (like "Namaste!"), conversational filler, or intro/outro sentences.\n` +
+    `- Stick strictly to facts in the provided data. Do NOT provide unsolicited suggestions, warnings, or financial advice unless specifically requested.\n\n` +
+    (SYSTEM_BLOCKS[intent] ?? SYSTEM_BLOCKS.GENERAL)
 
   const serialized = serializeSlice(dataSlice)
+  const historyBlock = serializeHistory(history.slice(-6)) // last 3 turns (6 messages)
 
-  // If serialized data is too long, truncate gracefully
-  const MAX_DATA_CHARS = 2400 // ~600 tokens
-  const truncated =
-    serialized.length > MAX_DATA_CHARS
-      ? serialized.slice(0, MAX_DATA_CHARS) + "\n...[data truncated for brevity]"
-      : serialized
-
-  const userMessage = `User's financial data:\n${truncated}\n\nUser's question: ${question}`
+  const userMessage =
+    `User's financial data:\n${serialized}` +
+    historyBlock +
+    `\n\nUser's question: ${question}`
 
   const totalTokens = estimateTokens(systemInstruction) + estimateTokens(userMessage)
 

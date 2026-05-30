@@ -114,6 +114,7 @@ export interface SIPSchedule {
   totalInvested?: number
   linkedGoal?: string
   note?: string
+  savingId?: string
 }
 
 interface FinanceDataContextType {

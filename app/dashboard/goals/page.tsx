@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { Target, CheckCircle2, Clock, Trash2, Edit2, Info, PiggyBank, ArrowUpRight, ShieldAlert, Plus } from "lucide-react"
+import { Target, CheckCircle2, Clock, Trash2, Edit2, Info, PiggyBank, ShieldAlert, Plus, ArrowRight } from "lucide-react"
 import { GoalForm } from "@/components/forms/goal-form"
 import { useFinanceData, Goal, Saving } from "@/hooks/use-finance-data"
 import { useState } from "react"
@@ -18,12 +18,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import Link from "next/link"
 
 export default function GoalsPage() {
   const { goals, deleteGoal, savings, apps, providers } = useFinanceData()
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [formOpen, setFormOpen] = useState(false)
-  
+
   // Goal Details state
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -70,8 +71,8 @@ export default function GoalsPage() {
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">Goals</h1>
           <p className="text-sm text-muted-foreground mt-1 font-medium">Track long-term target indices and back them with assets</p>
         </div>
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           onClick={() => {
             setEditingGoal(null)
             setFormOpen(true)
@@ -151,14 +152,14 @@ export default function GoalsPage() {
           const linkedSavings = getGoalSavingsBacking(g)
           const totalLinkedBacking = linkedSavings.reduce((sum, item) => sum + safeNumber(item.amount), 0)
           const netSaved = safeNumber(g.current) + totalLinkedBacking
-          
+
           const pct = Math.min(100, Math.round((netSaved / safeNumber(g.target)) * 100))
           const done = pct === 100
           const remaining = Math.max(0, g.target - netSaved)
 
           return (
-            <Card 
-              key={g.id} 
+            <Card
+              key={g.id}
               className={`group border-border/70 shadow-sm hover:shadow-md transition-all relative overflow-hidden bg-background/60 backdrop-blur-md
                 ${done ? "border-emerald-500/20 bg-emerald-500/5 hover:border-emerald-500/30" : "hover:border-primary/20"}`}
             >
@@ -185,16 +186,17 @@ export default function GoalsPage() {
                     Target: <span className="text-foreground font-black">₹{formatCurrency(g.target)}</span>
                   </span>
                 </div>
-                
+
                 <Separator className="bg-border/30" />
 
-                <div className="flex items-center justify-between">
+                {/* Card action row */}
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-                    {linkedSavings.length} linked backing asset{linkedSavings.length !== 1 ? "s" : ""}
+                    {linkedSavings.length} linked asset{linkedSavings.length !== 1 ? "s" : ""}
                   </span>
-                  
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Details (opens dialog with Edit + Delete inside) */}
                     <Button
                       variant="outline"
                       size="icon-xs"
@@ -203,35 +205,24 @@ export default function GoalsPage() {
                         setDetailsOpen(true)
                       }}
                       className="h-7 w-7 rounded-md border-border/60"
-                      title="Asset Details"
+                      title="Goal Details"
                     >
                       <Info className="h-3.5 w-3.5 text-primary" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="icon-xs"
-                      onClick={() => {
-                        setEditingGoal(g)
-                        setFormOpen(true)
-                      }}
-                      className="h-7 w-7 rounded-md border-border/60"
-                      title="Edit Goal"
-                    >
-                      <Edit2 className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="icon-xs"
-                      onClick={() => {
-                        if (confirm(`Delete financial goal ${g.name}?`)) {
-                          deleteGoal(g.id)
-                        }
-                      }}
-                      className="h-7 w-7 rounded-md"
-                      title="Delete Goal"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+
+                    {/* Allocate Savings — full-page link */}
+                    <Link href={`/dashboard/goals/${g.id}/allocate`}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 rounded-md border-border/60 gap-1 text-[10px] font-bold text-primary hover:bg-primary/5 hover:border-primary/30"
+                        title="Allocate Savings"
+                      >
+                        <PiggyBank className="h-3 w-3" />
+                        Allocate Savings
+                        <ArrowRight className="h-3 w-3" />
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </CardContent>
@@ -247,7 +238,7 @@ export default function GoalsPage() {
         onOpenChange={setFormOpen}
       />
 
-      {/* ─── GOAL DETAILS DIALOG ─── */}
+      {/* ─── GOAL DETAILS DIALOG — includes Edit & Delete ─── */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
           <DialogHeader>
@@ -269,7 +260,7 @@ export default function GoalsPage() {
 
             return (
               <div className="space-y-4 pt-2">
-                
+
                 {/* Visual Allocation Card */}
                 <div className="rounded-xl border border-border/60 bg-muted/40 p-4 space-y-3.5">
                   <div className="flex justify-between items-baseline">
@@ -300,11 +291,11 @@ export default function GoalsPage() {
                     <PiggyBank className="h-4 w-4 text-primary" />
                     <span>Allocated Backing Assets</span>
                   </h4>
-                  
+
                   <Separator className="bg-border/30" />
-                  
-                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    
+
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+
                     {/* Base savings */}
                     {safeNumber(selectedGoal.current) > 0 && (
                       <div className="flex items-center justify-between p-3 rounded-lg border border-primary/10 bg-primary/5 text-xs font-semibold">
@@ -345,18 +336,49 @@ export default function GoalsPage() {
                     })}
 
                     {selectedGoal.current === 0 && linkedSavings.length === 0 && (
-                      <div className="text-center py-6 border border-dashed rounded-lg">
+                      <div className="text-center py-5 border border-dashed rounded-lg">
                         <ShieldAlert className="h-5 w-5 text-muted-foreground mx-auto mb-1.5" />
                         <p className="text-xs text-muted-foreground font-semibold">No assets are currently backing this goal.</p>
-                        <p className="text-[10px] text-muted-foreground/80 mt-0.5">Link assets in the Savings or Goal Forms.</p>
+                        <p className="text-[10px] text-muted-foreground/80 mt-0.5">Use Allocate Savings to link assets.</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
-                  <Button size="sm" variant="outline" onClick={() => setDetailsOpen(false)}>
-                    Close Details
+                {/* ── Edit & Delete actions ── */}
+                <Separator className="bg-border/30" />
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs font-semibold"
+                      onClick={() => {
+                        setDetailsOpen(false)
+                        setEditingGoal(selectedGoal)
+                        setFormOpen(true)
+                      }}
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                      Edit Goal
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="gap-1.5 text-xs font-semibold"
+                      onClick={() => {
+                        if (confirm(`Delete financial goal "${selectedGoal.name}"?`)) {
+                          deleteGoal(selectedGoal.id)
+                          setDetailsOpen(false)
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => setDetailsOpen(false)}>
+                    Close
                   </Button>
                 </div>
               </div>

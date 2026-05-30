@@ -18,8 +18,7 @@ import { Button } from "@/components/ui/button"
 import { GOAL_CATEGORIES } from "@/constants/finance"
 import { useFinanceData, Goal } from "@/hooks/use-finance-data"
 import { useState, useEffect } from "react"
-import { Plus, X } from "lucide-react"
-import { formatCurrency, safeNumber } from "@/lib/utils"
+import { Plus } from "lucide-react"
 
 const schema = z.object({
   name:     z.string().min(1, "Name is required"),
@@ -44,8 +43,7 @@ export function GoalForm({ initialData, triggerButton, open: controlledOpen, onO
   const open = isControlled ? controlledOpen : localOpen
   const setOpen = isControlled ? controlledOnOpenChange : setLocalOpen
 
-  const { addGoal, updateGoal, savings } = useFinanceData()
-  const [savingAllocations, setSavingAllocations] = useState<Record<string, number>>({})
+  const { addGoal, updateGoal } = useFinanceData()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema as any),
@@ -56,18 +54,6 @@ export function GoalForm({ initialData, triggerButton, open: controlledOpen, onO
 
   useEffect(() => {
     if (initialData && open) {
-      const allocations: Record<string, number> = {}
-      if (initialData.savings_allocations?.length) {
-        initialData.savings_allocations.forEach((alloc) => {
-          allocations[alloc.id] = alloc.amount
-        })
-      } else if (initialData.savings_ids?.length) {
-        initialData.savings_ids.forEach((id) => {
-          const savingsItem = savings.find((s) => s.id === id)
-          allocations[id] = savingsItem?.amount ?? 0
-        })
-      }
-
       form.reset({
         name: initialData.name,
         category: initialData.category,
@@ -75,57 +61,24 @@ export function GoalForm({ initialData, triggerButton, open: controlledOpen, onO
         current: initialData.current,
         deadline: initialData.deadline || "",
       })
-      setSavingAllocations(allocations)
     } else if (!initialData && open) {
       form.reset({
         name: "", category: "emergency_fund", target: 0, current: 0, deadline: "",
       })
-      setSavingAllocations({})
     }
-  }, [initialData, open, form, savings])
-
-  function toggleSaving(id: string) {
-    setSavingAllocations((prev) => {
-      if (prev[id] !== undefined) {
-        const next = { ...prev }
-        delete next[id]
-        return next
-      }
-      const selectedSaving = savings.find((s) => s.id === id)
-      return {
-        ...prev,
-        [id]: selectedSaving?.amount ?? 0,
-      }
-    })
-  }
-
-  function setAllocation(id: string, amount: number) {
-    setSavingAllocations((prev) => {
-      const next = { ...prev }
-      if (amount <= 0) {
-        delete next[id]
-      } else {
-        next[id] = amount
-      }
-      return next
-    })
-  }
+  }, [initialData, open, form])
 
   async function onSubmit(values: FormValues) {
     const randomColors = ["bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-pink-500", "bg-amber-500"]
     const color = initialData?.color || randomColors[Math.floor(Math.random() * randomColors.length)]
-
-    const savingsAllocations = Object.entries(savingAllocations)
-      .filter(([, amount]) => amount > 0)
-      .map(([id, amount]) => ({ id, amount }))
 
     const formattedData = {
       name: values.name,
       category: values.category,
       target: values.target,
       current: values.current,
-      savings_ids: Object.keys(savingAllocations),
-      savings_allocations: savingsAllocations,
+      savings_ids: initialData?.savings_ids || [],
+      savings_allocations: initialData?.savings_allocations || [],
       deadline: values.deadline || "",
       color
     }
@@ -137,7 +90,6 @@ export function GoalForm({ initialData, triggerButton, open: controlledOpen, onO
     }
 
     form.reset()
-    setSavingAllocations({})
     if (setOpen) setOpen(false)
   }
 
@@ -220,51 +172,6 @@ export function GoalForm({ initialData, triggerButton, open: controlledOpen, onO
                 <FormMessage />
               </FormItem>
             )} />
-
-            {/* Link to Savings — dynamically from useFinanceData savings */}
-            <div className="space-y-2 pt-1">
-              <FormLabel className="text-sm font-semibold">Allocate Savings to this Goal <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
-              <div className="space-y-2">
-                {savings.map((s) => {
-                  const active = savingAllocations[s.id] !== undefined
-                  const allocation = savingAllocations[s.id] ?? 0
-                  return (
-                    <div key={s.id} className="rounded-2xl border border-border/60 bg-muted/50 p-3 flex flex-col gap-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleSaving(s.id)}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all select-none ${active ? "bg-primary/10 text-primary border border-primary/20" : "bg-white/80 text-muted-foreground border border-border/60 hover:bg-muted"}`}
-                        >
-                          {active ? "Linked" : "Link"}
-                        </button>
-                        <div className="text-xs font-semibold text-muted-foreground">₹{formatCurrency(s.amount)} total</div>
-                      </div>
-                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div className="text-sm font-bold text-foreground">🐷 {s.name}</div>
-                        {active ? (
-                          <Input
-                            type="number"
-                            min={0}
-                            max={safeNumber(s.amount)}
-                            step={100}
-                            value={allocation}
-                            onChange={(e) => setAllocation(s.id, Number(e.target.value))}
-                            placeholder={`Allocate up to ₹${formatCurrency(s.amount)}`}
-                            className="max-w-[220px]"
-                          />
-                        ) : (
-                          <div className="text-[10px] text-muted-foreground">Tap Link to allocate part of this asset</div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-                {savings.length === 0 && (
-                  <p className="text-xs text-muted-foreground font-medium py-1">No active savings assets logged yet. Create some in the Savings tab!</p>
-                )}
-              </div>
-            </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-border/30">
               <Button type="button" variant="outline" onClick={() => setOpen?.(false)}>

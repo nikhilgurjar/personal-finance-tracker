@@ -7,18 +7,43 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { SAVINGS_HISTORY, SAVINGS_TYPES } from "@/constants/finance"
-import { Plus, TrendingUp, CalendarDays, Edit2, Trash2, Shield, Building, AppWindow as AppIcon } from "lucide-react"
+import { Plus, TrendingUp, CalendarDays, Edit2, Trash2, Shield, Building, AppWindow as AppIcon, ArrowUpDown, ChevronLeft, ChevronRight, Info, PiggyBank, Target, ShieldAlert } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { SavingsForm } from "@/components/forms/savings-form"
-import { useFinanceData, Saving } from "@/hooks/use-finance-data"
+import { useFinanceData, Saving, Goal } from "@/hooks/use-finance-data"
 import { useState } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function SavingsPage() {
   const { savings, deleteSaving, apps, addApp, providers, addProvider, goals, isDemo } = useFinanceData()
   const [editingSaving, setEditingSaving] = useState<Saving | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+
+  // Saving Assets Table State
+  const [savingSearchTerm, setSavingSearchTerm] = useState("")
+  const [savingOwnerFilter, setSavingOwnerFilter] = useState("all")
+  const [savingSortBy, setSavingSortBy] = useState<"name" | "owner" | "amount">("name")
+  const [savingSortOrder, setSavingSortOrder] = useState<"asc" | "desc">("asc")
+  const [savingCurrentPage, setSavingCurrentPage] = useState(1)
+  const savingRowsPerPage = 5
+
+  // Goals Table State
+  const [goalSearchTerm, setGoalSearchTerm] = useState("")
+  const [goalSortBy, setGoalSortBy] = useState<"name" | "target" | "progress">("name")
+  const [goalSortOrder, setGoalSortOrder] = useState<"asc" | "desc">("asc")
+  const [goalCurrentPage, setGoalCurrentPage] = useState(1)
+  const goalRowsPerPage = 5
+
+  // Dialog Details States
+  const [selectedSaving, setSelectedSaving] = useState<Saving | null>(null)
+  const [savingDetailsOpen, setSavingDetailsOpen] = useState(false)
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null)
+  const [goalDetailsOpen, setGoalDetailsOpen] = useState(false)
 
   // Apps & Providers Local Inputs
   const [newAppName, setNewAppName] = useState("")
@@ -161,6 +186,13 @@ export default function SavingsPage() {
             <span>Savings Assets</span>
           </TabsTrigger>
           <TabsTrigger 
+            value="goals" 
+            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+          >
+            <span>🎯</span>
+            <span>Savings Goals</span>
+          </TabsTrigger>
+          <TabsTrigger 
             value="trend" 
             className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
           >
@@ -181,94 +213,234 @@ export default function SavingsPage() {
           {/* Tab 1: Savings List Table */}
           <TabsContent value="list" className="mt-0 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold font-sans">Active Financial Assets</CardTitle>
-                <CardDescription className="text-xs">Linked saving deposits, SIP mutual funds, and equities</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 flex-wrap gap-4">
+                <div>
+                  <CardTitle className="text-xl font-bold font-sans">Active Financial Assets</CardTitle>
+                  <CardDescription className="text-xs">Linked saving deposits, SIP mutual funds, and equities</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <Input
+                    placeholder="Search name, app, provider..."
+                    value={savingSearchTerm}
+                    onChange={(e) => {
+                      setSavingSearchTerm(e.target.value)
+                      setSavingCurrentPage(1)
+                    }}
+                    className="h-8 text-xs w-[180px] bg-background"
+                  />
+                  <Select
+                    value={savingOwnerFilter}
+                    onValueChange={(val) => {
+                      setSavingOwnerFilter(val)
+                      setSavingCurrentPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs bg-background">
+                      <SelectValue placeholder="All Owners" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">👤 All Owners</SelectItem>
+                      {Array.from(new Set(savings.map((s) => s.owner).filter(Boolean))).map((owner) => (
+                        <SelectItem key={owner} value={owner}>
+                          {owner}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1">
-                  {savings.length === 0 ? (
-                    <div className="text-center py-10">
-                      <p className="text-sm text-muted-foreground font-medium">No active assets registered. Link your savings now!</p>
-                    </div>
-                  ) : (
-                    savings.map((sav, i) => {
+                {(() => {
+                  const filteredAndSortedSavings = savings
+                    .filter((sav) => {
                       const matchedApp = apps.find(a => a.value === sav.app)?.label || sav.app
                       const matchedProvider = providers.find(p => p.value === sav.provider)?.label || sav.provider
-                      const fullTypeLabel = TYPE_MAP[sav.type] || sav.type
-                      const typeIcon = fullTypeLabel.match(/[\p{Emoji}\u200d]+/gu)?.[0] || "💰"
-                      
-                      return (
-                        <div key={sav.id}>
-                          <div className="flex items-center justify-between py-4 px-2 hover:bg-muted/15 rounded-xl transition-all group">
-                            <div className="flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-xl bg-muted flex items-center justify-center text-lg">
-                                {typeIcon}
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold tracking-tight text-foreground">{sav.name}</p>
-                                <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground mt-0.5 font-medium">
-                                  <span>👤 {sav.owner}</span>
-                                  <span>·</span>
-                                  <span>📱 {matchedApp}</span>
-                                  <span>·</span>
-                                  <span>🏦 {matchedProvider}</span>
-                                </div>
-                                {/* Linked Goals */}
-                                {getSavingsGoalIds(sav).length > 0 && (
-                                  <div className="flex flex-wrap gap-1.5 mt-2">
-                                    {getSavingsGoalIds(sav).map((gid) => {
-                                      const goalMatch = goals.find((g) => g.id === gid)
-                                      return goalMatch ? (
-                                        <Badge key={gid} variant="outline" className="text-[9px] font-bold py-0 bg-primary/5 text-primary border-primary/10">
-                                          🎯 {goalMatch.name}
-                                        </Badge>
-                                      ) : null
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <p className="text-sm font-black tracking-tight text-foreground">₹{formatCurrency(sav.amount)}</p>
-                                <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">{sav.frequency || "One-time"}</p>
-                              </div>
-                              
-                              <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  variant="outline"
-                                  size="icon-xs"
-                                  onClick={() => {
-                                    setEditingSaving(sav)
-                                    setFormOpen(true)
-                                  }}
-                                  className="h-7 w-7 rounded-md border-border/60"
-                                >
-                                  <Edit2 className="h-3 w-3 text-muted-foreground" />
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="icon-xs"
-                                  onClick={() => {
-                                    if (confirm(`Delete saving asset ${sav.name}?`)) {
-                                      deleteSaving(sav.id)
-                                    }
-                                  }}
-                                  className="h-7 w-7 rounded-md"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                          {i < savings.length - 1 && <Separator className="bg-border/30" />}
-                        </div>
-                      )
+                      const matchOwner = savingOwnerFilter === "all" || sav.owner === savingOwnerFilter
+                      const matchSearch =
+                        sav.name.toLowerCase().includes(savingSearchTerm.toLowerCase()) ||
+                        matchedApp.toLowerCase().includes(savingSearchTerm.toLowerCase()) ||
+                        matchedProvider.toLowerCase().includes(savingSearchTerm.toLowerCase()) ||
+                        sav.owner.toLowerCase().includes(savingSearchTerm.toLowerCase())
+                      return matchOwner && matchSearch
                     })
-                  )}
-                </div>
+                    .sort((a, b) => {
+                      let comparison = 0
+                      if (savingSortBy === "name") {
+                        comparison = a.name.localeCompare(b.name)
+                      } else if (savingSortBy === "owner") {
+                        comparison = a.owner.localeCompare(b.owner)
+                      } else if (savingSortBy === "amount") {
+                        comparison = safeNumber(a.amount) - safeNumber(b.amount)
+                      }
+                      return savingSortOrder === "asc" ? comparison : -comparison
+                    })
+
+                  const totalPages = Math.ceil(filteredAndSortedSavings.length / savingRowsPerPage)
+                  const paginatedSavings = filteredAndSortedSavings.slice(
+                    (savingCurrentPage - 1) * savingRowsPerPage,
+                    savingCurrentPage * savingRowsPerPage
+                  )
+
+                  const handleSort = (field: "name" | "owner" | "amount") => {
+                    if (savingSortBy === field) {
+                      setSavingSortOrder(savingSortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setSavingSortBy(field)
+                      setSavingSortOrder("asc")
+                    }
+                    setSavingCurrentPage(1)
+                  }
+
+                  if (filteredAndSortedSavings.length === 0) {
+                    return (
+                      <div className="text-center py-10">
+                        <p className="text-sm text-muted-foreground font-medium">No active assets registered. Link your savings now!</p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-border/40 overflow-hidden bg-background/30">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("name")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Asset</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("owner")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Owner</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead>Platform / Institution</TableHead>
+                              <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("amount")}>
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span>Amount</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedSavings.map((sav) => {
+                              const matchedApp = apps.find(a => a.value === sav.app)?.label || sav.app
+                              const matchedProvider = providers.find(p => p.value === sav.provider)?.label || sav.provider
+                              const fullTypeLabel = TYPE_MAP[sav.type] || sav.type
+                              const typeIcon = fullTypeLabel.match(/[\p{Emoji}\u200d]+/gu)?.[0] || "💰"
+
+                              return (
+                                <TableRow key={sav.id}>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg">{typeIcon}</span>
+                                      <div>
+                                        <p className="font-bold text-xs">{sav.name}</p>
+                                        {getSavingsGoalIds(sav).length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-1">
+                                            {getSavingsGoalIds(sav).map((gid) => {
+                                              const goalMatch = goals.find((g) => g.id === gid)
+                                              return goalMatch ? (
+                                                <Badge key={gid} variant="outline" className="text-[8px] font-bold py-0 px-1 bg-primary/5 text-primary border-primary/10">
+                                                  🎯 {goalMatch.name}
+                                                </Badge>
+                                              ) : null
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-xs font-semibold text-muted-foreground">👤 {sav.owner}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    <span>📱 {matchedApp}</span>
+                                    <span className="mx-1.5">·</span>
+                                    <span>🏦 {matchedProvider}</span>
+                                  </TableCell>
+                                  <TableCell className="font-black text-xs text-foreground text-right">
+                                    <p>₹{formatCurrency(sav.amount)}</p>
+                                    <p className="text-[9px] text-muted-foreground font-semibold mt-0.5">{sav.frequency || "One-time"}</p>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={() => {
+                                          setSelectedSaving(sav)
+                                          setSavingDetailsOpen(true)
+                                        }}
+                                        title="View Details"
+                                      >
+                                        <Info className="h-3.5 w-3.5 text-primary" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={() => {
+                                          setEditingSaving(sav)
+                                          setFormOpen(true)
+                                        }}
+                                        title="Edit"
+                                      >
+                                        <Edit2 className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={() => {
+                                          if (confirm(`Delete saving asset ${sav.name}?`)) {
+                                            deleteSaving(sav.id)
+                                          }
+                                        }}
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-2 py-1 text-xs">
+                          <p className="text-muted-foreground font-semibold">
+                            Showing {(savingCurrentPage - 1) * savingRowsPerPage + 1}–{Math.min(savingCurrentPage * savingRowsPerPage, filteredAndSortedSavings.length)} of {filteredAndSortedSavings.length} entries
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={savingCurrentPage === 1}
+                              onClick={() => setSavingCurrentPage((p) => Math.max(1, p - 1))}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="font-bold px-2">{savingCurrentPage} / {totalPages}</span>
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={savingCurrentPage === totalPages}
+                              onClick={() => setSavingCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -400,9 +572,209 @@ export default function SavingsPage() {
                   </div>
                 </CardContent>
               </Card>
-
-            </div>
+</div>
           </TabsContent>
+
+          {/* Tab 2: Goals list table */}
+          <TabsContent value="goals" className="mt-0 focus-visible:outline-none">
+            <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
+          <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 flex-wrap gap-4">
+            <div>
+              <CardTitle className="text-xl font-bold font-sans">Financial Milestone backing</CardTitle>
+              <CardDescription className="text-xs">Goals list in table format. Creation/edits allowed only on Goals page.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Search goals..."
+                value={goalSearchTerm}
+                onChange={(e) => {
+                  setGoalSearchTerm(e.target.value)
+                  setGoalCurrentPage(1)
+                }}
+                className="h-8 text-xs w-[180px] bg-background"
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              // Helper to query linked savings details for any goal
+              const getGoalSavingsBackingLocal = (g: Goal) => {
+                const allocations = (g.savings_allocations && g.savings_allocations.length > 0)
+                  ? g.savings_allocations
+                  : (g.savings_ids || []).map((id) => ({ id, amount: 0 }))
+
+                const fallbackAllocations = savings
+                  .filter((s) => s.linkedGoals?.includes(g.id) && !allocations.some((alloc) => alloc.id === s.id))
+                  .map((s) => ({ id: s.id, amount: 0 }))
+
+                const combined = [...allocations, ...fallbackAllocations]
+
+                return combined
+                  .map((alloc) => {
+                    const saving = savings.find((s) => s.id === alloc.id)
+                    if (!saving) return null
+                    const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
+                    return {
+                      saving,
+                      allocatedAmount: alloc.amount,
+                      amount: effectiveAmount,
+                    }
+                  })
+                  .filter((item): item is { saving: Saving; allocatedAmount: number; amount: number } => item !== null)
+              }
+
+              const filteredAndSortedGoals = goals
+                .filter((g) => g.name.toLowerCase().includes(goalSearchTerm.toLowerCase()))
+                .sort((a, b) => {
+                  let comparison = 0
+                  if (goalSortBy === "name") {
+                    comparison = a.name.localeCompare(b.name)
+                  } else if (goalSortBy === "target") {
+                    comparison = safeNumber(a.target) - safeNumber(b.target)
+                  } else if (goalSortBy === "progress") {
+                    const progressA = safeNumber(a.current) + getGoalSavingsBackingLocal(a).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                    const progressB = safeNumber(b.current) + getGoalSavingsBackingLocal(b).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                    comparison = progressA - progressB
+                  }
+                  return goalSortOrder === "asc" ? comparison : -comparison
+                })
+
+              const totalPages = Math.ceil(filteredAndSortedGoals.length / goalRowsPerPage)
+              const paginatedGoals = filteredAndSortedGoals.slice(
+                (goalCurrentPage - 1) * goalRowsPerPage,
+                goalCurrentPage * goalRowsPerPage
+              )
+
+              const handleSort = (field: "name" | "target" | "progress") => {
+                if (goalSortBy === field) {
+                  setGoalSortOrder(goalSortOrder === "asc" ? "desc" : "asc")
+                } else {
+                  setGoalSortBy(field)
+                  setGoalSortOrder("asc")
+                }
+                setGoalCurrentPage(1)
+              }
+
+              if (filteredAndSortedGoals.length === 0) {
+                return (
+                  <div className="text-center py-10">
+                    <p className="text-sm text-muted-foreground font-medium">No backing goals registered.</p>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-border/40 overflow-hidden bg-background/30">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="cursor-pointer select-none" onClick={() => handleSort("name")}>
+                            <div className="flex items-center gap-1">
+                              <span>Goal Name</span>
+                              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          </TableHead>
+                          <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("target")}>
+                            <div className="flex items-center gap-1 justify-end">
+                              <span>Target</span>
+                              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          </TableHead>
+                          <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("progress")}>
+                            <div className="flex items-center gap-1 justify-end">
+                              <span>Total Saved</span>
+                              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                            </div>
+                          </TableHead>
+                          <TableHead>Deadline</TableHead>
+                          <TableHead>Progress bar</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedGoals.map((g) => {
+                          const backing = getGoalSavingsBackingLocal(g)
+                          const totalBacking = backing.reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                          const netSaved = safeNumber(g.current) + totalBacking
+                          const pct = Math.min(100, Math.round((netSaved / safeNumber(g.target)) * 100))
+                          const done = pct === 100
+
+                          return (
+                            <TableRow key={g.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.color || "bg-primary"}`} />
+                                  <span className="font-bold text-xs">{g.name}</span>
+                                  {done && (
+                                    <Badge className="bg-emerald-600/90 text-white border-none font-bold text-[8px] py-0 px-1">
+                                      ✓ Met
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-bold text-xs text-right">₹{formatCurrency(g.target)}</TableCell>
+                              <TableCell className="font-extrabold text-xs text-primary text-right">₹{formatCurrency(netSaved)}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground font-semibold">{g.deadline || "No deadline"}</TableCell>
+                              <TableCell className="min-w-[120px]">
+                                <div className="flex items-center gap-2">
+                                  <Progress value={pct} className="h-2 flex-1" />
+                                  <span className="text-[10px] font-bold text-muted-foreground shrink-0">{pct}%</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  onClick={() => {
+                                    setSelectedGoal(g)
+                                    setGoalDetailsOpen(true)
+                                  }}
+                                  title="View Details Only"
+                                >
+                                  <Info className="h-3.5 w-3.5 text-primary" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-2 py-1 text-xs">
+                      <p className="text-muted-foreground font-semibold">
+                        Showing {(goalCurrentPage - 1) * goalRowsPerPage + 1}–{Math.min(goalCurrentPage * goalRowsPerPage, filteredAndSortedGoals.length)} of {filteredAndSortedGoals.length} entries
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon-xs"
+                          disabled={goalCurrentPage === 1}
+                          onClick={() => setGoalCurrentPage((p) => Math.max(1, p - 1))}
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </Button>
+                        <span className="font-bold px-2">{goalCurrentPage} / {totalPages}</span>
+                        <Button
+                          variant="outline"
+                          size="icon-xs"
+                          disabled={goalCurrentPage === totalPages}
+                          onClick={() => setGoalCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </CardContent>
+          </Card>
+      </TabsContent>
 
         </div>
       </Tabs>
@@ -413,6 +785,230 @@ export default function SavingsPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
       />
+
+      {/* ─── SAVING ASSETS DETAILS DIALOG ─── */}
+      <Dialog open={savingDetailsOpen} onOpenChange={setSavingDetailsOpen}>
+        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <span>🐷 Saving Asset:</span>
+              <span className="text-primary">{selectedSaving?.name}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Audit linked details and allocations for this resource.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSaving && (() => {
+            const matchedApp = apps.find(a => a.value === selectedSaving.app)?.label || selectedSaving.app
+            const matchedProvider = providers.find(p => p.value === selectedSaving.provider)?.label || selectedSaving.provider
+            const fullTypeLabel = TYPE_MAP[selectedSaving.type] || selectedSaving.type
+
+            return (
+              <div className="space-y-4 pt-2">
+                <div className="rounded-xl border border-border/60 bg-muted/40 p-4 space-y-2">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Asset Balance</p>
+                      <p className="text-lg font-black mt-0.5">₹{formatCurrency(selectedSaving.amount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Owner</p>
+                      <p className="text-sm font-bold text-foreground mt-1">👤 {selectedSaving.owner}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product Type</p>
+                      <p className="text-xs font-semibold mt-1 capitalize">{fullTypeLabel}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Frequency</p>
+                      <p className="text-xs font-semibold mt-1 capitalize">{selectedSaving.frequency || "One-time"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Platform App</p>
+                      <p className="text-xs font-semibold mt-1">📱 {matchedApp}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Institution / Fund House</p>
+                      <p className="text-xs font-semibold mt-1">🏦 {matchedProvider}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Backing Goals */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Target className="h-4 w-4 text-primary" />
+                    <span>Backing Milestones</span>
+                  </h4>
+                  <Separator className="bg-border/30" />
+                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                    {getSavingsGoalIds(selectedSaving).length === 0 ? (
+                      <div className="text-center py-4 border border-dashed rounded-lg">
+                        <p className="text-[11px] text-muted-foreground font-semibold">Not allocated to any goal.</p>
+                      </div>
+                    ) : (
+                      getSavingsGoalIds(selectedSaving).map((gid) => {
+                        const goalMatch = goals.find((g) => g.id === gid)
+                        if (!goalMatch) return null
+                        return (
+                          <div key={gid} className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-background/50 text-xs font-semibold">
+                            <span className="font-bold text-foreground">🎯 {goalMatch.name}</span>
+                            <Badge variant="outline" className="text-[9px] py-0 px-1 bg-primary/5 text-primary border-primary/10">
+                              Target: ₹{formatCurrency(goalMatch.target)}
+                            </Badge>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button size="sm" variant="outline" onClick={() => setSavingDetailsOpen(false)}>
+                    Close Details
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── GOAL DETAILS DIALOG ─── */}
+      <Dialog open={goalDetailsOpen} onOpenChange={setGoalDetailsOpen}>
+        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <span>🎯 Goal Details:</span>
+              <span className="text-primary">{selectedGoal?.name}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Granular review of allocated funding assets backing this target
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedGoal && (() => {
+            const getGoalSavingsBackingLocal = (g: Goal) => {
+              const allocations = (g.savings_allocations && g.savings_allocations.length > 0)
+                ? g.savings_allocations
+                : (g.savings_ids || []).map((id) => ({ id, amount: 0 }))
+
+              const fallbackAllocations = savings
+                .filter((s) => s.linkedGoals?.includes(g.id) && !allocations.some((alloc) => alloc.id === s.id))
+                .map((s) => ({ id: s.id, amount: 0 }))
+
+              const combined = [...allocations, ...fallbackAllocations]
+
+              return combined
+                .map((alloc) => {
+                  const saving = savings.find((s) => s.id === alloc.id)
+                  if (!saving) return null
+                  const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
+                  return {
+                    saving,
+                    allocatedAmount: alloc.amount,
+                    amount: effectiveAmount,
+                  }
+                })
+                .filter((item): item is { saving: Saving; allocatedAmount: number; amount: number } => item !== null)
+            }
+
+            const linkedSavings = getGoalSavingsBackingLocal(selectedGoal)
+            const totalBacking = linkedSavings.reduce((sum, item) => sum + safeNumber(item.amount), 0)
+            const netSaved = safeNumber(selectedGoal.current) + totalBacking
+            const backingPct = Math.min(100, Math.round((totalBacking / safeNumber(selectedGoal.target)) * 100))
+            const basePct = Math.round((safeNumber(selectedGoal.current) / safeNumber(selectedGoal.target)) * 100)
+
+            return (
+              <div className="space-y-4 pt-2">
+                <div className="rounded-xl border border-border/60 bg-muted/40 p-4 space-y-3.5">
+                  <div className="flex justify-between items-baseline">
+                    <div>
+                      <p className="text-2xl font-black">₹{formatCurrency(netSaved)}</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Total Backing Secured</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-muted-foreground">Target: ₹{formatCurrency(selectedGoal.target)}</p>
+                      <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+                        {selectedGoal.deadline ? `📅 Due ${selectedGoal.deadline}` : "No deadline set"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Progress value={Math.round((netSaved / selectedGoal.target) * 100)} className="h-2.5" />
+                    <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                      <span>{basePct}% Base Cash</span>
+                      <span>{backingPct}% Asset Backing</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <PiggyBank className="h-4 w-4 text-primary" />
+                    <span>Allocated Backing Assets</span>
+                  </h4>
+                  <Separator className="bg-border/30" />
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {safeNumber(selectedGoal.current) > 0 && (
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-primary/10 bg-primary/5 text-xs font-semibold">
+                        <div className="flex items-center gap-2">
+                          <span>💰</span>
+                          <div>
+                            <p className="font-bold text-foreground">Direct Base Cash</p>
+                            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Manual ledger allocation</p>
+                          </div>
+                        </div>
+                        <span className="font-black text-foreground">₹{formatCurrency(selectedGoal.current)}</span>
+                      </div>
+                    )}
+
+                    {linkedSavings.map(({ saving, amount, allocatedAmount }) => {
+                      const matchedApp = apps.find(a => a.value === saving.app)?.label || saving.app
+                      const matchedProvider = providers.find(p => p.value === saving.provider)?.label || saving.provider
+                      const detailLabel = safeNumber(allocatedAmount) > 0 && allocatedAmount !== saving.amount
+                        ? `Allocated ₹${formatCurrency(allocatedAmount)} of ₹${formatCurrency(saving.amount)}`
+                        : `₹${formatCurrency(saving.amount)} total`
+
+                      return (
+                        <div key={saving.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-background/50 text-xs font-semibold hover:border-primary/20 transition-colors">
+                          <div className="flex items-center gap-2.5">
+                            <span>🐷</span>
+                            <div>
+                              <p className="font-bold text-foreground truncate max-w-[170px]">{saving.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-[170px]">
+                                {matchedApp} · {matchedProvider}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{detailLabel}</p>
+                            </div>
+                          </div>
+                          <span className="font-black text-foreground shrink-0">₹{formatCurrency(amount)}</span>
+                        </div>
+                      )
+                    })}
+
+                    {selectedGoal.current === 0 && linkedSavings.length === 0 && (
+                      <div className="text-center py-6 border border-dashed rounded-lg">
+                        <ShieldAlert className="h-5 w-5 text-muted-foreground mx-auto mb-1.5" />
+                        <p className="text-xs text-muted-foreground font-semibold">No assets are currently backing this goal.</p>
+                        <p className="text-[10px] text-muted-foreground/80 mt-0.5">Link assets in the Savings or Goal Forms.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button size="sm" variant="outline" onClick={() => setGoalDetailsOpen(false)}>
+                    Close Details
+                  </Button>
+                </div>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -21,6 +21,7 @@ import { useState, useEffect } from "react"
 import { Plus } from "lucide-react"
 
 const schema = z.object({
+  savingId:         z.string().min(1, "Linked Saving is required"),
   name:             z.string().min(1, "Name is required"),
   investmentType:   z.string().min(1, "Type is required"),
   amount:           z.coerce.number().positive("Must be positive"),
@@ -50,11 +51,12 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
   const open = isControlled ? controlledOpen : localOpen
   const setOpen = isControlled ? controlledOnOpenChange : setLocalOpen
 
-  const { addSIP, updateSIP, accounts, goals } = useFinanceData()
+  const { addSIP, updateSIP, accounts, goals, savings } = useFinanceData()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema as any),
     defaultValues: {
+      savingId: "",
       name: "",
       investmentType: "mf",
       amount: 0,
@@ -70,9 +72,24 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
     },
   })
 
+  const watchSavingId = form.watch("savingId")
+
+  // Auto-populate Name, Investment Type, and App/Broker when a saving asset is selected
+  useEffect(() => {
+    if (watchSavingId && watchSavingId !== "") {
+      const selected = savings.find((s) => s.id === watchSavingId)
+      if (selected) {
+        form.setValue("name", selected.name)
+        form.setValue("investmentType", selected.type)
+        form.setValue("app", selected.app)
+      }
+    }
+  }, [watchSavingId, savings, form])
+
   useEffect(() => {
     if (initialData && open) {
       form.reset({
+        savingId: initialData.savingId || "",
         name: initialData.name,
         investmentType: initialData.investmentType,
         amount: initialData.amount,
@@ -88,6 +105,7 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
       })
     } else if (!initialData && open) {
       form.reset({
+        savingId: "",
         name: "",
         investmentType: "mf",
         amount: 0,
@@ -106,6 +124,7 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
 
   async function onSubmit(values: FormValues) {
     const formattedData = {
+      savingId: values.savingId,
       name: values.name,
       investmentType: values.investmentType,
       amount: values.amount,
@@ -116,7 +135,7 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
       app: values.app,
       sipStatus: values.sipStatus as "active" | "paused" | "completed",
       totalInvested: values.totalInvested,
-linkedGoal: values.linkedGoal === "none" ? undefined : (values.linkedGoal || undefined),
+      linkedGoal: values.linkedGoal === "none" ? undefined : (values.linkedGoal || undefined),
       note: values.note || "",
     }
 
@@ -148,6 +167,27 @@ linkedGoal: values.linkedGoal === "none" ? undefined : (values.linkedGoal || und
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+
+            <FormField control={form.control as any} name="savingId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Linked Saving / Asset (Required)</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select existing saving asset" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {savings.map((sav) => (
+                      <SelectItem key={sav.id} value={sav.id}>
+                        {sav.name} ({sav.provider})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
 
             <FormField control={form.control as any} name="name" render={({ field }) => (
               <FormItem>
