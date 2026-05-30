@@ -11,6 +11,11 @@ export type Intent =
   | "DEBT_QUERY"
   | "SAVINGS_QUERY"
   | "GENERAL"
+  // ── Write intents ──
+  | "ADD_INCOME"
+  | "ADD_EXPENSE"
+  | "ADD_SAVING"
+  | "ADD_GOAL"
 
 export interface TimeFilter {
   start: Date
