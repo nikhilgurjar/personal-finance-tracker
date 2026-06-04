@@ -49,6 +49,8 @@ export interface Expense {
   amount: number
   account: string
   note: string
+  goalId?: string
+  goalName?: string
 }
 
 export interface SavingAllocation {
@@ -570,9 +572,18 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       await setDoc(doc(db, "users", user.uid, "expenses", id), cleanUndefined(newExp))
     }
+
+    // Adjust linked goal if present
+    if (exp.goalId) {
+      const goal = goals.find((g) => g.id === exp.goalId)
+      if (goal) {
+        await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - exp.amount) })
+      }
+    }
   }
 
   const updateExpense = async (id: string, exp: Partial<Expense>) => {
+    const oldExp = expenses.find((e) => e.id === id)
     const updated = expenses.map((e) => (e.id === id ? { ...e, ...exp } : e))
     setExpenses(updated)
     if (isDemo || !user) {
@@ -580,15 +591,59 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       await setDoc(doc(db, "users", user.uid, "expenses", id), cleanUndefined(exp), { merge: true })
     }
+
+    // Handle goal changes
+    if (oldExp) {
+      const oldGoalId = oldExp.goalId
+      const newGoalId = exp.goalId !== undefined ? exp.goalId : oldExp.goalId
+      const oldAmount = oldExp.amount
+      const newAmount = exp.amount !== undefined ? exp.amount : oldExp.amount
+
+      if (oldGoalId === newGoalId) {
+        // Goal didn't change, but amount might have
+        if (oldGoalId && oldAmount !== newAmount) {
+          const goal = goals.find((g) => g.id === oldGoalId)
+          if (goal) {
+            const difference = newAmount - oldAmount
+            await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - difference) })
+          }
+        }
+      } else {
+        // Goal changed
+        if (oldGoalId) {
+          // Restore amount to old goal
+          const oldGoal = goals.find((g) => g.id === oldGoalId)
+          if (oldGoal) {
+            await updateGoal(oldGoal.id, { current: (oldGoal.current || 0) + oldAmount })
+          }
+        }
+        if (newGoalId) {
+          // Deduct from new goal (note: use goals state, but since state updates might not be synchronous, we find the fresh goal value if oldGoal was same but since they are different, we can just grab from goals state)
+          const newGoal = goals.find((g) => g.id === newGoalId)
+          if (newGoal) {
+            await updateGoal(newGoal.id, { current: Math.max(0, (newGoal.current || 0) - newAmount) })
+          }
+        }
+      }
+    }
   }
 
   const deleteExpense = async (id: string) => {
+    const exp = expenses.find((e) => e.id === id)
     const updated = expenses.filter((e) => e.id !== id)
     setExpenses(updated)
     if (isDemo || !user) {
       localStorage.setItem("finio_expenses", JSON.stringify(updated))
     } else {
       await deleteDoc(doc(db, "users", user.uid, "expenses", id))
+    }
+
+    // Restore goal budget if expense was linked to a goal
+    if (exp && exp.goalId) {
+      const goal = goals.find((g) => g.id === exp.goalId)
+      if (goal) {
+        await updateGoal(goal.id, { current: (goal.current || 0) + exp.amount })
+      }
     }
   }
 

@@ -28,6 +28,7 @@ const schema = z.object({
   amount:   z.coerce.number().positive("Must be positive"),
   account:  z.string().min(1, "Account is required"),
   note:     z.string().optional(),
+  goalId:   z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -45,7 +46,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
   const open = isControlled ? controlledOpen : localOpen
   const setOpen = isControlled ? controlledOnOpenChange : setLocalOpen
 
-  const { addExpense, updateExpense, accounts } = useFinanceData()
+  const { addExpense, updateExpense, accounts, goals } = useFinanceData()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema as any),
@@ -55,6 +56,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
       amount:   0,
       account:  "",
       note:     "",
+      goalId:   "",
     },
   })
 
@@ -66,6 +68,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
         amount: initialData.amount,
         account: initialData.account,
         note: initialData.note || "",
+        goalId: initialData.goalId || "",
       })
     } else if (!initialData && open) {
       form.reset({
@@ -74,17 +77,21 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
         amount:   0,
         account:  "",
         note:     "",
+        goalId:   "",
       })
     }
   }, [initialData, open, form])
 
   async function onSubmit(values: FormValues) {
+    const selectedGoal = goals.find((g) => g.id === values.goalId)
     const formattedData = {
       date: values.date,
       category: values.category,
       amount: values.amount,
       account: values.account,
       note: values.note ?? "",
+      goalId: values.goalId || undefined,
+      goalName: selectedGoal ? selectedGoal.name : undefined,
     }
 
     if (initialData) {
@@ -158,7 +165,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
               </FormItem>
             )} />
 
-            <FormField control={form.control} name="account" render={({ field }) => (
+             <FormField control={form.control} name="account" render={({ field }) => (
               <FormItem>
                 <FormLabel>Account Used</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
@@ -174,6 +181,26 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
                     {accounts.length === 0 && (
                       <SelectItem value="none" disabled>No linked accounts found</SelectItem>
                     )}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="goalId" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tag Against Goal <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || "none"}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="No Linked Goal" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {goals.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>🎯 {g.name} (Target: ₹{formatCurrency(g.target)})</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />

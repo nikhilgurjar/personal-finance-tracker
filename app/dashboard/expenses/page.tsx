@@ -426,7 +426,18 @@ export default function ExpensesPage() {
                                       <span className="font-bold text-xs">{fullCategory.replace(icon, "").trim()}</span>
                                     </div>
                                   </TableCell>
-                                  <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">{exp.note || "—"}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate">
+                                    <div className="flex flex-col gap-1">
+                                      <span>{exp.note || "—"}</span>
+                                      {exp.goalName && (
+                                        <div className="inline-flex">
+                                          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 bg-primary/10 text-primary border-none font-bold">
+                                            🎯 {exp.goalName}
+                                          </Badge>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TableCell>
                                   <TableCell className="text-xs text-muted-foreground">
                                     {matchedAccount ? matchedAccount.name : "Cash/Other"}
                                   </TableCell>
