@@ -119,7 +119,7 @@ async function callGroq(
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured.")
 
   const body = {
-    model: "llama-3.1-8b-instant",
+    model: "llama-3.3-70b-versatile",
     messages: [
       { role: "system", content: system },
       { role: "user",   content: user },

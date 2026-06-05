@@ -1,4 +1,4 @@
-import { LayoutDashboard, Wallet, TrendingDown, Target, PiggyBank } from "lucide-react"
+import { LayoutDashboard, Wallet, TrendingDown, Target, PiggyBank, Brain } from "lucide-react"
 
 export const NAV_ITEMS = [
   { label: "Overview",  href: "/dashboard",           icon: LayoutDashboard },
@@ -6,6 +6,7 @@ export const NAV_ITEMS = [
   { label: "Expenses",  href: "/dashboard/expenses",  icon: TrendingDown },
   { label: "Goals",     href: "/dashboard/goals",     icon: Target },
   { label: "Savings",   href: "/dashboard/savings",   icon: PiggyBank },
+  { label: "AI Coach",  href: "/dashboard/ai-plan",   icon: Brain },
 ]
 
 export const STATS = [

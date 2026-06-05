@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Trash2, Edit2, TrendingUp, BarChart3, Calendar } from "lucide-react"
+import { Plus, Trash2, Edit2, TrendingUp, BarChart3, Calendar, History, RotateCcw, ChevronDown } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts"
 import { SIPForm } from "@/components/forms/sip-form"
 import { useFinanceData, SIPSchedule } from "@/hooks/use-finance-data"
@@ -22,9 +22,13 @@ const SIP_PROJECTION = [
 ]
 
 export default function SIPsPage() {
-  const { sips, deleteSIP, goals, isDemo } = useFinanceData()
+  const { sips, deleteSIP, goals, isDemo, triggerMonthSIPs, triggerHistory, undoLastTrigger } = useFinanceData()
   const [editingSIP, setEditingSIP] = useState<SIPSchedule | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [triggeringMonth, setTriggeringMonth] = useState(false)
+  const [undoingTrigger, setUndoingTrigger] = useState(false)
+  const [triggerMessage, setTriggerMessage] = useState<{ type: "success" | "info"; text: string } | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
 
   const activeSIPs = sips.filter(s => s.sipStatus === "active")
   const pausedSIPs = sips.filter(s => s.sipStatus === "paused")
@@ -79,6 +83,59 @@ export default function SIPsPage() {
     return null
   }
 
+  const handleTriggerMonthSIP = async () => {
+    setTriggeringMonth(true)
+    setTriggerMessage(null)
+    try {
+      const result = await triggerMonthSIPs()
+      if (result.triggered > 0) {
+        setTriggerMessage({
+          type: "success",
+          text: `Triggered ${result.triggered} SIP${result.triggered > 1 ? "s" : ""} and updated savings!`
+        })
+      } else {
+        setTriggerMessage({
+          type: "info",
+          text: (result as any).message || "All SIPs already triggered for this month"
+        })
+      }
+    } catch (error) {
+      setTriggerMessage({
+        type: "info",
+        text: "Error triggering SIPs"
+      })
+    } finally {
+      setTriggeringMonth(false)
+      setTimeout(() => setTriggerMessage(null), 5000)
+    }
+  }
+
+  const handleUndoLastTrigger = async () => {
+    setUndoingTrigger(true)
+    try {
+      const success = await undoLastTrigger()
+      if (success) {
+        setTriggerMessage({
+          type: "success",
+          text: "Last trigger undone successfully!"
+        })
+      } else {
+        setTriggerMessage({
+          type: "info",
+          text: "Failed to undo trigger"
+        })
+      }
+    } catch (error) {
+      setTriggerMessage({
+        type: "info",
+        text: "Error undoing trigger"
+      })
+    } finally {
+      setUndoingTrigger(false)
+      setTimeout(() => setTriggerMessage(null), 5000)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -86,18 +143,42 @@ export default function SIPsPage() {
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">SIP Schedule</h1>
           <p className="text-sm text-muted-foreground mt-1 font-medium">Manage systematic investment plans and automate wealth building</p>
         </div>
-        <Button 
-          size="sm" 
-          onClick={() => {
-            setEditingSIP(null)
-            setFormOpen(true)
-          }}
-          className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Create SIP</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button 
+            size="sm"
+            variant="outline"
+            onClick={handleTriggerMonthSIP}
+            disabled={triggeringMonth || activeSIPs.length === 0}
+            className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform"
+            title={activeSIPs.length === 0 ? "No active SIPs to trigger" : "Trigger monthly SIPs"}
+          >
+            <Calendar className="h-4 w-4" />
+            <span>{triggeringMonth ? "Triggering..." : "Trigger Month"}</span>
+          </Button>
+          <Button 
+            size="sm" 
+            onClick={() => {
+              setEditingSIP(null)
+              setFormOpen(true)
+            }}
+            className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create SIP</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Trigger Message */}
+      {triggerMessage && (
+        <div className={`p-3 rounded-lg border text-sm font-medium ${
+          triggerMessage.type === 'success' 
+            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700' 
+            : 'bg-blue-500/10 border-blue-500/20 text-blue-700'
+        }`}>
+          {triggerMessage.text}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -310,6 +391,67 @@ export default function SIPsPage() {
           </TabsContent>
         </div>
       </Tabs>
+
+      {/* Trigger History Section */}
+      {triggerHistory.length > 0 && (
+        <Card className="border-border/40 mt-8">
+          <CardHeader>
+            <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowHistory(!showHistory)}>
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-lg">Trigger History</CardTitle>
+                <Badge variant="outline" className="ml-2">{triggerHistory.length}</Badge>
+              </div>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+            </div>
+          </CardHeader>
+          
+          {showHistory && (
+            <CardContent className="space-y-4 border-t border-border/40 pt-4">
+              {triggerHistory.map((history, idx) => (
+                <div key={history.id} className="border border-border/40 rounded-lg p-4 bg-muted/20 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-foreground">Month: {history.month}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Triggered on: {new Date(history.date).toLocaleDateString()} {new Date(history.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    {idx === 0 && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleUndoLastTrigger}
+                        disabled={undoingTrigger}
+                        className="gap-1.5"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>{undoingTrigger ? "Undoing..." : "Undo"}</span>
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-border/30">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {history.triggeredSIPs.length} SIP{history.triggeredSIPs.length !== 1 ? "s" : ""} Triggered
+                    </p>
+                    {history.triggeredSIPs.map((triggered) => (
+                      <div key={triggered.sipId} className="text-xs bg-background/50 p-2 rounded border border-border/20">
+                        <p className="font-semibold text-foreground">{triggered.sipName}</p>
+                        <p className="text-muted-foreground mt-0.5">
+                          <span>₹{formatCurrency(triggered.amount)}</span>
+                          <span className="mx-2">→</span>
+                          <span>{triggered.savingName}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   )
 }

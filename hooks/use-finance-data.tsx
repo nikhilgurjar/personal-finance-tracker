@@ -117,6 +117,20 @@ export interface SIPSchedule {
   linkedGoal?: string
   note?: string
   savingId?: string
+  triggeredMonths?: string[] // Track which months SIP has been triggered (e.g., ["2026-05", "2026-06"])
+}
+
+export interface TriggerHistory {
+  id: string
+  date: string // ISO date when triggered
+  month: string // "2026-05" format
+  triggeredSIPs: Array<{
+    sipId: string
+    sipName: string
+    amount: number
+    savingId: string
+    savingName: string
+  }>
 }
 
 interface FinanceDataContextType {
@@ -130,6 +144,7 @@ interface FinanceDataContextType {
   debts: DebtTransaction[]
   income: Income[]
   sips: SIPSchedule[]
+  triggerHistory: TriggerHistory[]
   apps: { value: string; label: string }[]
   providers: { value: string; label: string }[]
   
@@ -173,6 +188,8 @@ interface FinanceDataContextType {
   addSIP: (sip: Omit<SIPSchedule, "id">) => Promise<void>
   updateSIP: (id: string, sip: Partial<SIPSchedule>) => Promise<void>
   deleteSIP: (id: string) => Promise<void>
+  triggerMonthSIPs: () => Promise<{ triggered: number; skipped: number }>
+  undoLastTrigger: () => Promise<boolean>
   
   // Custom Apps & Providers
   addApp: (name: string) => Promise<void>
@@ -239,6 +256,8 @@ const INITIAL_SIPS: SIPSchedule[] = [
   { id: "sip_2", name: "Zerodha Direct SIP", investmentType: "mf", amount: 10000, frequency: "monthly", startDate: "2026-02-01", account: "acc_1", app: "zerodha", sipStatus: "active", totalInvested: 40000, linkedGoal: "goal_3", note: "Large Cap Fund SIP" },
 ]
 
+const INITIAL_TRIGGER_HISTORY: TriggerHistory[] = []
+
 const INITIAL_APPS = [...SAVINGS_APPS]
 const INITIAL_PROVIDERS = [...SAVINGS_PROVIDERS]
 
@@ -295,6 +314,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const [debts, setDebts] = useState<DebtTransaction[]>([])
   const [income, setIncome] = useState<Income[]>([])
   const [sips, setSIPs] = useState<SIPSchedule[]>([])
+  const [triggerHistory, setTriggerHistory] = useState<TriggerHistory[]>([])
   const [apps, setApps] = useState<{ value: string; label: string }[]>([])
   const [providers, setProviders] = useState<{ value: string; label: string }[]>([])
 
@@ -330,6 +350,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const localDebts = localStorage.getItem("finio_debts")
     const localIncome = localStorage.getItem("finio_income")
     const localSIPs = localStorage.getItem("finio_sips")
+    const localTriggerHistory = localStorage.getItem("finio_trigger_history")
     const localApps = localStorage.getItem("finio_apps")
     const localProviders = localStorage.getItem("finio_providers")
 
@@ -373,6 +394,12 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     else {
       setSIPs(INITIAL_SIPS)
       localStorage.setItem("finio_sips", JSON.stringify(INITIAL_SIPS))
+    }
+
+    if (localTriggerHistory) setTriggerHistory(JSON.parse(localTriggerHistory))
+    else {
+      setTriggerHistory(INITIAL_TRIGGER_HISTORY)
+      localStorage.setItem("finio_trigger_history", JSON.stringify(INITIAL_TRIGGER_HISTORY))
     }
 
     if (localApps) setApps(JSON.parse(localApps))
@@ -843,6 +870,210 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     }
   }
 
+  // Trigger monthly SIPs
+  const triggerMonthSIPs = async () => {
+    const today = new Date("2026-05-30") // Use consistent date for demo
+    const currentMonth = today.toISOString().substring(0, 7) // "2026-05"
+    
+    let triggered = 0
+    let skipped = 0
+    const updatedSIPs = [...sips]
+    const updatedSavings = [...savings]
+    const triggeredSIPsList: TriggerHistory["triggeredSIPs"] = []
+
+    // Process each active SIP
+    for (const sip of sips.filter(s => s.sipStatus === "active")) {
+      const triggeredMonths = sip.triggeredMonths || []
+      
+      // Check if already triggered this month
+      if (triggeredMonths.includes(currentMonth)) {
+        skipped++
+        continue
+      }
+
+      // Find the linked saving
+      let linkedSavingId = sip.savingId
+      let linkedSavingName = ""
+      if (!linkedSavingId && sip.linkedGoal) {
+        // Try to find a saving from the linked goal
+        const linkedGoal = goals.find(g => g.id === sip.linkedGoal)
+        if (linkedGoal && linkedGoal.savings_ids && linkedGoal.savings_ids.length > 0) {
+          linkedSavingId = linkedGoal.savings_ids[0]
+        }
+      }
+
+      // If we found a linked saving, add the SIP amount
+      if (linkedSavingId) {
+        const savingIndex = updatedSavings.findIndex(s => s.id === linkedSavingId)
+        if (savingIndex >= 0) {
+          linkedSavingName = updatedSavings[savingIndex].name
+          updatedSavings[savingIndex] = {
+            ...updatedSavings[savingIndex],
+            amount: updatedSavings[savingIndex].amount + sip.amount,
+          }
+          
+          // Record this trigger
+          triggeredSIPsList.push({
+            sipId: sip.id,
+            sipName: sip.name,
+            amount: sip.amount,
+            savingId: linkedSavingId,
+            savingName: linkedSavingName,
+          })
+          triggered++
+        }
+      }
+
+      // Update SIP with new triggered month
+      const sipIndex = updatedSIPs.findIndex(s => s.id === sip.id)
+      if (sipIndex >= 0) {
+        updatedSIPs[sipIndex] = {
+          ...updatedSIPs[sipIndex],
+          triggeredMonths: [...triggeredMonths, currentMonth],
+          totalInvested: (updatedSIPs[sipIndex].totalInvested || 0) + sip.amount,
+        }
+      }
+    }
+
+    // Create trigger history entry if any SIPs were triggered
+    if (triggeredSIPsList.length > 0) {
+      const newTriggerRecord: TriggerHistory = {
+        id: `trigger_${Math.random().toString(36).substr(2, 9)}`,
+        date: today.toISOString(),
+        month: currentMonth,
+        triggeredSIPs: triggeredSIPsList,
+      }
+      
+      const updatedHistory = [newTriggerRecord, ...triggerHistory]
+      setTriggerHistory(updatedHistory)
+      
+      if (isDemo || !user) {
+        localStorage.setItem("finio_trigger_history", JSON.stringify(updatedHistory))
+      }
+    }
+
+    // Update both SIPs and Savings
+    setSIPs(updatedSIPs)
+    setSavings(updatedSavings)
+
+    if (isDemo || !user) {
+      localStorage.setItem("finio_sips", JSON.stringify(updatedSIPs))
+      localStorage.setItem("finio_savings", JSON.stringify(updatedSavings))
+    } else {
+      // Persist to Firestore
+      try {
+        for (const sip of updatedSIPs) {
+          await setDoc(
+            doc(db, "users", user.uid, "sips", sip.id),
+            cleanUndefined(sip),
+            { merge: true }
+          )
+        }
+        for (const saving of updatedSavings) {
+          await setDoc(
+            doc(db, "users", user.uid, "savings", saving.id),
+            cleanUndefined(saving),
+            { merge: true }
+          )
+        }
+        
+        // Save trigger history
+        if (triggeredSIPsList.length > 0) {
+          const historyId = `trigger_${Math.random().toString(36).substr(2, 9)}`
+          await setDoc(
+            doc(db, "users", user.uid, "trigger_history", historyId),
+            {
+              id: historyId,
+              date: today.toISOString(),
+              month: currentMonth,
+              triggeredSIPs: triggeredSIPsList,
+            }
+          )
+        }
+      } catch (error) {
+        console.error("Failed to trigger SIPs:", error)
+      }
+    }
+
+    return { triggered, skipped }
+  }
+
+  // Undo last trigger
+  const undoLastTrigger = async () => {
+    if (triggerHistory.length === 0) {
+      return false
+    }
+
+    const lastTrigger = triggerHistory[0]
+    const updatedSIPs = [...sips]
+    const updatedSavings = [...savings]
+
+    // Reverse the changes
+    for (const triggeredSIP of lastTrigger.triggeredSIPs) {
+      // Remove the triggered month from SIP
+      const sipIndex = updatedSIPs.findIndex(s => s.id === triggeredSIP.sipId)
+      if (sipIndex >= 0) {
+        const updatedMonths = (updatedSIPs[sipIndex].triggeredMonths || []).filter(
+          m => m !== lastTrigger.month
+        )
+        updatedSIPs[sipIndex] = {
+          ...updatedSIPs[sipIndex],
+          triggeredMonths: updatedMonths,
+          totalInvested: Math.max(0, (updatedSIPs[sipIndex].totalInvested || 0) - triggeredSIP.amount),
+        }
+      }
+
+      // Reduce the saving amount
+      const savingIndex = updatedSavings.findIndex(s => s.id === triggeredSIP.savingId)
+      if (savingIndex >= 0) {
+        updatedSavings[savingIndex] = {
+          ...updatedSavings[savingIndex],
+          amount: Math.max(0, updatedSavings[savingIndex].amount - triggeredSIP.amount),
+        }
+      }
+    }
+
+    // Remove from trigger history
+    const updatedHistory = triggerHistory.slice(1)
+    setTriggerHistory(updatedHistory)
+
+    // Update state
+    setSIPs(updatedSIPs)
+    setSavings(updatedSavings)
+
+    // Persist
+    if (isDemo || !user) {
+      localStorage.setItem("finio_sips", JSON.stringify(updatedSIPs))
+      localStorage.setItem("finio_savings", JSON.stringify(updatedSavings))
+      localStorage.setItem("finio_trigger_history", JSON.stringify(updatedHistory))
+    } else {
+      // Persist to Firestore
+      try {
+        for (const sip of updatedSIPs) {
+          await setDoc(
+            doc(db, "users", user.uid, "sips", sip.id),
+            cleanUndefined(sip),
+            { merge: true }
+          )
+        }
+        for (const saving of updatedSavings) {
+          await setDoc(
+            doc(db, "users", user.uid, "savings", saving.id),
+            cleanUndefined(saving),
+            { merge: true }
+          )
+        }
+        // Delete trigger history entry
+        await deleteDoc(doc(db, "users", user.uid, "trigger_history", lastTrigger.id))
+      } catch (error) {
+        console.error("Failed to undo trigger:", error)
+        return false
+      }
+    }
+
+    return true
+  }
+
   return (
     <FinanceDataContext.Provider
       value={{
@@ -856,6 +1087,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         debts,
         income,
         sips,
+        triggerHistory,
         apps,
         providers,
         loginWithGoogle,
@@ -883,6 +1115,8 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         addSIP,
         updateSIP,
         deleteSIP,
+        triggerMonthSIPs,
+        undoLastTrigger,
         addApp,
         addProvider,
       }}

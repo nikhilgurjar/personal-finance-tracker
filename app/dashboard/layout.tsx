@@ -7,7 +7,6 @@ import { useFinanceData } from "@/hooks/use-finance-data"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { TopBar } from "@/components/dashboard/top-bar"
-import { AIAssistant } from "@/components/chat/AIAssistant"
 import "../globals.css"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -42,7 +41,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
-      <AIAssistant />
     </SidebarProvider>
   )
 }

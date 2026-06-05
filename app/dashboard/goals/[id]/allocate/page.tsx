@@ -44,6 +44,7 @@ export default function AllocateSavingsPage({
 
   // Local editable allocations: list of { id, amount }
   const [allocations, setAllocations] = useState<SavingAllocation[]>([])
+  const [hasSeeded, setHasSeeded] = useState(false)
   const [addSheetOpen, setAddSheetOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [saving, setSaving] = useState(false)
@@ -54,7 +55,7 @@ export default function AllocateSavingsPage({
 
   // Seed local state from goal once loaded
   useEffect(() => {
-    if (goal) {
+    if (goal && !hasSeeded) {
       const existing: SavingAllocation[] =
         goal.savings_allocations && goal.savings_allocations.length > 0
           ? goal.savings_allocations.map((a) => ({ id: a.id, amount: a.amount }))
@@ -62,9 +63,16 @@ export default function AllocateSavingsPage({
               const s = savings.find((sv) => sv.id === sid)
               return { id: sid, amount: s?.amount ?? 0 }
             })
-      setAllocations(existing)
+            
+      // Also pull in any fallback allocations (savings linked directly to the goal but not in existing)
+      const fallbackAllocations = savings
+        .filter((s) => s.linkedGoals?.includes(goal.id) && !existing.some((alloc) => alloc.id === s.id))
+        .map((s) => ({ id: s.id, amount: s.amount }))
+
+      setAllocations([...existing, ...fallbackAllocations])
+      if (savings.length > 0) setHasSeeded(true)
     }
-  }, [goal?.id])
+  }, [goal?.id, savings, hasSeeded])
 
   // Focus search input on sheet entry
   useEffect(() => {
@@ -113,9 +121,8 @@ export default function AllocateSavingsPage({
   const allocatedSavings = allocations
     .map((alloc) => {
       const s = savings.find((sv) => sv.id === alloc.id)
-      return s ? { saving: s, alloc } : null
+      return { saving: s, alloc }
     })
-    .filter((x): x is { saving: Saving; alloc: SavingAllocation } => x !== null)
 
   const totalAllocated = allocations.reduce((sum, a) => sum + safeNumber(a.amount), 0)
   const netSaved = safeNumber(goal.current) + totalAllocated
@@ -289,6 +296,41 @@ export default function AllocateSavingsPage({
           ) : (
             <div className="space-y-2">
               {allocatedSavings.map(({ saving: s, alloc }) => {
+                if (!s) {
+                  return (
+                    <div
+                      key={alloc.id}
+                      className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border border-destructive/20 bg-destructive/5 transition-all group animate-in fade-in slide-in-from-bottom-1"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="h-10 w-10 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center shrink-0 text-destructive">
+                          <ShieldAlert className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-destructive truncate">Deleted/Missing Saving</p>
+                          <p className="text-[10px] text-destructive/70 mt-0.5">
+                            This saving account could not be found. It may have been deleted.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-[140px] text-right text-sm font-bold text-muted-foreground line-through">
+                          ₹{formatCurrency(alloc.amount)}
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="h-9 w-9 rounded-lg"
+                          onClick={() => removeAllocation(alloc.id)}
+                          title="Remove from this goal"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                }
+                
                 const { matchedApp, matchedProvider } = getSavingMeta(s)
                 const assetUtilizationPct = s.amount > 0 ? Math.min(100, Math.round((safeNumber(alloc.amount) / s.amount) * 100)) : 0
 

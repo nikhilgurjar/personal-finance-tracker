@@ -14,6 +14,7 @@ import {
   TrendingUp,
   BarChart3,
   Sparkles,
+  Brain,
 } from "lucide-react"
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const PRIMARY_NAV = [
   { label: "SIP Schedule",  href: "/dashboard/sips",         icon: BarChart3 },
   { label: "Goals",         href: "/dashboard/goals",        icon: Target },
   { label: "Savings",       href: "/dashboard/savings",      icon: PiggyBank },
+  { label: "AI Coach",      href: "/dashboard/ai-plan",      icon: Brain },
   { label: "Lend & Borrow", href: "/dashboard/lend-borrow",  icon: ArrowLeftRight },
 ]
 
@@ -69,7 +71,6 @@ export function AppSidebar() {
 
           <SidebarMenu className="gap-0.5">
             {PRIMARY_NAV.map(({ label, href, icon: Icon }) => {
-              console.log({ path, href, active: path === href })
               const active = path === href
               return (
                 <SidebarMenuItem key={href}>
