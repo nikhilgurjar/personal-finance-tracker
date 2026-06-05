@@ -550,7 +550,9 @@ Educational only — no specific stock picks or guaranteed returns.
 3 immediate next steps. If debt is CRITICAL, the first step must be debt-related.
 
 ## 12-Month Plan
-A month-by-month roadmap for the next 12 months. Show how the surplus is used each month to clear debt, fund goals, and build wealth. Keep it clear and specific.
+Present a month-by-month roadmap for the next 12 months using a clear Markdown table.
+Columns should include: | Month | Focus Area | Surplus Allocation (Debt, Goals, etc.) | Milestones Hit |
+Show exactly how the surplus is used each month. Keep it clear, realistic, and specific to the data.
 
 ═══════════════════════════════════════════════════════
 § STYLE
