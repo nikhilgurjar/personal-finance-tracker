@@ -7,13 +7,23 @@ import { Separator } from "@/components/ui/separator"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
-import { Shield, Sparkles, User, Cloud, HelpCircle, Key, AppWindow, Building } from "lucide-react"
+import { Shield, User, Cloud, HelpCircle, Key, AppWindow, Download, FileSpreadsheet, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { buildExportCsv, downloadCsv } from "@/lib/exportData"
 
 export default function SettingsPage() {
-  const { user, isDemo, apps, addApp, providers, addProvider } = useFinanceData()
+  const { user, isDemo, apps, addApp, providers, addProvider, goals, savings, debts, sips, income } = useFinanceData()
   const [newAppName, setNewAppName] = useState("")
   const [newProviderName, setNewProviderName] = useState("")
+  const [exportStatus, setExportStatus] = useState<"idle" | "done">("idle")
+
+  const handleExport = () => {
+    const csv = buildExportCsv({ goals, savings, debts, sips, income })
+    const date = new Date().toISOString().slice(0, 10)
+    downloadCsv(csv, `finio_export_${date}.csv`)
+    setExportStatus("done")
+    setTimeout(() => setExportStatus("idle"), 3000)
+  }
 
   const handleAddApp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,6 +103,60 @@ export default function SettingsPage() {
 
         {/* Right Column: Manage Fields */}
         <div className="md:col-span-2 space-y-6">
+
+          {/* Data Export */}
+          <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+                <span>Export Your Data</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Download your goals, savings, debts, SIP schedule, and income as a CSV file
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border border-border/40 bg-muted/20 p-4 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { label: "Goals", count: goals.length },
+                    { label: "Savings", count: savings.length },
+                    { label: "Debts", count: debts.length },
+                    { label: "SIP Schedules", count: sips.length },
+                    { label: "Income", count: income.length },
+                  ].map(({ label, count }) => (
+                    <div key={label} className="flex items-center justify-between rounded-lg bg-background/60 border border-border/40 px-3 py-2">
+                      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+                      <Badge variant="secondary" className="text-[10px] font-bold">{count} records</Badge>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  The CSV file will include all sections with headers and a net-position summary for debts.
+                  It opens correctly in Microsoft Excel, Google Sheets, and any text editor.
+                </p>
+              </div>
+              <Button
+                id="export-data-btn"
+                onClick={handleExport}
+                className="gap-2 font-semibold"
+                variant={exportStatus === "done" ? "outline" : "default"}
+              >
+                {exportStatus === "done" ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <span className="text-emerald-600">Downloaded!</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    <span>Export as CSV</span>
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
           
           {/* Apps & Providers */}
           <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">

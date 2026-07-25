@@ -32,7 +32,7 @@ export default function OverviewPage() {
   // 5-Month Income vs Expense Trend Calculation
   const getPastMonths = (count = 5) => {
     const list = []
-    const now = new Date("2026-05-30") // Base date to align with mock data
+    const now = new Date()
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const monthStr = d.toLocaleString("default", { month: "short" })
@@ -56,32 +56,14 @@ export default function OverviewPage() {
       .reduce((sum, s) => sum + safeNumber(s.amount), 0)
 
     if (isDemo && (income.length > 0 || expenses.length > 0 || sips.length > 0)) {
-      // For historical mock completeness if no user logs exist for previous months in demo mode
-      if (item.key === "2026-05") {
-        item.Income = incVal || 145000
-        item.Expense = expVal || 18340
-        item.Investments = sipVal || 15000
-      } else if (item.key === "2026-04") {
-        item.Income = 95000
-        item.Expense = 16200
-        item.Investments = 15000
-      } else if (item.key === "2026-03") {
-        item.Income = 95000
-        item.Expense = 15400
-        item.Investments = 15000
-      } else if (item.key === "2026-02") {
-        item.Income = 95000
-        item.Expense = 21000
-        item.Investments = 15000
-      } else if (item.key === "2026-01") {
-        item.Income = 95000
-        item.Expense = 14800
-        item.Investments = 5000
-      } else {
-        item.Income = incVal
-        item.Expense = expVal
-        item.Investments = sipVal
-      }
+      // Use actual data if available, otherwise generate plausible demo values
+      const demoIncomes = [95000, 95000, 95000, 95000, 145000]
+      const demoExpenses = [14800, 21000, 15400, 16200, 18340]
+      const demoInvestments = [5000, 15000, 15000, 15000, 15000]
+      const monthIndex = monthlyTrends.indexOf(item)
+      item.Income = incVal || demoIncomes[monthIndex] || 95000
+      item.Expense = expVal || demoExpenses[monthIndex] || 15000
+      item.Investments = sipVal || demoInvestments[monthIndex] || 10000
     } else {
       // Live cloud/user mode: use actual data only
       item.Income = incVal

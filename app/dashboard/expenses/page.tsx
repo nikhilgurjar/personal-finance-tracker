@@ -78,7 +78,7 @@ export default function ExpensesPage() {
   // Dynamic 5-Month Income vs Expense Trend Calculation
   const getPastMonths = (count = 5) => {
     const list = []
-    const now = new Date("2026-05-30") // Base date to align with mock data
+    const now = new Date()
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const monthStr = d.toLocaleString("default", { month: "short" })
@@ -95,19 +95,10 @@ export default function ExpensesPage() {
       .reduce((sum, e) => sum + safeNumber(e.amount), 0)
 
     if (isDemo && expenses.length > 0) {
-      if (item.key === "2026-05") {
-        item.total = expVal || 18340
-      } else if (item.key === "2026-04") {
-        item.total = 19200
-      } else if (item.key === "2026-03") {
-        item.total = 13500
-      } else if (item.key === "2026-02") {
-        item.total = 16800
-      } else if (item.key === "2026-01") {
-        item.total = 14200
-      } else {
-        item.total = expVal
-      }
+      // Use actual data if available, otherwise generate plausible demo values
+      const demoFallbacks = [14200, 16800, 13500, 19200, 18340]
+      const monthIndex = dynamicMonthlyTrend.indexOf(item)
+      item.total = expVal || demoFallbacks[monthIndex] || 15000
     } else {
       item.total = expVal
     }
