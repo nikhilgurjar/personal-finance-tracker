@@ -12,13 +12,13 @@ import { Badge } from "@/components/ui/badge"
 import { buildExportCsv, downloadCsv } from "@/lib/exportData"
 
 export default function SettingsPage() {
-  const { user, isDemo, apps, addApp, providers, addProvider, goals, savings, debts, sips, income } = useFinanceData()
+  const { user, isDemo, apps, addApp, providers, addProvider, goals, savings, expenses, debts, sips, income } = useFinanceData()
   const [newAppName, setNewAppName] = useState("")
   const [newProviderName, setNewProviderName] = useState("")
   const [exportStatus, setExportStatus] = useState<"idle" | "done">("idle")
 
   const handleExport = () => {
-    const csv = buildExportCsv({ goals, savings, debts, sips, income })
+    const csv = buildExportCsv({ goals, savings, expenses, debts, sips, income })
     const date = new Date().toISOString().slice(0, 10)
     downloadCsv(csv, `finio_export_${date}.csv`)
     setExportStatus("done")

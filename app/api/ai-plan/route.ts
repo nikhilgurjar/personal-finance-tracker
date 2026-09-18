@@ -1,11 +1,25 @@
-// app/api/ai-plan/route.ts
+// app/api/ai-plan/route.ts  (v4 — free-only OpenRouter)
 // Dedicated API for the AI savings & wealth plan page.
-// Fetches full financial context and supports multi-turn clarifying conversations.
+// Primary: OpenRouter free models (ranked fallback chain)
+// Fallback: Gemini gemini-2.0-flash-lite (Google free tier)
 
 import { NextRequest, NextResponse } from "next/server"
 import { fetchDataSlice } from "@/lib/ai/firestoreSlice"
+import {
+  callOpenRouterWithFallback,
+  OpenRouterExhaustedError,
+  stripThinkTags,
+} from "@/lib/ai/openRouterClient"
 import { buildPlanPrompt } from "@/lib/ai/planPromptBuilder"
 import type { HistoryMessage } from "@/lib/ai/promptBuilder"
+import {
+  canUseProvider,
+  getProviderCooldown,
+  getProviderRetryMessage,
+  markProviderFailure,
+  markProviderSuccess,
+} from "@/lib/ai/providerPolicy"
+import { logger } from "@/lib/logger"
 
 const PLAN_COLLECTIONS = ["goals", "savings", "income", "expenses", "sips", "accounts", "debts"]
 const PLAN_LIMIT = 200
@@ -13,6 +27,8 @@ const PLAN_LIMIT = 200
 const rateLimiter = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT_REQUESTS = 15
 const RATE_LIMIT_WINDOW_MS = 60_000
+const OPENROUTER_RETRY_MS = 30_000
+const GEMINI_RETRY_MS = 60_000
 
 function checkRateLimit(uid: string): { allowed: boolean; retryAfterSec?: number } {
   const now = Date.now()
@@ -36,8 +52,9 @@ function checkRateLimit(uid: string): { allowed: boolean; retryAfterSec?: number
 
 async function callGemini(
   system: string,
-  user: string
-): Promise<{ text: string; provider: "gemini" }> {
+  user: string,
+  isPlanMode: boolean
+): Promise<{ text: string; provider: "gemini"; model?: undefined }> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.")
 
@@ -45,11 +62,9 @@ async function callGemini(
     system_instruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: {
-      // Lower temperature = more deterministic, fewer hallucinated numbers
       temperature: 0.2,
-      // Increased from 2048 — detailed plans need ~2500–3000 tokens
-      maxOutputTokens: 3072,
-      topP: 0.85,
+      maxOutputTokens: isPlanMode ? 2048 : 512,
+      topP: 0.8,
     },
   }
 
@@ -76,54 +91,12 @@ async function callGemini(
     data?.candidates?.[0]?.content?.parts?.[0]?.text ??
     "Sorry, I couldn't generate a plan right now."
 
-  // Detect if Gemini stopped early due to token limits
   const finishReason = data?.candidates?.[0]?.finishReason
   if (finishReason === "MAX_TOKENS") {
     console.warn("[ai-plan/route] Gemini hit MAX_TOKENS — consider raising maxOutputTokens")
   }
 
-  return { text, provider: "gemini" }
-}
-
-async function callGroq(
-  system: string,
-  user: string
-): Promise<{ text: string; provider: "groq" }> {
-  const apiKey = process.env.GROQ_API_KEY
-  if (!apiKey) throw new Error("GROQ_API_KEY is not configured.")
-
-  const body = {
-    model: "llama-3.3-70b-versatile",
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    // Lower temperature for structured, data-faithful output
-    temperature: 0.2,
-    max_tokens: 3072,
-    top_p: 0.85,
-  }
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`Groq error ${res.status}: ${errText}`)
-  }
-
-  const data = await res.json()
-  const text: string =
-    data?.choices?.[0]?.message?.content ??
-    "Sorry, I couldn't generate a plan right now."
-
-  return { text, provider: "groq" }
+  return { text: stripThinkTags(text), provider: "gemini" }
 }
 
 interface PlanRequestBody {
@@ -133,26 +106,6 @@ interface PlanRequestBody {
   localData?: Record<string, any[]>
   history?: HistoryMessage[]
   savedPlan?: string
-}
-
-/** Detect whether the response looks like a structured plan vs a short answer/clarification */
-function detectIsPlan(text: string): boolean {
-  const planSignals = [
-    "## ",                     // markdown headers
-    "Monthly Budget Blueprint",
-    "Goal-by-Goal Roadmap",
-    "Monthly Checklist",
-    "Wealth Building Steps",
-    "Financial Snapshot",
-    "Key Analytics",
-    "This Week",
-    "Fast-Track",
-    "Data Completeness",
-    "12-Month",
-  ]
-  const matchCount = planSignals.filter((s) => text.includes(s)).length
-  // Require at least 3 plan signals to be confident it's a full plan
-  return matchCount >= 3
 }
 
 export async function POST(req: NextRequest) {
@@ -179,26 +132,76 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!canUseProvider("openrouter")) {
+      const retryAfterSec = Math.max(1, Math.ceil(getProviderCooldown("openrouter") / 1000))
+      return NextResponse.json(
+        { error: getProviderRetryMessage("openrouter", retryAfterSec) },
+        { status: 503, headers: { "Retry-After": String(retryAfterSec) } }
+      )
+    }
+
     const dataSlice = await fetchDataSlice(
       { intent: "GENERAL", collections: PLAN_COLLECTIONS, limit: PLAN_LIMIT },
       { uid, isDemo: isDemo ?? true, localData: localData ?? {} }
     )
 
-    const { system, user, estimatedTokens } = buildPlanPrompt({
+    logger.slice("ai-plan/route", dataSlice, {
+      uid: uid ?? "demo",
+      isDemo: isDemo ?? true,
+    })
+
+    const { system, user, estimatedTokens, mode } = buildPlanPrompt({
       dataSlice,
       question,
       history: history.slice(-10),
       savedPlan,
     })
 
-    let result: { text: string; provider: "gemini" | "groq" }
+    const isPlanMode = mode === "PLAN"
+    const task = isPlanMode ? "PLAN" : "CONVERSATIONAL"
+    const maxTokens = isPlanMode ? 3072 : 800
+
+    let result: { text: string; provider: "openrouter" | "gemini"; model?: string }
 
     try {
-      result = await callGemini(system, user)
-    } catch (err: any) {
-      if (err?.code === 429 || err?.message === "GEMINI_RATE_LIMITED") {
-        console.warn("[ai-plan/route] Gemini rate-limited — falling back to Groq")
-        result = await callGroq(system, user)
+      result = await callOpenRouterWithFallback({
+        system,
+        user,
+        task,
+        maxTokens,
+        temperature: 0.2,
+      })
+      markProviderSuccess("openrouter")
+    } catch (err: unknown) {
+      const isExhausted = err instanceof OpenRouterExhaustedError
+      const code = (err as { code?: number })?.code
+      if (isExhausted || code === 429) {
+        markProviderFailure("openrouter", OPENROUTER_RETRY_MS)
+        logger.warn("ai-plan/route", "OpenRouter free chain exhausted — falling back to Gemini")
+
+        if (!canUseProvider("gemini")) {
+          const retryAfterSec = Math.max(1, Math.ceil(getProviderCooldown("gemini") / 1000))
+          return NextResponse.json(
+            { error: getProviderRetryMessage("gemini", retryAfterSec) },
+            { status: 503, headers: { "Retry-After": String(retryAfterSec) } }
+          )
+        }
+
+        try {
+          result = await callGemini(system, user, isPlanMode)
+          markProviderSuccess("gemini")
+        } catch (geminiErr: unknown) {
+          const geminiCode = (geminiErr as { code?: number })?.code
+          if (geminiCode === 429 || /GEMINI_RATE_LIMITED|429/.test(String(geminiErr))) {
+            markProviderFailure("gemini", GEMINI_RETRY_MS)
+            const retryAfterSec = Math.max(1, Math.ceil(getProviderCooldown("gemini") / 1000))
+            return NextResponse.json(
+              { error: getProviderRetryMessage("gemini", retryAfterSec) },
+              { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+            )
+          }
+          throw geminiErr
+        }
       } else {
         throw err
       }
@@ -207,14 +210,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       answer: result.text,
       provider: result.provider,
+      model: result.model,
       estimatedTokens,
-      isPlan: detectIsPlan(result.text),
+      isPlan: isPlanMode,
     })
-  } catch (err: any) {
-    console.error("[ai-plan/route] Unhandled error:", err)
-    return NextResponse.json(
-      { error: err?.message ?? "Internal server error" },
-      { status: 500 }
-    )
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error"
+    logger.error("ai-plan/route", message, { err: String(err) })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

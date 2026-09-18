@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useFinanceData, Goal, Saving, SavingAllocation } from "@/hooks/use-finance-data"
 import { safeNumber, formatCurrency } from "@/lib/utils"
+import { getTotalSpentOnGoal } from "@/lib/goalProgress"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,7 +39,7 @@ export default function AllocateSavingsPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
-  const { goals, savings, apps, providers, updateGoal } = useFinanceData()
+  const { goals, savings, apps, providers, updateGoal, expenses } = useFinanceData()
 
   const goal = goals.find((g) => g.id === id)
 
@@ -125,7 +126,8 @@ export default function AllocateSavingsPage({
     })
 
   const totalAllocated = allocations.reduce((sum, a) => sum + safeNumber(a.amount), 0)
-  const netSaved = safeNumber(goal.current) + totalAllocated
+  const totalSpent = getTotalSpentOnGoal(goal.id, expenses)
+  const netSaved = safeNumber(goal.current) + totalAllocated + totalSpent
   const pct = Math.min(100, Math.round((netSaved / safeNumber(goal.target)) * 100))
   const done = pct >= 100
 

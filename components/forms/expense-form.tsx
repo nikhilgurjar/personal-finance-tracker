@@ -29,6 +29,7 @@ const schema = z.object({
   account:  z.string().min(1, "Account is required"),
   note:     z.string().optional(),
   goalId:   z.string().optional(),
+  fundingSourceId: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -46,7 +47,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
   const open = isControlled ? controlledOpen : localOpen
   const setOpen = isControlled ? controlledOnOpenChange : setLocalOpen
 
-  const { addExpense, updateExpense, accounts, goals } = useFinanceData()
+  const { addExpense, updateExpense, accounts, goals, savings } = useFinanceData()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema as any),
@@ -57,8 +58,11 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
       account:  "",
       note:     "",
       goalId:   "",
+      fundingSourceId: "base_cash",
     },
   })
+
+  const watchGoalId = form.watch("goalId")
 
   useEffect(() => {
     if (initialData && open) {
@@ -69,6 +73,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
         account: initialData.account,
         note: initialData.note || "",
         goalId: initialData.goalId || "",
+        fundingSourceId: initialData.fundingSourceId || "base_cash",
       })
     } else if (!initialData && open) {
       form.reset({
@@ -78,6 +83,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
         account:  "",
         note:     "",
         goalId:   "",
+        fundingSourceId: "base_cash",
       })
     }
   }, [initialData, open, form])
@@ -90,11 +96,12 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
       amount: values.amount,
       account: values.account,
       note: values.note ?? "",
-      goalId: values.goalId || undefined,
+      goalId: values.goalId && values.goalId !== "none" ? values.goalId : undefined,
       goalName: selectedGoal ? selectedGoal.name : undefined,
+      fundingSourceId: values.fundingSourceId || "base_cash",
     }
 
-    if (initialData) {
+    if (initialData && initialData.id) {
       await updateExpense(initialData.id, formattedData)
     } else {
       await addExpense(formattedData)
@@ -117,7 +124,7 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
       <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold tracking-tight">
-            {initialData ? "✏️ Edit Expense Record" : "💸 Add Expense"}
+            {initialData && initialData.id ? "✏️ Edit Expense Record" : initialData ? "⚡ Smart Fund Expense" : "💸 Add Expense"}
           </DialogTitle>
         </DialogHeader>
         
@@ -206,6 +213,41 @@ export function ExpenseForm({ initialData, triggerButton, open: controlledOpen, 
                 <FormMessage />
               </FormItem>
             )} />
+
+            {watchGoalId && watchGoalId !== "none" && (
+              <FormField control={form.control} name="fundingSourceId" render={({ field }) => {
+                const selectedGoal = goals.find(g => g.id === watchGoalId)
+                const linkedSavings = selectedGoal 
+                  ? savings.filter(s => 
+                      s.linkedGoals?.includes(watchGoalId) || 
+                      selectedGoal.savings_ids?.includes(s.id) || 
+                      selectedGoal.savings_allocations?.some(a => a.id === s.id)
+                    )
+                  : []
+
+                return (
+                  <FormItem>
+                    <FormLabel>Funded By (Liquidated Asset)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "base_cash"}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select funding source" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="base_cash">💰 Base Cash (Unallocated)</SelectItem>
+                        {linkedSavings.map(s => (
+                          <SelectItem key={s.id} value={s.id}>
+                            🏦 {s.name} (₹{formatCurrency(s.amount)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )
+              }} />
+            )}
 
             <FormField control={form.control} name="note" render={({ field }) => (
               <FormItem>

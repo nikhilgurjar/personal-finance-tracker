@@ -31,6 +31,8 @@ const schema = z.object({
   custom_provider: z.string().optional(),
   amount:       z.coerce.number().positive("Must be positive"),
   frequency:    z.string().optional(),
+  tenure_months: z.coerce.number().min(0).optional(),
+  tenure_days:   z.coerce.number().min(0).optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -56,11 +58,13 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
     defaultValues: {
       name: "", owner: "John Doe", type: "mf", app: "",
       provider: "", amount: 0, frequency: "One-time",
+      tenure_months: 0, tenure_days: 0,
     },
   })
 
   const watchApp      = form.watch("app")
   const watchProvider = form.watch("provider")
+  const watchType     = form.watch("type")
 
   useEffect(() => {
     if (initialData && open) {
@@ -74,6 +78,8 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
         custom_provider: providers.some(p => p.value === initialData.provider) ? "" : initialData.provider,
         amount: initialData.amount,
         frequency: "One-time",
+        tenure_months: initialData.tenure_months || 0,
+        tenure_days: initialData.tenure_days || 0,
       })
       setLinkedGoals(initialData.linkedGoals || [])
     } else if (!initialData && open) {
@@ -87,6 +93,8 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
         custom_provider: "",
         amount: 0,
         frequency: "One-time",
+        tenure_months: 0,
+        tenure_days: 0,
       })
       setLinkedGoals([])
     }
@@ -121,7 +129,9 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
       amount: values.amount,
       linkedGoals: linkedGoals,
       frequency: "One-time",
-      active: true
+      active: true,
+      tenure_months: values.tenure_months,
+      tenure_days: values.tenure_days,
     }
 
     if (initialData) {
@@ -206,6 +216,30 @@ export function SavingsForm({ initialData, triggerButton, open: controlledOpen, 
                 </FormItem>
               )} />
             </div>
+
+            {(watchType === "fd" || watchType === "rd") && (
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control as any} name="tenure_months" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tenure (Months)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="0" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control as any} name="tenure_days" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tenure (Days)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="0" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            )}
 
             {/* App */}
             <div className="grid grid-cols-1 gap-4">

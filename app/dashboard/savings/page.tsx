@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { SAVINGS_HISTORY, SAVINGS_TYPES } from "@/constants/finance"
-import { Plus, TrendingUp, CalendarDays, Edit2, Trash2, Shield, Building, AppWindow as AppIcon, ArrowUpDown, ChevronLeft, ChevronRight, Info, PiggyBank, Target, ShieldAlert } from "lucide-react"
+import { Plus, TrendingUp, CalendarDays, Edit2, Trash2, Shield, Building, AppWindow as AppIcon, ArrowUpDown, ChevronLeft, ChevronRight, Info, PiggyBank, Target, ShieldAlert, Clock } from "lucide-react"
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { SavingsForm } from "@/components/forms/savings-form"
 import { useFinanceData, Saving, Goal } from "@/hooks/use-finance-data"
+import { getGoalProgress } from "@/lib/goalProgress"
 import { useState } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -19,8 +20,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+// Ledger event type styling
+const TX_TYPE_STYLES: Record<string, { color: string; bg: string; label: string }> = {
+  CREATED:            { color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", label: "Created" },
+  EXPENSE_DEDUCTION:  { color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-500/10 border-rose-500/20",       label: "Deducted" },
+  EXPENSE_REVERSED:   { color: "text-sky-600 dark:text-sky-400",      bg: "bg-sky-500/10 border-sky-500/20",         label: "Reversed" },
+  TRANSFERRED:        { color: "text-amber-600 dark:text-amber-400",  bg: "bg-amber-500/10 border-amber-500/20",     label: "Transferred" },
+  MANUAL_ADJUSTMENT:  { color: "text-violet-600 dark:text-violet-400",bg: "bg-violet-500/10 border-violet-500/20",   label: "Adjusted" },
+  SWAPPED_IN:         { color: "text-teal-600 dark:text-teal-400",    bg: "bg-teal-500/10 border-teal-500/20",       label: "Swapped In" },
+  SWAPPED_OUT:        { color: "text-orange-600 dark:text-orange-400",bg: "bg-orange-500/10 border-orange-500/20",   label: "Swapped Out" },
+}
+
 export default function SavingsPage() {
-  const { savings, deleteSaving, apps, addApp, providers, addProvider, goals, isDemo } = useFinanceData()
+  const { savings, deleteSaving, apps, addApp, providers, addProvider, goals, expenses, savingTransactions, isDemo } = useFinanceData()
   const [editingSaving, setEditingSaving] = useState<Saving | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
@@ -632,8 +644,14 @@ export default function SavingsPage() {
                   } else if (goalSortBy === "target") {
                     comparison = safeNumber(a.target) - safeNumber(b.target)
                   } else if (goalSortBy === "progress") {
-                    const progressA = safeNumber(a.current) + getGoalSavingsBackingLocal(a).reduce((sum, item) => sum + safeNumber(item.amount), 0)
-                    const progressB = safeNumber(b.current) + getGoalSavingsBackingLocal(b).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                    const backingA = getGoalSavingsBackingLocal(a).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                    const spentA = expenses.filter(e => e.goalId === a.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
+                    const progressA = safeNumber(a.current) + backingA + spentA
+                    
+                    const backingB = getGoalSavingsBackingLocal(b).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                    const spentB = expenses.filter(e => e.goalId === b.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
+                    const progressB = safeNumber(b.current) + backingB + spentB
+                    
                     comparison = progressA - progressB
                   }
                   return goalSortOrder === "asc" ? comparison : -comparison
@@ -696,8 +714,9 @@ export default function SavingsPage() {
                         {paginatedGoals.map((g) => {
                           const backing = getGoalSavingsBackingLocal(g)
                           const totalBacking = backing.reduce((sum, item) => sum + safeNumber(item.amount), 0)
-                          const netSaved = safeNumber(g.current) + totalBacking
-                          const pct = Math.min(100, Math.round((netSaved / safeNumber(g.target)) * 100))
+                          const totalSpent = expenses.filter(e => e.goalId === g.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
+                          const netSaved = safeNumber(g.current) + totalBacking + totalSpent
+                          const pct = safeNumber(g.target) > 0 ? Math.min(100, Math.round((netSaved / safeNumber(g.target)) * 100)) : 0
                           const done = pct === 100
 
                           return (
@@ -788,7 +807,7 @@ export default function SavingsPage() {
 
       {/* ─── SAVING ASSETS DETAILS DIALOG ─── */}
       <Dialog open={savingDetailsOpen} onOpenChange={setSavingDetailsOpen}>
-        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
+        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <span>🐷 Saving Asset:</span>
@@ -833,6 +852,67 @@ export default function SavingsPage() {
                       <p className="text-xs font-semibold mt-1">🏦 {matchedProvider}</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Ledger Timeline */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-primary" />
+                    <span>Asset Ledger Timeline</span>
+                  </h4>
+                  <Separator className="bg-border/30" />
+                  {(() => {
+                    const txs = savingTransactions
+                      .filter((tx) => tx.savingId === selectedSaving.id)
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+                    if (txs.length === 0) {
+                      return (
+                        <div className="text-center py-5 border border-dashed rounded-lg bg-muted/10">
+                          <Clock className="h-4 w-4 text-muted-foreground mx-auto mb-1.5" />
+                          <p className="text-xs text-muted-foreground font-semibold">No ledger events recorded yet.</p>
+                          <p className="text-[10px] text-muted-foreground/70 mt-0.5">Events appear when you add, edit, or link expenses to this asset.</p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
+                        {txs.map((tx) => {
+                          const style = TX_TYPE_STYLES[tx.type] ?? { color: "text-muted-foreground", bg: "bg-muted/40 border-border/30", label: tx.type }
+                          const isDeduction = tx.type === "EXPENSE_DEDUCTION" || tx.type === "SWAPPED_OUT"
+                          return (
+                            <div key={tx.id} className="flex items-start justify-between p-2.5 rounded-lg border bg-background/50 text-xs gap-2">
+                              <div className="flex items-start gap-2 min-w-0">
+                                <Badge className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 border ${style.bg} ${style.color}`}>
+                                  {style.label}
+                                </Badge>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-muted-foreground font-medium">
+                                    {new Date(tx.date).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                  </p>
+                                  {tx.metadata && (() => {
+                                    try {
+                                      const meta = JSON.parse(tx.metadata)
+                                      if (meta.expenseId) return <p className="text-[9px] text-muted-foreground/70 font-medium">Expense ref: {meta.expenseId}</p>
+                                      if (meta.direction) return <p className="text-[9px] text-muted-foreground/70 font-medium">{meta.direction === "in" ? "Linked to" : "Unlinked from"} goal</p>
+                                      return null
+                                    } catch { return <p className="text-[9px] text-muted-foreground/70">{String(tx.metadata).slice(0, 40)}</p> }
+                                  })()}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className={`font-black text-xs ${isDeduction ? "text-rose-500" : "text-emerald-500"}`}>
+                                  {isDeduction ? "-" : "+"}₹{formatCurrency(tx.amount)}
+                                </p>
+                                <p className="text-[9px] text-muted-foreground font-medium mt-0.5">Bal: ₹{formatCurrency(tx.balanceAfter)}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Backing Goals */}
@@ -889,36 +969,7 @@ export default function SavingsPage() {
           </DialogHeader>
 
           {selectedGoal && (() => {
-            const getGoalSavingsBackingLocal = (g: Goal) => {
-              const allocations = (g.savings_allocations && g.savings_allocations.length > 0)
-                ? g.savings_allocations
-                : (g.savings_ids || []).map((id) => ({ id, amount: 0 }))
-
-              const fallbackAllocations = savings
-                .filter((s) => s.linkedGoals?.includes(g.id) && !allocations.some((alloc) => alloc.id === s.id))
-                .map((s) => ({ id: s.id, amount: 0 }))
-
-              const combined = [...allocations, ...fallbackAllocations]
-
-              return combined
-                .map((alloc) => {
-                  const saving = savings.find((s) => s.id === alloc.id)
-                  if (!saving) return null
-                  const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
-                  return {
-                    saving,
-                    allocatedAmount: alloc.amount,
-                    amount: effectiveAmount,
-                  }
-                })
-                .filter((item): item is { saving: Saving; allocatedAmount: number; amount: number } => item !== null)
-            }
-
-            const linkedSavings = getGoalSavingsBackingLocal(selectedGoal)
-            const totalBacking = linkedSavings.reduce((sum, item) => sum + safeNumber(item.amount), 0)
-            const netSaved = safeNumber(selectedGoal.current) + totalBacking
-            const backingPct = Math.min(100, Math.round((totalBacking / safeNumber(selectedGoal.target)) * 100))
-            const basePct = Math.round((safeNumber(selectedGoal.current) / safeNumber(selectedGoal.target)) * 100)
+            const { linkedSavings, totalLinkedBacking: totalBacking, totalSpent, baseCash, netSaved, target, pct, basePct, backingPct, spentPct, linkedExpenses } = getGoalProgress(selectedGoal, savings, expenses)
 
             return (
               <div className="space-y-4 pt-2">
@@ -926,7 +977,7 @@ export default function SavingsPage() {
                   <div className="flex justify-between items-baseline">
                     <div>
                       <p className="text-2xl font-black">₹{formatCurrency(netSaved)}</p>
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Total Backing Secured</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5">Total Fulfillment Value</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-muted-foreground">Target: ₹{formatCurrency(selectedGoal.target)}</p>
@@ -937,12 +988,19 @@ export default function SavingsPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <Progress value={Math.round((netSaved / selectedGoal.target) * 100)} className="h-2.5" />
+                    <Progress value={pct} className="h-2.5" />
                     <div className="flex justify-between text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
-                      <span>{basePct}% Base Cash</span>
-                      <span>{backingPct}% Asset Backing</span>
+                      <span>{basePct}% Base</span>
+                      <span>{backingPct}% Assets</span>
+                      {spentPct > 0 && <span className="text-rose-400">{spentPct}% Spent</span>}
                     </div>
                   </div>
+                  {totalSpent > 0 && (
+                    <div className="text-[11px] font-bold text-rose-500 bg-rose-500/5 border border-rose-500/10 rounded-md px-2 py-1 flex items-center justify-between">
+                      <span>Already Spent (Fulfilled):</span>
+                      <span>₹{formatCurrency(totalSpent)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2.5">
@@ -968,9 +1026,13 @@ export default function SavingsPage() {
                     {linkedSavings.map(({ saving, amount, allocatedAmount }) => {
                       const matchedApp = apps.find(a => a.value === saving.app)?.label || saving.app
                       const matchedProvider = providers.find(p => p.value === saving.provider)?.label || saving.provider
-                      const detailLabel = safeNumber(allocatedAmount) > 0 && allocatedAmount !== saving.amount
-                        ? `Allocated ₹${formatCurrency(allocatedAmount)} of ₹${formatCurrency(saving.amount)}`
-                        : `₹${formatCurrency(saving.amount)} total`
+                      const allocAmt = safeNumber(allocatedAmount)
+                      const savingAmt = safeNumber(saving.amount)
+                      const detailLabel = (() => {
+                        if (savingAmt === 0 && allocAmt > 0) return `Allocated ₹${formatCurrency(allocAmt)} — fully consumed`
+                        if (allocAmt > 0 && allocAmt !== savingAmt) return `Allocated ₹${formatCurrency(allocAmt)} of ₹${formatCurrency(savingAmt)}`
+                        return `₹${formatCurrency(savingAmt)} total`
+                      })()
 
                       return (
                         <div key={saving.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-background/50 text-xs font-semibold hover:border-primary/20 transition-colors">

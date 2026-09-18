@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { Sparkles, Wallet, TrendingDown, PiggyBank, Target, TrendingUp, BarChart3 } from "lucide-react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
+import { getGoalProgress } from "@/lib/goalProgress"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts"
 
 export default function OverviewPage() {
@@ -186,10 +187,7 @@ export default function OverviewPage() {
               </div>
             ) : (
               goals.slice(0, 3).map((g) => {
-                const backingSavings = savings.filter(s => g.savings_ids?.includes(s.id) || s.linkedGoals?.includes(g.id))
-                const totalBacking = backingSavings.reduce((sum, s) => sum + s.amount, 0)
-                const netSaved = g.current + totalBacking
-                const pct = Math.min(100, Math.round((netSaved / g.target) * 100))
+                const { netSaved, pct } = getGoalProgress(g, savings, expenses)
                 
                 return (
                   <div key={g.id} className="space-y-2">

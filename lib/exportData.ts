@@ -2,7 +2,8 @@
 // Client-side CSV export for: goals, savings, debts, SIP schedule, income.
 // Produces a single CSV file with labelled sections — no external dependencies.
 
-import type { Goal, Saving, DebtTransaction, SIPSchedule, Income, SavingAllocation } from "@/hooks/use-finance-data"
+import type { Goal, Saving, DebtTransaction, SIPSchedule, Income, Expense } from "@/hooks/use-finance-data"
+import { getGoalProgress } from "@/lib/goalProgress"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,33 +65,12 @@ interface GoalMetric {
  * multiple goals competing for the same surplus (see the aggregate total
  * in the Summary section for that).
  */
-function computeGoalMetrics(goals: Goal[], savings: Saving[], now: Date, monthlySurplus: number): GoalMetric[] {
+function computeGoalMetrics(goals: Goal[], savings: Saving[], expenses: Expense[], now: Date, monthlySurplus: number): GoalMetric[] {
   return goals.map((g) => {
-    const allocations: SavingAllocation[] = g.savings_allocations && g.savings_allocations.length > 0
-      ? g.savings_allocations
-      : (g.savings_ids || []).map((id) => ({ id, amount: 0 }))
-
-    const allocationIds = new Set(allocations.map((a) => a.id))
-
-    // Also include savings that link back via linkedGoals
-    const fallback = savings
-      .filter((s) => s.linkedGoals?.includes(g.id) && !allocationIds.has(s.id))
-      .map((s) => ({ id: s.id, amount: 0 }))
-
-    const combined = [...allocations, ...fallback]
-    const backingAmount = combined.reduce((sum, alloc) => {
-      const saving = savings.find((s) => s.id === alloc.id)
-      if (!saving) return sum
-      const amount = alloc.amount > 0 ? alloc.amount : saving.amount
-      return sum + Number(amount || 0)
-    }, 0)
-
-    const linkedSavingsNames = combined
-      .map((alloc) => savings.find((s) => s.id === alloc.id)?.name ?? "")
-      .filter(Boolean)
-      .join("; ")
-
-    const totalProgress = Number(g.current || 0) + backingAmount
+    const progress = getGoalProgress(g, savings, expenses)
+    const backingAmount = progress.totalLinkedBacking
+    const linkedSavingsNames = progress.linkedSavings.map((item) => item.saving.name).join("; ")
+    const totalProgress = progress.netSaved
     const progressPctNum = g.target > 0 ? (totalProgress / g.target) * 100 : 0
     const remaining = Math.max(0, g.target - totalProgress)
     const monthsRemaining = monthsUntil(now, g.deadline)
@@ -403,6 +383,7 @@ function buildIncomeSection(income: Income[]): string {
 export interface ExportDataInput {
   goals: Goal[]
   savings: Saving[]
+  expenses?: Expense[]
   debts: DebtTransaction[]
   sips: SIPSchedule[]
   income: Income[]
@@ -433,7 +414,7 @@ export function buildExportCsv(data: ExportDataInput): string {
     .reduce((sum, s) => sum + Number(s.amount || 0), 0)
   const monthlySurplus = monthlyIncome - monthlySIP
 
-  const goalMetrics = computeGoalMetrics(data.goals, data.savings, now, monthlySurplus)
+  const goalMetrics = computeGoalMetrics(data.goals, data.savings, data.expenses ?? [], now, monthlySurplus)
 
   return [
     header,

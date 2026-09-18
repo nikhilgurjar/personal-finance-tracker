@@ -28,6 +28,8 @@ import {
   SAVINGS_APPS,
   SAVINGS_PROVIDERS
 } from "@/constants/finance"
+import type { LiquidationSuggestion, SmartLiquidationPlan } from "@/lib/smart-liquidation"
+import { buildLiquidationPlan } from "@/lib/smart-liquidation"
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -51,6 +53,7 @@ export interface Expense {
   note: string
   goalId?: string
   goalName?: string
+  fundingSourceId?: string
 }
 
 export interface SavingAllocation {
@@ -68,6 +71,7 @@ export interface Goal {
   savings_allocations?: SavingAllocation[]
   deadline?: string
   color: string
+  isArchived?: boolean
 }
 
 export interface Saving {
@@ -81,6 +85,18 @@ export interface Saving {
   linkedGoals: string[]
   frequency?: string
   active?: boolean
+  tenure_months?: number
+  tenure_days?: number
+}
+
+export interface SavingTransaction {
+  id: string
+  savingId: string
+  date: string
+  type: "CREATED" | "EXPENSE_DEDUCTION" | "TRANSFERRED" | "MANUAL_ADJUSTMENT" | "SWAPPED_IN" | "SWAPPED_OUT" | "EXPENSE_REVERSED"
+  amount: number
+  balanceAfter: number
+  metadata?: string
 }
 
 export interface DebtTransaction {
@@ -145,6 +161,7 @@ interface FinanceDataContextType {
   income: Income[]
   sips: SIPSchedule[]
   triggerHistory: TriggerHistory[]
+  savingTransactions: SavingTransaction[]
   apps: { value: string; label: string }[]
   providers: { value: string; label: string }[]
   
@@ -173,6 +190,10 @@ interface FinanceDataContextType {
   addSaving: (sav: Omit<Saving, "id" | "linkedGoals"> & { linkedGoals?: string[] }) => Promise<void>
   updateSaving: (id: string, sav: Partial<Saving>) => Promise<void>
   deleteSaving: (id: string) => Promise<void>
+
+  // Saving Transactions
+  addSavingTransaction: (st: Omit<SavingTransaction, "id">) => Promise<void>
+  executeSmartLiquidation: (suggestion: LiquidationSuggestion) => Promise<SmartLiquidationPlan | null>
 
   // Debts CRUD
   addDebtTransaction: (debt: Omit<DebtTransaction, "id">) => Promise<void>
@@ -315,6 +336,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const [income, setIncome] = useState<Income[]>([])
   const [sips, setSIPs] = useState<SIPSchedule[]>([])
   const [triggerHistory, setTriggerHistory] = useState<TriggerHistory[]>([])
+  const [savingTransactions, setSavingTransactions] = useState<SavingTransaction[]>([])
   const [apps, setApps] = useState<{ value: string; label: string }[]>([])
   const [providers, setProviders] = useState<{ value: string; label: string }[]>([])
 
@@ -351,6 +373,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const localIncome = localStorage.getItem("finio_income")
     const localSIPs = localStorage.getItem("finio_sips")
     const localTriggerHistory = localStorage.getItem("finio_trigger_history")
+    const localSavingTransactions = localStorage.getItem("finio_saving_transactions")
     const localApps = localStorage.getItem("finio_apps")
     const localProviders = localStorage.getItem("finio_providers")
 
@@ -402,6 +425,12 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       localStorage.setItem("finio_trigger_history", JSON.stringify(INITIAL_TRIGGER_HISTORY))
     }
 
+    if (localSavingTransactions) setSavingTransactions(JSON.parse(localSavingTransactions))
+    else {
+      setSavingTransactions([])
+      localStorage.setItem("finio_saving_transactions", JSON.stringify([]))
+    }
+
     if (localApps) setApps(JSON.parse(localApps))
     else {
       setApps(INITIAL_APPS)
@@ -430,7 +459,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         return list
       }
 
-      const [accs, exps, gls, savs, dbts, incs, sipsData, aps, provs] = await Promise.all([
+      const [accs, exps, gls, savs, dbts, incs, sipsData, aps, provs, savTrans] = await Promise.all([
         fetchCol<Account>(`users/${uid}/accounts`),
         fetchCol<Expense>(`users/${uid}/expenses`),
         fetchCol<Goal>(`users/${uid}/goals`, normalizeGoal),
@@ -440,6 +469,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         fetchCol<SIPSchedule>(`users/${uid}/sips`),
         fetchCol<any>(`users/${uid}/apps`),
         fetchCol<any>(`users/${uid}/providers`),
+        fetchCol<SavingTransaction>(`users/${uid}/saving_transactions`),
       ])
 
       setAccounts(accs)
@@ -449,6 +479,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       setDebts(dbts)
       setIncome(incs)
       setSIPs(sipsData)
+      setSavingTransactions(savTrans)
       setApps(aps)
       setProviders(provs)
     } catch (error) {
@@ -600,8 +631,79 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       await setDoc(doc(db, "users", user.uid, "expenses", id), cleanUndefined(newExp))
     }
 
-    // Adjust linked goal if present
+    // Adjust linked goal or saving if present
     if (exp.goalId) {
+      if (exp.fundingSourceId && exp.fundingSourceId !== "base_cash") {
+        // Deduct from a specific Saving
+        const saving = savings.find((s) => s.id === exp.fundingSourceId)
+        if (saving) {
+          const newAmount = Math.max(0, saving.amount - exp.amount)
+          await updateSaving(saving.id, { amount: newAmount })
+          await addSavingTransaction({
+            savingId: saving.id,
+            date: new Date().toISOString(),
+            type: "EXPENSE_DEDUCTION",
+            amount: exp.amount,
+            balanceAfter: newAmount,
+            metadata: JSON.stringify({ expenseId: id, goalId: exp.goalId }),
+          })
+        }
+      } else {
+        // Default behavior: deduct from base cash
+        const goal = goals.find((g) => g.id === exp.goalId)
+        if (goal) {
+          await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - exp.amount) })
+        }
+      }
+    }
+  }
+
+  const isSavingFunded = (fundingSourceId?: string) =>
+    Boolean(fundingSourceId && fundingSourceId !== "base_cash")
+
+  const restoreExpenseFunding = async (exp: Expense) => {
+    if (!exp.goalId) return
+
+    if (isSavingFunded(exp.fundingSourceId)) {
+      const saving = savings.find((s) => s.id === exp.fundingSourceId)
+      if (saving) {
+        const newAmount = saving.amount + exp.amount
+        await updateSaving(saving.id, { amount: newAmount })
+        await addSavingTransaction({
+          savingId: saving.id,
+          date: new Date().toISOString(),
+          type: "EXPENSE_REVERSED",
+          amount: exp.amount,
+          balanceAfter: newAmount,
+          metadata: JSON.stringify({ expenseId: exp.id, goalId: exp.goalId, reason: "expense_update" }),
+        })
+      }
+    } else {
+      const goal = goals.find((g) => g.id === exp.goalId)
+      if (goal) {
+        await updateGoal(goal.id, { current: (goal.current || 0) + exp.amount })
+      }
+    }
+  }
+
+  const applyExpenseFunding = async (exp: Expense, expenseId: string) => {
+    if (!exp.goalId) return
+
+    if (isSavingFunded(exp.fundingSourceId)) {
+      const saving = savings.find((s) => s.id === exp.fundingSourceId)
+      if (saving) {
+        const newAmount = Math.max(0, saving.amount - exp.amount)
+        await updateSaving(saving.id, { amount: newAmount })
+        await addSavingTransaction({
+          savingId: saving.id,
+          date: new Date().toISOString(),
+          type: "EXPENSE_DEDUCTION",
+          amount: exp.amount,
+          balanceAfter: newAmount,
+          metadata: JSON.stringify({ expenseId, goalId: exp.goalId }),
+        })
+      }
+    } else {
       const goal = goals.find((g) => g.id === exp.goalId)
       if (goal) {
         await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - exp.amount) })
@@ -619,38 +721,16 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       await setDoc(doc(db, "users", user.uid, "expenses", id), cleanUndefined(exp), { merge: true })
     }
 
-    // Handle goal changes
     if (oldExp) {
-      const oldGoalId = oldExp.goalId
-      const newGoalId = exp.goalId !== undefined ? exp.goalId : oldExp.goalId
-      const oldAmount = oldExp.amount
-      const newAmount = exp.amount !== undefined ? exp.amount : oldExp.amount
+      const merged: Expense = { ...oldExp, ...exp }
+      const fundingChanged =
+        exp.fundingSourceId !== undefined && exp.fundingSourceId !== oldExp.fundingSourceId
+      const goalChanged = exp.goalId !== undefined && exp.goalId !== oldExp.goalId
+      const amountChanged = exp.amount !== undefined && exp.amount !== oldExp.amount
 
-      if (oldGoalId === newGoalId) {
-        // Goal didn't change, but amount might have
-        if (oldGoalId && oldAmount !== newAmount) {
-          const goal = goals.find((g) => g.id === oldGoalId)
-          if (goal) {
-            const difference = newAmount - oldAmount
-            await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - difference) })
-          }
-        }
-      } else {
-        // Goal changed
-        if (oldGoalId) {
-          // Restore amount to old goal
-          const oldGoal = goals.find((g) => g.id === oldGoalId)
-          if (oldGoal) {
-            await updateGoal(oldGoal.id, { current: (oldGoal.current || 0) + oldAmount })
-          }
-        }
-        if (newGoalId) {
-          // Deduct from new goal (note: use goals state, but since state updates might not be synchronous, we find the fresh goal value if oldGoal was same but since they are different, we can just grab from goals state)
-          const newGoal = goals.find((g) => g.id === newGoalId)
-          if (newGoal) {
-            await updateGoal(newGoal.id, { current: Math.max(0, (newGoal.current || 0) - newAmount) })
-          }
-        }
+      if (fundingChanged || goalChanged || amountChanged) {
+        await restoreExpenseFunding(oldExp)
+        await applyExpenseFunding(merged, id)
       }
     }
   }
@@ -665,11 +745,27 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       await deleteDoc(doc(db, "users", user.uid, "expenses", id))
     }
 
-    // Restore goal budget if expense was linked to a goal
+    // Restore goal budget or saving if expense was linked
     if (exp && exp.goalId) {
-      const goal = goals.find((g) => g.id === exp.goalId)
-      if (goal) {
-        await updateGoal(goal.id, { current: (goal.current || 0) + exp.amount })
+      if (exp.fundingSourceId && exp.fundingSourceId !== "base_cash") {
+        const saving = savings.find((s) => s.id === exp.fundingSourceId)
+        if (saving) {
+          const newAmount = saving.amount + exp.amount
+          await updateSaving(saving.id, { amount: newAmount })
+          await addSavingTransaction({
+            savingId: saving.id,
+            date: new Date().toISOString(),
+            type: "EXPENSE_REVERSED",
+            amount: exp.amount,
+            balanceAfter: newAmount,
+            metadata: JSON.stringify({ expenseId: id, goalId: exp.goalId }),
+          })
+        }
+      } else {
+        const goal = goals.find((g) => g.id === exp.goalId)
+        if (goal) {
+          await updateGoal(goal.id, { current: (goal.current || 0) + exp.amount })
+        }
       }
     }
   }
@@ -723,15 +819,66 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       await setDoc(doc(db, "users", user.uid, "savings", id), cleanUndefined(newSav))
     }
+    
+    await addSavingTransaction({
+      savingId: id,
+      date: new Date().toISOString(),
+      type: "CREATED",
+      amount: newSav.amount,
+      balanceAfter: newSav.amount,
+      metadata: "Initial Creation",
+    })
   }
 
   const updateSaving = async (id: string, sav: Partial<Saving>) => {
+    const oldSav = savings.find((s) => s.id === id)
     const updated = savings.map((s) => (s.id === id ? { ...s, ...sav } : s))
     setSavings(updated)
     if (isDemo || !user) {
       localStorage.setItem("finio_savings", JSON.stringify(updated))
     } else {
       await setDoc(doc(db, "users", user.uid, "savings", id), cleanUndefined(sav), { merge: true })
+    }
+    
+    if (oldSav && sav.amount !== undefined && sav.amount !== oldSav.amount) {
+      const diff = sav.amount - oldSav.amount
+      await addSavingTransaction({
+        savingId: id,
+        date: new Date().toISOString(),
+        type: "MANUAL_ADJUSTMENT",
+        amount: Math.abs(diff),
+        balanceAfter: sav.amount,
+        metadata: diff > 0 ? "Increased manually" : "Decreased manually",
+      })
+    }
+
+    if (oldSav && sav.linkedGoals !== undefined) {
+      const oldGoals = new Set(oldSav.linkedGoals ?? [])
+      const newGoals = new Set(sav.linkedGoals ?? [])
+      for (const gid of oldGoals) {
+        if (!newGoals.has(gid)) {
+          await addSavingTransaction({
+            savingId: id,
+            date: new Date().toISOString(),
+            type: "TRANSFERRED",
+            amount: oldSav.amount,
+            balanceAfter: sav.amount ?? oldSav.amount,
+            metadata: JSON.stringify({ direction: "out", fromGoalId: gid }),
+          })
+        }
+      }
+      for (const gid of newGoals) {
+        if (!oldGoals.has(gid)) {
+          await addSavingTransaction({
+            savingId: id,
+            date: new Date().toISOString(),
+            type: "TRANSFERRED",
+            amount: oldSav.amount,
+            balanceAfter: sav.amount ?? oldSav.amount,
+            metadata: JSON.stringify({ direction: "in", toGoalId: gid }),
+          })
+        }
+      }
     }
   }
 
@@ -743,6 +890,57 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       await deleteDoc(doc(db, "users", user.uid, "savings", id))
     }
+  }
+
+  const addSavingTransaction = async (st: Omit<SavingTransaction, "id">) => {
+    const id = `st_${Math.random().toString(36).substr(2, 9)}`
+    const newSt = { id, ...st }
+    const updated = [...savingTransactions, newSt]
+    setSavingTransactions(updated)
+    if (isDemo || !user) {
+      localStorage.setItem("finio_saving_transactions", JSON.stringify(updated))
+    } else {
+      await setDoc(doc(db, "users", user.uid, "saving_transactions", id), cleanUndefined(newSt))
+    }
+  }
+
+  const executeSmartLiquidation = async (suggestion: LiquidationSuggestion): Promise<SmartLiquidationPlan | null> => {
+    const plan = buildLiquidationPlan(suggestion, suggestion.requestGoalId)
+    if (!plan || !suggestion.primary) return null
+
+    if (suggestion.swap && suggestion.primary.goalId !== suggestion.requestGoalId) {
+      const { highYieldSaving } = suggestion.swap
+      const sourceGoalId = suggestion.primary.goalId
+      const newLinkedGoals = [...new Set([...(highYieldSaving.linkedGoals ?? []), sourceGoalId])]
+
+      await updateSaving(highYieldSaving.id, { linkedGoals: newLinkedGoals })
+      await addSavingTransaction({
+        savingId: highYieldSaving.id,
+        date: new Date().toISOString(),
+        type: "SWAPPED_OUT",
+        amount: plan.amount,
+        balanceAfter: highYieldSaving.amount,
+        metadata: JSON.stringify({
+          fromGoalId: suggestion.requestGoalId,
+          toGoalId: sourceGoalId,
+          pairedSavingId: suggestion.primary.saving.id,
+        }),
+      })
+      await addSavingTransaction({
+        savingId: suggestion.primary.saving.id,
+        date: new Date().toISOString(),
+        type: "SWAPPED_IN",
+        amount: plan.amount,
+        balanceAfter: suggestion.primary.saving.amount,
+        metadata: JSON.stringify({
+          fromGoalId: sourceGoalId,
+          toGoalId: suggestion.requestGoalId,
+          pairedSavingId: highYieldSaving.id,
+        }),
+      })
+    }
+
+    return plan
   }
 
   // Debts
@@ -1088,6 +1286,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         income,
         sips,
         triggerHistory,
+        savingTransactions,
         apps,
         providers,
         loginWithGoogle,
@@ -1106,6 +1305,8 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         addSaving,
         updateSaving,
         deleteSaving,
+        addSavingTransaction,
+        executeSmartLiquidation,
         addDebtTransaction,
         updateDebtTransaction,
         deleteDebtTransaction,

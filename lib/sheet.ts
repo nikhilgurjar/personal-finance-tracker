@@ -20,6 +20,7 @@ export type Expense = {
   note: string
   is_recurring: boolean
   tags: string
+  funding_source_id: string // "base_cash" or saving id
   created_at: string
 }
 
@@ -39,6 +40,19 @@ export type Saving = {
   frequency: string
   goal_ids: string
   note: string
+  tenure_months: number
+  tenure_days: number
+  created_at: string
+}
+
+export type SavingTransaction = {
+  id: string
+  saving_id: string
+  date: string
+  type: string // 'CREATED', 'EXPENSE_DEDUCTION', 'TRANSFERRED', 'MANUAL_ADJUSTMENT', 'SWAPPED_IN', 'SWAPPED_OUT'
+  amount: number
+  balance_after: number
+  metadata: string // JSON string for extra info like goalId, expenseId
   created_at: string
 }
 
@@ -52,6 +66,7 @@ export type Goal = {
   priority: string
   deadline: string
   status: string
+  is_archived: boolean
   note: string
   created_at: string
 }
@@ -133,6 +148,7 @@ export const getAccounts    = () => getRows<Account>("accounts")
 export const getTransactions= () => getRows<Transaction>("transactions")
 export const getProviders   = () => getRows<Provider>("providers")
 export const getApps        = () => getRows<App>("apps")
+export const getSavingTransactions = () => getRows<SavingTransaction>("saving_transactions")
 
 // ─── Append helpers ───────────────────────────────────────────────────────────
 
@@ -141,7 +157,7 @@ export function appendExpense(e: Omit<Expense, "id" | "created_at">) {
     crypto.randomUUID(),
     e.date, e.category, e.subcategory, e.amount,
     e.payment_mode, e.account, e.merchant,
-    e.note, e.is_recurring, e.tags,
+    e.note, e.is_recurring, e.tags, e.funding_source_id,
     new Date().toISOString(),
   ])
 }
@@ -152,7 +168,15 @@ export function appendSaving(s: Omit<Saving, "id" | "created_at">) {
     s.name, s.owner, s.type, s.app, s.provider,
     s.invested_amount, s.current_value, s.returns_percent,
     s.start_date, s.maturity_date, s.is_active,
-    s.frequency, s.goal_ids, s.note,
+    s.frequency, s.goal_ids, s.note, s.tenure_months, s.tenure_days,
+    new Date().toISOString(),
+  ])
+}
+
+export function appendSavingTransaction(st: Omit<SavingTransaction, "id" | "created_at">) {
+  return appendRow("saving_transactions", [
+    crypto.randomUUID(),
+    st.saving_id, st.date, st.type, st.amount, st.balance_after, st.metadata,
     new Date().toISOString(),
   ])
 }
@@ -161,7 +185,7 @@ export function appendGoal(g: Omit<Goal, "id" | "created_at">) {
   return appendRow("goals", [
     crypto.randomUUID(),
     g.name, g.category, g.target_amount, g.current_amount,
-    g.savings_ids, g.priority, g.deadline, g.status, g.note,
+    g.savings_ids, g.priority, g.deadline, g.status, g.is_archived, g.note,
     new Date().toISOString(),
   ])
 }

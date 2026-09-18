@@ -11,7 +11,7 @@ import { EXPENSE_CATEGORIES } from "@/constants/finance"
 import { ExpenseForm } from "@/components/forms/expense-form"
 import { useFinanceData, Expense } from "@/hooks/use-finance-data"
 import { safeNumber, formatCurrency } from "@/lib/utils"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Trash2, Edit2, Wallet, Calendar, Plus, ChevronDown, TrendingDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import {
@@ -39,6 +39,29 @@ export default function ExpensesPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [currentPage, setCurrentPage] = useState(1)
   const rowsPerPage = 5
+
+  // Smart Fund prefill: reads sessionStorage set by the Goals page Smart Fund flow
+  useEffect(() => {
+    const raw = sessionStorage.getItem("finio_expense_prefill")
+    if (raw) {
+      try {
+        const prefill = JSON.parse(raw)
+        sessionStorage.removeItem("finio_expense_prefill")
+        const synthetic: Expense = {
+          id: "",
+          date: new Date().toISOString().split("T")[0],
+          category: "other",
+          amount: prefill.amount ?? 0,
+          account: "",
+          note: prefill.note ?? "",
+          goalId: prefill.goalId,
+          fundingSourceId: prefill.fundingSourceId,
+        }
+        setEditingExpense(synthetic)
+        setFormOpen(true)
+      } catch { /* ignore parse errors */ }
+    }
+  }, [])
 
   // Dynamic calculations
   const totalExpenses = expenses.reduce((s, e) => s + safeNumber(e.amount), 0)

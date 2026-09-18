@@ -16,12 +16,16 @@ import {
 import { 
   Target, CheckCircle2, Clock, Trash2, Edit2, Info, 
   PiggyBank, ShieldAlert, Plus, ArrowRight, CalendarDays, 
-  LayoutGrid, BarChart3, Filter
+  LayoutGrid, BarChart3, Filter, Sparkles, Loader2
 } from "lucide-react"
 import { GoalForm } from "@/components/forms/goal-form"
 import { useFinanceData, Goal, Saving } from "@/hooks/use-finance-data"
 import { useState } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
+import { getGoalProgress, getFundingSourceLabel } from "@/lib/goalProgress"
+import { suggestLiquidation, type LiquidationSuggestion } from "@/lib/smart-liquidation"
+import { Input } from "@/components/ui/input"
+import { useRouter } from "next/navigation"
 import {
   Dialog,
   DialogContent,
@@ -33,80 +37,54 @@ import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
 
 export default function GoalsPage() {
-  const { goals, deleteGoal, savings, apps, providers, expenses } = useFinanceData()
+  const router = useRouter()
+  const { goals, updateGoal, deleteGoal, savings, apps, providers, expenses, executeSmartLiquidation } = useFinanceData()
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
   // Goal Details state
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+
+  // Smart Fund Expense state
+  const [smartFundOpen, setSmartFundOpen] = useState(false)
+  const [smartFundAmount, setSmartFundAmount] = useState("")
+  const [smartSuggestion, setSmartSuggestion] = useState<LiquidationSuggestion | null>(null)
+  const [smartFundLoading, setSmartFundLoading] = useState(false)
   
   // Category Filter state
   const [selectedCategory, setSelectedCategory] = useState<string>("All")
+  const [showArchived, setShowArchived] = useState<boolean>(false)
 
-  // ─── HELPER: Savings Backing ───
-  const getGoalSavingsBacking = (goal: Goal) => {
-    const allocations = (goal.savings_allocations && goal.savings_allocations.length > 0)
-      ? goal.savings_allocations
-      : (goal.savings_ids || []).map((id) => ({ id, amount: 0 }))
+  const activeGoalsList = goals.filter(g => showArchived ? g.isArchived : !g.isArchived)
 
-    const fallbackAllocations = savings
-      .filter((s) => s.linkedGoals?.includes(goal.id) && !allocations.some((alloc) => alloc.id === s.id))
-      .map((s) => ({ id: s.id, amount: 0 }))
-
-    const combined = [...allocations, ...fallbackAllocations]
-
-    return combined
-      .map((alloc) => {
-        const saving = savings.find((s) => s.id === alloc.id)
-        if (!saving) return null
-        const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
-        return {
-          saving,
-          allocatedAmount: alloc.amount,
-          amount: effectiveAmount,
-        }
-      })
-      .filter((item): item is { saving: Saving; allocatedAmount: number; amount: number } => item !== null)
-  }
+  const computeGoalProgress = (goal: Goal) => getGoalProgress(goal, savings, expenses)
 
   // ─── STATS & ANALYSIS CALCULATIONS ───
-  const activeGoalsCount = goals.length
+  const activeGoalsCount = activeGoalsList.length
   
   let totalTargetAmount = 0
   let totalAllocatedAmount = 0
 
-  const completedGoalsCount = goals.filter(g => {
-    const linkedSavings = getGoalSavingsBacking(g)
-    const totalLinkedBacking = linkedSavings.reduce((sum, s) => sum + safeNumber(s.amount), 0)
-    const netSaved = safeNumber(g.current) + totalLinkedBacking
-    
-    totalTargetAmount += safeNumber(g.target)
-    totalAllocatedAmount += netSaved
-
-    return netSaved >= safeNumber(g.target)
+  const completedGoalsCount = activeGoalsList.filter(g => {
+    const p = computeGoalProgress(g)
+    totalTargetAmount += p.target
+    totalAllocatedAmount += p.netSaved
+    return p.done
   }).length
   
   const inProgressGoalsCount = activeGoalsCount - completedGoalsCount
   const overallProgress = totalTargetAmount > 0 ? Math.min(100, Math.round((totalAllocatedAmount / totalTargetAmount) * 100)) : 0
 
   // Categories extraction & filtering
-  const allCategories = Array.from(new Set(goals.map(g => (g as any).category || "Uncategorized")))
+  const allCategories = Array.from(new Set(activeGoalsList.map(g => (g as any).category || "Uncategorized")))
   const filteredGoals = selectedCategory === "All" 
-    ? goals 
-    : goals.filter(g => ((g as any).category || "Uncategorized") === selectedCategory)
+    ? activeGoalsList 
+    : activeGoalsList.filter(g => ((g as any).category || "Uncategorized") === selectedCategory)
 
   // ─── REUSABLE CARD RENDERER ───
   const renderGoalCard = (g: Goal) => {
-    const linkedSavings = getGoalSavingsBacking(g)
-    const totalLinkedBacking = linkedSavings.reduce((sum, item) => sum + safeNumber(item.amount), 0)
-    const netSaved = safeNumber(g.current) + totalLinkedBacking
-
-    const pct = Math.min(100, Math.round((netSaved / safeNumber(g.target)) * 100))
-    const done = pct === 100
-
-    const linkedExpenses = expenses.filter((e) => e.goalId === g.id)
-    const totalSpent = linkedExpenses.reduce((sum, e) => sum + safeNumber(e.amount), 0)
+    const { linkedSavings, netSaved, target, pct, done, totalSpent } = computeGoalProgress(g)
 
     return (
       <Card
@@ -140,7 +118,7 @@ export default function GoalsPage() {
               Allocated: <span className="text-foreground font-black">₹{formatCurrency(netSaved)}</span>
             </span>
             <span className="text-muted-foreground">
-              Target: <span className="text-foreground font-black">₹{formatCurrency(g.target)}</span>
+              Target: <span className="text-foreground font-black">₹{formatCurrency(target)}</span>
             </span>
           </div>
 
@@ -198,17 +176,27 @@ export default function GoalsPage() {
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">Goals</h1>
           <p className="text-sm text-muted-foreground mt-1 font-medium">Track long-term target indices and back them with assets</p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditingGoal(null)
-            setFormOpen(true)
-          }}
-          className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Goal</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button
+            variant={showArchived ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowArchived(!showArchived)}
+            className="border-border/60 shadow-sm hover:scale-[1.01] transition-transform font-semibold"
+          >
+            {showArchived ? "Hide Archived" : "View Archived"}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingGoal(null)
+              setFormOpen(true)
+            }}
+            className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Goal</span>
+          </Button>
+        </div>
       </div>
 
       {/* Summary row */}
@@ -347,13 +335,9 @@ export default function GoalsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {allCategories.map(category => {
-                const catGoals = goals.filter(g => ((g as any).category || "Uncategorized") === category)
+                const catGoals = activeGoalsList.filter(g => ((g as any).category || "Uncategorized") === category)
                 const catTarget = catGoals.reduce((sum, g) => sum + safeNumber(g.target), 0)
-                const catAllocated = catGoals.reduce((sum, g) => {
-                  const linked = getGoalSavingsBacking(g)
-                  const backing = linked.reduce((s, item) => s + safeNumber(item.amount), 0)
-                  return sum + safeNumber(g.current) + backing
-                }, 0)
+                const catAllocated = catGoals.reduce((sum, g) => sum + computeGoalProgress(g).netSaved, 0)
                 const catPct = catTarget > 0 ? Math.min(100, Math.round((catAllocated / catTarget) * 100)) : 0
 
                 return (
@@ -385,7 +369,7 @@ export default function GoalsPage() {
 
       {/* ─── GOAL DETAILS DIALOG ─── */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
+        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80 max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <span>🎯 Goal Details:</span>
@@ -397,12 +381,42 @@ export default function GoalsPage() {
           </DialogHeader>
 
           {selectedGoal && (() => {
-            const linkedSavings = getGoalSavingsBacking(selectedGoal)
-            const totalBacking = linkedSavings.reduce((sum, item) => sum + safeNumber(item.amount), 0)
-            const netSaved = safeNumber(selectedGoal.current) + totalBacking
-            const backingPct = Math.min(100, Math.round((totalBacking / safeNumber(selectedGoal.target)) * 100))
-            const basePct = Math.round((safeNumber(selectedGoal.current) / safeNumber(selectedGoal.target)) * 100)
-            const linkedExpenses = expenses.filter((e) => e.goalId === selectedGoal.id)
+            const progress = computeGoalProgress(selectedGoal)
+            const { linkedSavings, totalLinkedBacking, totalSpent, baseCash, netSaved, target, pct, done, linkedExpenses, basePct, backingPct, spentPct } = progress
+
+            const runSmartFundAnalysis = () => {
+              const raw = (smartFundAmount || "").toString().replace(/,/g, "")
+              const amount = Number(raw)
+              if (Number.isNaN(amount) || amount <= 0) {
+                setSmartSuggestion(null)
+                return
+              }
+              setSmartSuggestion(suggestLiquidation(amount, selectedGoal.id, savings, goals))
+            }
+
+            const applySmartFund = async () => {
+              if (!smartSuggestion) return
+              setSmartFundLoading(true)
+              try {
+                const plan = await executeSmartLiquidation(smartSuggestion)
+                if (plan) {
+                  sessionStorage.setItem(
+                    "finio_expense_prefill",
+                    JSON.stringify({
+                      goalId: plan.goalId,
+                      fundingSourceId: plan.fundingSourceId,
+                      amount: plan.amount,
+                      note: `Smart Fund: ${smartSuggestion.primary?.saving.name ?? "asset"}`,
+                    })
+                  )
+                  setDetailsOpen(false)
+                  setSmartFundOpen(false)
+                  router.push("/dashboard/expenses")
+                }
+              } finally {
+                setSmartFundLoading(false)
+              }
+            }
 
             return (
               <div className="space-y-4 pt-2">
@@ -456,9 +470,13 @@ export default function GoalsPage() {
                     {linkedSavings.map(({ saving, amount, allocatedAmount }) => {
                       const matchedApp = apps.find(a => a.value === saving.app)?.label || saving.app
                       const matchedProvider = providers.find(p => p.value === saving.provider)?.label || saving.provider
-                      const detailLabel = safeNumber(allocatedAmount) > 0 && allocatedAmount !== saving.amount
-                        ? `Allocated ₹${formatCurrency(allocatedAmount)} of ₹${formatCurrency(saving.amount)}`
-                        : `₹${formatCurrency(saving.amount)} total`
+                      const allocAmt = safeNumber(allocatedAmount)
+                      const savingAmt = safeNumber(saving.amount)
+                      const detailLabel = (() => {
+                        if (savingAmt === 0 && allocAmt > 0) return `Allocated ₹${formatCurrency(allocAmt)} — fully consumed`
+                        if (allocAmt > 0 && allocAmt !== savingAmt) return `Allocated ₹${formatCurrency(allocAmt)} of ₹${formatCurrency(savingAmt)}`
+                        return `₹${formatCurrency(savingAmt)} total`
+                      })()
 
                       return (
                         <div key={saving.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-background/50 text-xs font-semibold hover:border-primary/20 transition-colors">
@@ -514,6 +532,108 @@ export default function GoalsPage() {
                   </div>
                 </div>
 
+                {/* Smart Fund Expense section */}
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 text-violet-500">
+                    <Sparkles className="h-4 w-4" />
+                    <span>AI Smart Fund Expense</span>
+                  </h4>
+
+                  <Separator className="bg-border/30" />
+
+                  {!smartFundOpen ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-2 text-xs font-semibold border-violet-500/20 text-violet-600 dark:text-violet-400 hover:bg-violet-500/5"
+                      onClick={() => setSmartFundOpen(true)}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Find Optimal Asset to Fund an Expense
+                    </Button>
+                  ) : (
+                    <div className="space-y-3 rounded-xl border border-violet-500/10 bg-violet-500/5 p-3">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Enter expense amount (₹)"
+                          value={smartFundAmount}
+                          onChange={(e) => {
+                            setSmartFundAmount(e.target.value)
+                            setSmartSuggestion(null)
+                          }}
+                          className="h-8 text-xs bg-background flex-1"
+                        />
+                        <Button size="sm" className="h-8 text-xs font-semibold px-3" onClick={runSmartFundAnalysis}>
+                          Analyze
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setSmartFundOpen(false); setSmartSuggestion(null); setSmartFundAmount("") }}>
+                          ✕
+                        </Button>
+                      </div>
+
+                      {smartSuggestion && (
+                        <div className="space-y-2">
+                          {smartSuggestion.primary ? (
+                            <div className="rounded-lg border border-violet-500/20 bg-background/60 p-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold text-foreground">🏆 Optimal Asset</p>
+                                <Badge className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 text-[9px] font-bold">
+                                  Score: {smartSuggestion.primary.score}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-extrabold text-foreground">{smartSuggestion.primary.saving.name}</p>
+                                <p className="text-sm font-black text-primary">₹{formatCurrency(smartSuggestion.primary.saving.amount)}</p>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground font-semibold">
+                                From goal: <span className="text-foreground">{smartSuggestion.primary.goalName}</span>
+                                {smartSuggestion.primary.isExactMatch && <span className="ml-2 text-emerald-500">● Exact match!</span>}
+                              </p>
+                              <div className="space-y-0.5">
+                                {smartSuggestion.primary.reasons.map((r, i) => (
+                                  <p key={i} className="text-[9px] text-muted-foreground font-medium">• {r}</p>
+                                ))}
+                              </div>
+
+                              {smartSuggestion.swap && (
+                                <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                  ♻️ Swap Plan: Move <span className="font-black">{smartSuggestion.swap.highYieldSaving.name}</span> allocation to preserve high-yield asset on your goal.
+                                </div>
+                              )}
+
+                              <Button
+                                size="sm"
+                                className="w-full h-8 text-xs font-bold gap-1.5 bg-violet-600 hover:bg-violet-700 text-white"
+                                disabled={smartFundLoading}
+                                onClick={applySmartFund}
+                              >
+                                {smartFundLoading ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying...</> : <><Sparkles className="h-3.5 w-3.5" /> Apply Plan &amp; Create Expense</>}
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="text-center py-4 border border-dashed rounded-lg border-violet-500/20">
+                              <p className="text-xs text-muted-foreground font-semibold">No suitable asset found for ₹{formatCurrency(safeNumber(smartFundAmount))}.</p>
+                              <p className="text-[10px] text-muted-foreground/70 mt-0.5">Try a lower amount or link more savings to your goals.</p>
+                            </div>
+                          )}
+
+                          {smartSuggestion.alternatives.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Alternative options ({smartSuggestion.alternatives.length})</p>
+                              {smartSuggestion.alternatives.map((alt, i) => (
+                                <div key={i} className="flex items-center justify-between p-2 rounded-md border border-border/40 bg-background/50 text-xs">
+                                  <span className="font-semibold text-foreground">{alt.saving.name}</span>
+                                  <span className="font-bold text-muted-foreground">₹{formatCurrency(alt.saving.amount)} · Score {alt.score}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <Separator className="bg-border/30" />
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-2">
@@ -529,6 +649,18 @@ export default function GoalsPage() {
                     >
                       <Edit2 className="h-3.5 w-3.5" />
                       Edit Goal
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs font-semibold border-border/60 hover:bg-muted"
+                      onClick={() => {
+                        updateGoal(selectedGoal.id, { isArchived: !selectedGoal.isArchived })
+                        setDetailsOpen(false)
+                      }}
+                    >
+                      <Target className="h-3.5 w-3.5" />
+                      {selectedGoal.isArchived ? "Unarchive" : "Archive"}
                     </Button>
                     <Button
                       size="sm"

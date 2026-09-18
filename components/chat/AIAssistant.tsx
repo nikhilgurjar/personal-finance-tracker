@@ -18,7 +18,8 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
-  provider?: "gemini" | "groq" | "cache"
+  provider?: "gemini" | "openrouter" | "cache"
+  model?: string
   intent?: string
   error?: boolean
   timestamp: Date
@@ -46,93 +47,16 @@ const SUGGESTIONS = [
 const STORAGE_KEY = "finio-chat-v2"
 const MAX_STORED_MESSAGES = 20
 
-// ─── Lightweight markdown renderer ───────────────────────────────────────────
-
-function renderMarkdown(text: string): React.ReactElement {
-  const lines = text.split("\n")
-  const elements: React.ReactElement[] = []
-
-  lines.forEach((line, i) => {
-    if (line.startsWith("### ")) {
-      elements.push(
-        <p key={i} className="font-bold text-foreground mt-2 mb-0.5">
-          {line.slice(4)}
-        </p>
-      )
-      return
-    }
-    if (line.startsWith("## ")) {
-      elements.push(
-        <p key={i} className="font-bold text-foreground text-base mt-2 mb-0.5">
-          {line.slice(3)}
-        </p>
-      )
-      return
-    }
-    if (line.startsWith("- ") || line.startsWith("• ")) {
-      elements.push(
-        <div key={i} className="flex gap-1.5 items-start">
-          <span className="text-primary mt-0.5 shrink-0">•</span>
-          <span>{formatInline(line.slice(2))}</span>
-        </div>
-      )
-      return
-    }
-    const numbered = line.match(/^(\d+)\.\s(.+)/)
-    if (numbered) {
-      elements.push(
-        <div key={i} className="flex gap-1.5 items-start">
-          <span className="text-primary font-bold shrink-0 w-4">{numbered[1]}.</span>
-          <span>{formatInline(numbered[2])}</span>
-        </div>
-      )
-      return
-    }
-    if (line.trim() === "") {
-      elements.push(<div key={i} className="h-1" />)
-      return
-    }
-    elements.push(<p key={i}>{formatInline(line)}</p>)
-  })
-
-  return <div className="space-y-0.5 text-sm leading-relaxed">{elements}</div>
-}
-
-function formatInline(text: string): (string | React.ReactElement)[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|₹[\d,]+)/g)
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-bold text-foreground">
-          {part.slice(2, -2)}
-        </strong>
-      )
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code key={i} className="bg-muted px-1 py-0.5 rounded text-xs font-mono">
-          {part.slice(1, -1)}
-        </code>
-      )
-    }
-    if (/^₹[\d,]+/.test(part)) {
-      return (
-        <span key={i} className="font-semibold text-emerald-500">
-          {part}
-        </span>
-      )
-    }
-    return part
-  })
-}
+import { MarkdownContent } from "@/components/ai-plan/markdown"
+import { modelDisplayLabel } from "@/lib/ai/modelConfig"
 
 // ─── Provider badge ───────────────────────────────────────────────────────────
 
-function ProviderBadge({ provider }: { provider?: "gemini" | "groq" | "cache" }) {
+function ProviderBadge({ provider, model }: { provider?: "gemini" | "openrouter" | "cache"; model?: string }) {
   if (!provider) return null
   const config = {
     gemini: { label: "Gemini",  classes: "bg-blue-500/10 border-blue-500/20 text-blue-400" },
-    groq:   { label: "Groq",    classes: "bg-orange-500/10 border-orange-500/20 text-orange-400" },
+    openrouter: { label: model ? `OpenRouter · ${modelDisplayLabel(model)}` : "OpenRouter", classes: "bg-purple-500/10 border-purple-500/20 text-purple-400" },
     cache:  { label: "Cached",  classes: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" },
   }
   const { label, classes } = config[provider]
@@ -246,6 +170,7 @@ export function AIAssistant() {
           role: "assistant",
           content: data.answer,
           provider: data.provider,
+          model: data.model,
           intent: data.intent,
           timestamp: new Date(),
         }
@@ -352,7 +277,7 @@ export function AIAssistant() {
             </div>
             <div>
               <p className="text-sm font-bold text-foreground leading-none">Finio AI</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Gemini · Groq fallback</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">OpenRouter free · Gemini fallback</p>
             </div>
           </div>
 
@@ -402,13 +327,13 @@ export function AIAssistant() {
               {/* Bubble */}
               <div
                 className={cn(
-                  "flex flex-col gap-1 max-w-[85%]",
+                  "flex flex-col gap-1 max-w-[90%] sm:max-w-[85%] min-w-0",
                   msg.role === "user" ? "items-end" : "items-start"
                 )}
               >
                 <div
                   className={cn(
-                    "rounded-2xl px-3.5 py-2.5 text-sm",
+                    "rounded-2xl px-3.5 py-2.5 text-sm max-w-full min-w-0 overflow-hidden",
                     msg.role === "user"
                       ? "bg-gradient-to-br from-blue-600 to-violet-600 text-white rounded-tr-sm"
                       : msg.error
@@ -417,12 +342,12 @@ export function AIAssistant() {
                   )}
                 >
                   {msg.role === "assistant"
-                    ? renderMarkdown(msg.content)
-                    : msg.content}
+                    ? <MarkdownContent text={msg.content} />
+                    : <p className="break-words">{msg.content}</p>}
                 </div>
 
-                <div className="flex items-center gap-1.5 px-1">
-                  {msg.provider && <ProviderBadge provider={msg.provider} />}
+                <div className="flex items-center gap-1.5 px-1 flex-wrap">
+                  {msg.provider && <ProviderBadge provider={msg.provider} model={msg.model} />}
                   <span className="text-[9px] text-muted-foreground">
                     {msg.timestamp.toLocaleTimeString("en-IN", {
                       hour: "2-digit",

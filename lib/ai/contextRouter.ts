@@ -119,14 +119,14 @@ const INTENT_PATTERNS: Array<{ intent: Intent; patterns: RegExp[] }> = [
 // ─── Collection → limit map ───────────────────────────────────────────────────
 
 const INTENT_TO_CONTEXT: Record<Intent, { collections: string[]; limit: number }> = {
-  EXPENSE_QUERY:  { collections: ["expenses"],                       limit: 30 },
-  INCOME_QUERY:   { collections: ["income"],                         limit: 20 },
-  SIP_QUERY:      { collections: ["sips"],                           limit: 15 },
-  GOAL_QUERY:     { collections: ["goals", "savings"],               limit: 10 },
+  EXPENSE_QUERY:  { collections: ["expenses"],                       limit: 50 },
+  INCOME_QUERY:   { collections: ["income"],                         limit: 50 },
+  SIP_QUERY:      { collections: ["sips"],                           limit: 50 },
+  GOAL_QUERY:     { collections: ["goals", "savings"],               limit: 200 },
   BALANCE_QUERY:  { collections: ["accounts"],                       limit: 20 },
-  DEBT_QUERY:     { collections: ["debts"],                          limit: 20 },
-  SAVINGS_QUERY:  { collections: ["savings"],                        limit: 15 },
-  GENERAL:        { collections: ["accounts", "expenses", "income"], limit: 5  },
+  DEBT_QUERY:     { collections: ["debts"],                          limit: 50 },
+  SAVINGS_QUERY:  { collections: ["savings"],                        limit: 50 },
+  GENERAL:        { collections: ["accounts", "expenses", "income", "goals", "savings", "sips", "debts"], limit: 100 },
    ADD_INCOME: { collections: ["income"], limit: 1 },
   ADD_EXPENSE: { collections: ["expenses"], limit: 1 },
   ADD_SAVING: { collections: ["savings"], limit: 1 },
