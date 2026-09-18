@@ -589,6 +589,8 @@ export function buildPlanPrompt(input: PlanPromptInput): BuiltPlanPrompt {
   // ── Step 2: pick system prompt based on mode ───────────────────────────────
   const systemInstruction =
     `Today's date: ${todayStr}\n\n` +
+    `Return valid JSON only with keys: { "answer": string, "highlights": string[], "confidence": "low" | "medium" | "high" }\n` +
+    `No markdown fences, no reasoning, no internal commentary.\n\n` +
     (mode === "PLAN" ? PLAN_SYSTEM_PROMPT : CONVERSATIONAL_SYSTEM_PROMPT)
 
   // ── Step 3: serialize data — more budget for plans, less for Q&A ──────────
@@ -665,14 +667,15 @@ export function buildPlanPrompt(input: PlanPromptInput): BuiltPlanPrompt {
       ? `\n\n--- User's saved plan (refine if asked) ---\n${savedPlan.slice(0, 2000)}\n--- End of saved plan ---`
       : ""
 
-  const historyBlock = serializeHistory(history.slice(-10))
+  const historyLimit = mode === "PLAN" ? 4 : 2
+  const historyBlock = serializeHistory(history.slice(-historyLimit * 2))
 
   const userMessage =
     `User's financial data:\n${serialized}` +
     (analyticsSummary ? `\n\n${analyticsSummary}` : "") +
     savedPlanBlock +
     historyBlock +
-    `\n\nUser's message: ${question}`
+    `\n\nUser's message: ${question}\n\nReturn JSON only with keys answer, highlights, confidence.`
 
   const totalTokens = estimateTokens(systemInstruction) + estimateTokens(userMessage)
 

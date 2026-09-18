@@ -19,6 +19,7 @@ import {
   markProviderFailure,
   markProviderSuccess,
 } from "@/lib/ai/providerPolicy"
+import { parseStructuredFinanceResponse } from "@/lib/ai/responseSchema"
 import { logger } from "@/lib/logger"
 
 const PLAN_COLLECTIONS = ["goals", "savings", "income", "expenses", "sips", "accounts", "debts"]
@@ -207,12 +208,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const structured = parseStructuredFinanceResponse(result.text)
+
     return NextResponse.json({
-      answer: result.text,
+      answer: structured.answer,
       provider: result.provider,
       model: result.model,
       estimatedTokens,
       isPlan: isPlanMode,
+      confidence: structured.confidence,
+      highlights: structured.highlights,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal server error"

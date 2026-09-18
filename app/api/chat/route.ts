@@ -21,6 +21,7 @@ import {
   markProviderFailure,
   markProviderSuccess,
 } from "@/lib/ai/providerPolicy"
+import { parseStructuredFinanceResponse } from "@/lib/ai/responseSchema"
 import { logger } from "@/lib/logger"
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
@@ -253,17 +254,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const structured = parseStructuredFinanceResponse(result.text)
+
     if (!isDemo) {
-      setCache(cacheKey, result.text, result.provider, result.model)
+      setCache(cacheKey, structured.answer, result.provider, result.model)
     }
 
     return NextResponse.json({
-      answer: result.text,
+      answer: structured.answer,
       provider: result.provider,
       model: result.model,
       intent: routerResult.intent,
       estimatedTokens,
       cached: false,
+      confidence: structured.confidence,
+      highlights: structured.highlights,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal server error"
