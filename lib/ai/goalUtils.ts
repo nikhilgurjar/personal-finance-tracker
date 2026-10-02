@@ -47,7 +47,9 @@ export function getGoalBackingAmount(goal: any, savings: any[]) {
   const explicitBacking = [...allocations, ...linkedAllocations].reduce((sum, allocation) => {
     const saving = savings.find((item) => item.id === allocation.id)
     if (!saving) return sum
-    return sum + safeNumber(allocation.amount > 0 ? allocation.amount : saving.amount)
+    const availableBalance = safeNumber(saving.amount)
+    const allocatedAmount = safeNumber(allocation.amount)
+    return sum + (allocatedAmount > 0 ? Math.min(allocatedAmount, availableBalance) : availableBalance)
   }, 0)
 
   const inferredBackingAmount = savings

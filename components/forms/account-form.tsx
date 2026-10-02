@@ -28,6 +28,7 @@ const schema = z.object({
   balance:      z.coerce.number().min(0, "Balance must be positive"),
   creditLimit:  z.coerce.number().optional(),
   note:         z.string().optional(),
+  updateReason: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -57,11 +58,13 @@ export function AccountForm({ initialData, triggerButton, open: controlledOpen, 
       balance: 0,
       creditLimit: 0,
       note: "",
+      updateReason: "",
     },
   })
 
   // Watch type to conditionally show Credit Limit
   const watchType = form.watch("type")
+  const watchBalance = form.watch("balance")
 
   useEffect(() => {
     if (initialData && open) {
@@ -73,6 +76,7 @@ export function AccountForm({ initialData, triggerButton, open: controlledOpen, 
         balance: initialData.balance,
         creditLimit: initialData.creditLimit || 0,
         note: initialData.note || "",
+        updateReason: "",
       })
     } else if (!initialData && open) {
       form.reset({
@@ -83,6 +87,7 @@ export function AccountForm({ initialData, triggerButton, open: controlledOpen, 
         balance: 0,
         creditLimit: 0,
         note: "",
+        updateReason: "",
       })
     }
   }, [initialData, open, form])
@@ -99,7 +104,7 @@ export function AccountForm({ initialData, triggerButton, open: controlledOpen, 
     }
 
     if (initialData) {
-      await updateAccount(initialData.id, formattedData)
+      await updateAccount(initialData.id, formattedData, values.updateReason)
     } else {
       await addAccount(formattedData)
     }
@@ -185,10 +190,15 @@ export function AccountForm({ initialData, triggerButton, open: controlledOpen, 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField control={form.control} name="balance" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{watchType === "Credit Card" ? "Outstanding Balance (₹)" : "Initial Balance (₹)"}</FormLabel>
+                  <FormLabel>{initialData ? "Updated Balance (₹)" : watchType === "Credit Card" ? "Outstanding Balance (₹)" : "Initial Balance (₹)"}</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="0" {...field} />
                   </FormControl>
+                  {initialData && initialData.balance !== undefined && Number(watchBalance) !== initialData.balance && (
+                    <p className={`text-[11px] font-semibold mt-1 ${Number(watchBalance) - initialData.balance >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                      Diff: {Number(watchBalance) - initialData.balance >= 0 ? "+" : ""}₹{(Number(watchBalance) - initialData.balance).toLocaleString("en-IN")} (was ₹{initialData.balance.toLocaleString("en-IN")})
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />
@@ -205,6 +215,18 @@ export function AccountForm({ initialData, triggerButton, open: controlledOpen, 
                 )} />
               )}
             </div>
+
+            {initialData && (
+              <FormField control={form.control} name="updateReason" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Update Reason / Statement Note <span className="text-muted-foreground text-xs">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Monthly salary, Passbook sync, Interest, Reconciliation" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
 
             <FormField control={form.control} name="note" render={({ field }) => (
               <FormItem>

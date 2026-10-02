@@ -102,34 +102,48 @@ async function callGemini(
     },
   }
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+  const controller = new AbortController()
+  const timeoutMs = 20000
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      }
+    )
+
+    if (res.status === 429) {
+      throw Object.assign(new Error("GEMINI_RATE_LIMITED"), { code: 429 })
     }
-  )
 
-  if (res.status === 429) {
-    throw Object.assign(new Error("GEMINI_RATE_LIMITED"), { code: 429 })
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`Gemini error ${res.status}: ${errText}`)
+    }
+
+    const data = await res.json()
+    const text: string =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ??
+      "Sorry, I couldn't generate a response."
+    const finishReason = data?.candidates?.[0]?.finishReason
+    if (finishReason === "MAX_TOKENS") {
+      console.warn("[chat/route] Gemini hit MAX_TOKENS — consider raising maxOutputTokens")
+    }
+
+    return { text: stripThinkTags(text), provider: "gemini" }
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Gemini request timed out after ${timeoutMs}ms`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
   }
-
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`Gemini error ${res.status}: ${errText}`)
-  }
-
-  const data = await res.json()
-  const text: string =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-    "Sorry, I couldn't generate a response."
-  const finishReason = data?.candidates?.[0]?.finishReason
-  if (finishReason === "MAX_TOKENS") {
-    console.warn("[chat/route] Gemini hit MAX_TOKENS — consider raising maxOutputTokens")
-  }
-
-  return { text: stripThinkTags(text), provider: "gemini" }
 }
 
 // ─── Request body type ────────────────────────────────────────────────────────

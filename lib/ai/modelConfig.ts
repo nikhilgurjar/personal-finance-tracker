@@ -34,16 +34,23 @@ export const FREE_MODEL_TIERS: Record<AiTask, string[]> = validateTier({
   PLAN: [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
+    "mistralai/mistral-7b-instruct:free",
     "qwen/qwen3-next-80b-a3b-instruct:free",
     "openai/gpt-oss-120b:free",
     FREE_ROUTER_ID,
   ],
   CONVERSATIONAL: [
     "nvidia/nemotron-3-nano-30b-a3b:free",
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
     FREE_ROUTER_ID,
   ],
   CHAT: [
     "nvidia/nemotron-3-nano-30b-a3b:free",
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
     FREE_ROUTER_ID,
   ],
 })

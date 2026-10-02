@@ -12,8 +12,9 @@ import { ExpenseForm } from "@/components/forms/expense-form"
 import { useFinanceData, Expense } from "@/hooks/use-finance-data"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { useState, useEffect } from "react"
-import { Trash2, Edit2, Wallet, Calendar, Plus, ChevronDown, TrendingDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { Trash2, Edit2, Plus, TrendingDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { StatementImportWizard } from "@/components/forms/statement-import/wizard"
 import {
   Select,
   SelectContent,
@@ -149,50 +150,53 @@ export default function ExpensesPage() {
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">Expenses</h1>
           <p className="text-sm text-muted-foreground mt-1 font-medium">Analyze distributions and log transaction records</p>
         </div>
-        <Button 
-          size="sm" 
-          onClick={() => {
-            setEditingExpense(null)
-            setFormOpen(true)
-          }}
-          className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Expense</span>
-        </Button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <StatementImportWizard />
+          <Button 
+            size="sm" 
+            onClick={() => {
+              setEditingExpense(null)
+              setFormOpen(true)
+            }}
+            className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Expense</span>
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="breakdown" className="flex flex-col lg:flex-row gap-8 items-start">
+      <Tabs defaultValue="breakdown" className="w-full">
         
-        {/* Sleek Vertical Tab Triggers */}
-        <TabsList className="flex flex-row lg:flex-col w-full lg:w-64 h-auto bg-transparent border-b lg:border-b-0 lg:border-r border-border/60 rounded-none p-0 items-stretch lg:pr-6 shrink-0 gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
+        {/* Horizontal Tab Triggers */}
+        <TabsList variant="line" className="w-full border-b border-border/60">
           <TabsTrigger 
             value="breakdown" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📊</span>
             <span>Category Breakdown</span>
           </TabsTrigger>
           <TabsTrigger 
             value="monthly" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📈</span>
             <span>Monthly Trends</span>
           </TabsTrigger>
           <TabsTrigger 
             value="ledger" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📝</span>
             <span>Ledger Records</span>
           </TabsTrigger>
         </TabsList>
 
-        <div className="flex-1 w-full min-w-0">
-          
+
+
           {/* Tab 1: Breakdown */}
-          <TabsContent value="breakdown" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="breakdown" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-bold">Category Distribution</CardTitle>
@@ -237,7 +241,7 @@ export default function ExpensesPage() {
           </TabsContent>
 
           {/* Tab 2: Monthly Trends */}
-          <TabsContent value="monthly" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="monthly" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader>
                 <CardTitle className="text-xl font-bold">Monthly Burn Rate</CardTitle>
@@ -285,7 +289,7 @@ export default function ExpensesPage() {
           </TabsContent>
 
           {/* Tab 3: Ledger List (WITH THE ACCOUNT TRANSACTION FILTER AS REQUESTED!) */}
-          <TabsContent value="ledger" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="ledger" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 flex-wrap gap-4">
                 <div>
@@ -524,7 +528,6 @@ export default function ExpensesPage() {
             </Card>
           </TabsContent>
 
-        </div>
       </Tabs>
 
       {/* Editing & Adding Form Hookup */}

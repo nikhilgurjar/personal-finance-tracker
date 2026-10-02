@@ -44,6 +44,18 @@ export interface Account {
   note?: string
 }
 
+export interface AccountTransaction {
+  id: string
+  accountId: string
+  date: string
+  type: "CREATED" | "MANUAL_ADJUSTMENT" | "CREDIT_LIMIT_UPDATE" | "DETAILS_UPDATE"
+  oldBalance?: number
+  newBalance: number
+  amountChange: number
+  reason?: string
+  metadata?: string
+}
+
 export interface Expense {
   id: string
   date: string
@@ -162,6 +174,7 @@ interface FinanceDataContextType {
   sips: SIPSchedule[]
   triggerHistory: TriggerHistory[]
   savingTransactions: SavingTransaction[]
+  accountTransactions: AccountTransaction[]
   apps: { value: string; label: string }[]
   providers: { value: string; label: string }[]
   
@@ -173,8 +186,9 @@ interface FinanceDataContextType {
   
   // Accounts CRUD
   addAccount: (acc: Omit<Account, "id">) => Promise<void>
-  updateAccount: (id: string, acc: Partial<Account>) => Promise<void>
+  updateAccount: (id: string, acc: Partial<Account>, reason?: string) => Promise<void>
   deleteAccount: (id: string) => Promise<void>
+  addAccountTransaction: (at: Omit<AccountTransaction, "id">) => Promise<void>
   
   // Expenses CRUD
   addExpense: (exp: Omit<Expense, "id">) => Promise<void>
@@ -337,6 +351,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const [sips, setSIPs] = useState<SIPSchedule[]>([])
   const [triggerHistory, setTriggerHistory] = useState<TriggerHistory[]>([])
   const [savingTransactions, setSavingTransactions] = useState<SavingTransaction[]>([])
+  const [accountTransactions, setAccountTransactions] = useState<AccountTransaction[]>([])
   const [apps, setApps] = useState<{ value: string; label: string }[]>([])
   const [providers, setProviders] = useState<{ value: string; label: string }[]>([])
 
@@ -374,6 +389,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const localSIPs = localStorage.getItem("finio_sips")
     const localTriggerHistory = localStorage.getItem("finio_trigger_history")
     const localSavingTransactions = localStorage.getItem("finio_saving_transactions")
+    const localAccountTransactions = localStorage.getItem("finio_account_transactions")
     const localApps = localStorage.getItem("finio_apps")
     const localProviders = localStorage.getItem("finio_providers")
 
@@ -431,6 +447,23 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       localStorage.setItem("finio_saving_transactions", JSON.stringify([]))
     }
 
+    if (localAccountTransactions) {
+      setAccountTransactions(JSON.parse(localAccountTransactions))
+    } else {
+      const seedTransactions: AccountTransaction[] = INITIAL_ACCOUNTS.map((acc, index) => ({
+        id: `at_init_${index + 1}`,
+        accountId: acc.id,
+        date: new Date(Date.now() - (index + 1) * 7 * 24 * 60 * 60 * 1000).toISOString(),
+        type: "CREATED",
+        oldBalance: 0,
+        newBalance: acc.balance,
+        amountChange: acc.balance,
+        reason: "Initial account opening balance",
+      }))
+      setAccountTransactions(seedTransactions)
+      localStorage.setItem("finio_account_transactions", JSON.stringify(seedTransactions))
+    }
+
     if (localApps) setApps(JSON.parse(localApps))
     else {
       setApps(INITIAL_APPS)
@@ -459,7 +492,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         return list
       }
 
-      const [accs, exps, gls, savs, dbts, incs, sipsData, aps, provs, savTrans] = await Promise.all([
+      const [accs, exps, gls, savs, dbts, incs, sipsData, aps, provs, savTrans, accTrans] = await Promise.all([
         fetchCol<Account>(`users/${uid}/accounts`),
         fetchCol<Expense>(`users/${uid}/expenses`),
         fetchCol<Goal>(`users/${uid}/goals`, normalizeGoal),
@@ -470,6 +503,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         fetchCol<any>(`users/${uid}/apps`),
         fetchCol<any>(`users/${uid}/providers`),
         fetchCol<SavingTransaction>(`users/${uid}/saving_transactions`),
+        fetchCol<AccountTransaction>(`users/${uid}/account_transactions`),
       ])
 
       setAccounts(accs)
@@ -480,6 +514,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       setIncome(incs)
       setSIPs(sipsData)
       setSavingTransactions(savTrans)
+      setAccountTransactions(accTrans)
       setApps(aps)
       setProviders(provs)
     } catch (error) {
@@ -563,6 +598,19 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   // Pattern: always update React state immediately, then persist to
   //          localStorage (demo) or Firestore (cloud).
 
+  // Account Transactions
+  const addAccountTransaction = async (at: Omit<AccountTransaction, "id">) => {
+    const id = `at_${Math.random().toString(36).substr(2, 9)}`
+    const newAt = { id, ...at }
+    const updated = [...accountTransactions, newAt]
+    setAccountTransactions(updated)
+    if (isDemo || !user) {
+      localStorage.setItem("finio_account_transactions", JSON.stringify(updated))
+    } else {
+      await setDoc(doc(db, "users", user.uid, "account_transactions", id), cleanUndefined(newAt))
+    }
+  }
+
   // Accounts
   const addAccount = async (acc: Omit<Account, "id">) => {
     const id = `acc_${Math.random().toString(36).substr(2, 9)}`
@@ -572,34 +620,44 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
     if (isDemo || !user) {
       localStorage.setItem("finio_accounts", JSON.stringify(updated))
-      return
-    }
+    } else {
+      try {
+        await setDoc(doc(db, "users", user.uid, "accounts", id), cleanUndefined(newAcc))
+      } catch (error) {
+        console.error("Firestore account save failed:", error)
 
-    try {
-      await setDoc(doc(db, "users", user.uid, "accounts", id), cleanUndefined(newAcc))
-    } catch (error) {
-      console.error("Firestore account save failed:", error)
+        const sheetPersisted = await persistToSheet(() =>
+          appendSheetAccount({
+            name: newAcc.name,
+            type: newAcc.type,
+            bank: newAcc.bank,
+            last4: newAcc.last4,
+            balance: newAcc.balance,
+            credit_limit: newAcc.creditLimit ?? 0,
+            is_active: true,
+            note: newAcc.note || "",
+          })
+        )
 
-      const sheetPersisted = await persistToSheet(() =>
-        appendSheetAccount({
-          name: newAcc.name,
-          type: newAcc.type,
-          bank: newAcc.bank,
-          last4: newAcc.last4,
-          balance: newAcc.balance,
-          credit_limit: newAcc.creditLimit ?? 0,
-          is_active: true,
-          note: newAcc.note || "",
-        })
-      )
-
-      if (!sheetPersisted) {
-        localStorage.setItem("finio_accounts", JSON.stringify(updated))
+        if (!sheetPersisted) {
+          localStorage.setItem("finio_accounts", JSON.stringify(updated))
+        }
       }
     }
+
+    await addAccountTransaction({
+      accountId: id,
+      date: new Date().toISOString(),
+      type: "CREATED",
+      oldBalance: 0,
+      newBalance: newAcc.balance,
+      amountChange: newAcc.balance,
+      reason: newAcc.note ? `Account created: ${newAcc.note}` : "Account opened with initial balance",
+    })
   }
 
-  const updateAccount = async (id: string, acc: Partial<Account>) => {
+  const updateAccount = async (id: string, acc: Partial<Account>, reason?: string) => {
+    const oldAcc = accounts.find((a) => a.id === id)
     const updated = accounts.map((a) => (a.id === id ? { ...a, ...acc } : a))
     setAccounts(updated)
     if (isDemo || !user) {
@@ -607,13 +665,60 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       await setDoc(doc(db, "users", user.uid, "accounts", id), cleanUndefined(acc), { merge: true })
     }
+
+    if (oldAcc) {
+      const balanceChanged = acc.balance !== undefined && acc.balance !== oldAcc.balance
+      const limitChanged = acc.creditLimit !== undefined && acc.creditLimit !== oldAcc.creditLimit
+      const nameChanged = acc.name !== undefined && acc.name !== oldAcc.name
+
+      if (balanceChanged) {
+        const diff = (acc.balance ?? 0) - oldAcc.balance
+        await addAccountTransaction({
+          accountId: id,
+          date: new Date().toISOString(),
+          type: "MANUAL_ADJUSTMENT",
+          oldBalance: oldAcc.balance,
+          newBalance: acc.balance ?? 0,
+          amountChange: diff,
+          reason: reason || (diff > 0 ? `Balance updated (+₹${Math.abs(diff).toLocaleString("en-IN")})` : `Balance updated (-₹${Math.abs(diff).toLocaleString("en-IN")})`),
+          metadata: JSON.stringify({
+            oldBalance: oldAcc.balance,
+            newBalance: acc.balance,
+            diff,
+          }),
+        })
+      } else if (limitChanged) {
+        await addAccountTransaction({
+          accountId: id,
+          date: new Date().toISOString(),
+          type: "CREDIT_LIMIT_UPDATE",
+          oldBalance: oldAcc.balance,
+          newBalance: acc.balance ?? oldAcc.balance,
+          amountChange: (acc.creditLimit ?? 0) - (oldAcc.creditLimit ?? 0),
+          reason: reason || `Credit limit updated to ₹${(acc.creditLimit ?? 0).toLocaleString("en-IN")}`,
+        })
+      } else if (nameChanged) {
+        await addAccountTransaction({
+          accountId: id,
+          date: new Date().toISOString(),
+          type: "DETAILS_UPDATE",
+          oldBalance: oldAcc.balance,
+          newBalance: oldAcc.balance,
+          amountChange: 0,
+          reason: reason || `Account details updated`,
+        })
+      }
+    }
   }
 
   const deleteAccount = async (id: string) => {
     const updated = accounts.filter((a) => a.id !== id)
     setAccounts(updated)
+    const updatedTxs = accountTransactions.filter((at) => at.accountId !== id)
+    setAccountTransactions(updatedTxs)
     if (isDemo || !user) {
       localStorage.setItem("finio_accounts", JSON.stringify(updated))
+      localStorage.setItem("finio_account_transactions", JSON.stringify(updatedTxs))
     } else {
       await deleteDoc(doc(db, "users", user.uid, "accounts", id))
     }
@@ -1287,6 +1392,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         sips,
         triggerHistory,
         savingTransactions,
+        accountTransactions,
         apps,
         providers,
         loginWithGoogle,
@@ -1296,6 +1402,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         addAccount,
         updateAccount,
         deleteAccount,
+        addAccountTransaction,
         addExpense,
         updateExpense,
         deleteExpense,

@@ -56,6 +56,19 @@ export type SavingTransaction = {
   created_at: string
 }
 
+export type AccountTransaction = {
+  id: string
+  account_id: string
+  date: string
+  type: string // 'CREATED', 'MANUAL_ADJUSTMENT', 'CREDIT_LIMIT_UPDATE', 'DETAILS_UPDATE'
+  old_balance: number
+  new_balance: number
+  amount_change: number
+  reason: string
+  metadata: string
+  created_at: string
+}
+
 export type Goal = {
   id: string
   name: string
@@ -149,6 +162,7 @@ export const getTransactions= () => getRows<Transaction>("transactions")
 export const getProviders   = () => getRows<Provider>("providers")
 export const getApps        = () => getRows<App>("apps")
 export const getSavingTransactions = () => getRows<SavingTransaction>("saving_transactions")
+export const getAccountTransactions = () => getRows<AccountTransaction>("account_transactions")
 
 // ─── Append helpers ───────────────────────────────────────────────────────────
 
@@ -177,6 +191,14 @@ export function appendSavingTransaction(st: Omit<SavingTransaction, "id" | "crea
   return appendRow("saving_transactions", [
     crypto.randomUUID(),
     st.saving_id, st.date, st.type, st.amount, st.balance_after, st.metadata,
+    new Date().toISOString(),
+  ])
+}
+
+export function appendAccountTransaction(at: Omit<AccountTransaction, "id" | "created_at">) {
+  return appendRow("account_transactions", [
+    crypto.randomUUID(),
+    at.account_id, at.date, at.type, at.old_balance, at.new_balance, at.amount_change, at.reason, at.metadata,
     new Date().toISOString(),
   ])
 }

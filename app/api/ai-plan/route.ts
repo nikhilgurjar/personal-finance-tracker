@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai/providerPolicy"
 import { parseStructuredFinanceResponse } from "@/lib/ai/responseSchema"
 import { logger } from "@/lib/logger"
+import { runFinanceDecisionLoop } from "@/lib/ai/decisionLoop"
 
 const PLAN_COLLECTIONS = ["goals", "savings", "income", "expenses", "sips", "accounts", "debts"]
 const PLAN_LIMIT = 200
@@ -64,40 +65,54 @@ async function callGemini(
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: isPlanMode ? 2048 : 512,
+      maxOutputTokens: isPlanMode ? 8192 : 1024,
       topP: 0.8,
     },
   }
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+  const controller = new AbortController()
+  const timeoutMs = 20000
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      }
+    )
+
+    if (res.status === 429) {
+      throw Object.assign(new Error("GEMINI_RATE_LIMITED"), { code: 429 })
     }
-  )
 
-  if (res.status === 429) {
-    throw Object.assign(new Error("GEMINI_RATE_LIMITED"), { code: 429 })
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`Gemini error ${res.status}: ${errText}`)
+    }
+
+    const data = await res.json()
+    const text: string =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ??
+      "Sorry, I couldn't generate a plan right now."
+
+    const finishReason = data?.candidates?.[0]?.finishReason
+    if (finishReason === "MAX_TOKENS") {
+      console.warn("[ai-plan/route] Gemini hit MAX_TOKENS — consider raising maxOutputTokens")
+    }
+
+    return { text: stripThinkTags(text), provider: "gemini" }
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Gemini request timed out after ${timeoutMs}ms`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
   }
-
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`Gemini error ${res.status}: ${errText}`)
-  }
-
-  const data = await res.json()
-  const text: string =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-    "Sorry, I couldn't generate a plan right now."
-
-  const finishReason = data?.candidates?.[0]?.finishReason
-  if (finishReason === "MAX_TOKENS") {
-    console.warn("[ai-plan/route] Gemini hit MAX_TOKENS — consider raising maxOutputTokens")
-  }
-
-  return { text: stripThinkTags(text), provider: "gemini" }
 }
 
 interface PlanRequestBody {
@@ -158,16 +173,31 @@ export async function POST(req: NextRequest) {
       savedPlan,
     })
 
-    const isPlanMode = mode === "PLAN"
+    const decisionLoop = mode === "DECISION" ? runFinanceDecisionLoop({ question, dataSlice }) : null
+    const decisionLoopContext = decisionLoop
+      ? `\n\n--- Bounded decision loop state ---\n` +
+        `Mode: ${decisionLoop.mode}\n` +
+        `Loop budget: ${decisionLoop.loopBudget} turns\n` +
+        `Loop used: ${decisionLoop.loopUsed} turns\n` +
+        `Formula: ${decisionLoop.formula}\n` +
+        `Questions to ask before recommendation: ${decisionLoop.questions.length ? decisionLoop.questions.join(" | ") : "None"}\n` +
+        `Hard constraints: ${decisionLoop.constraints.length ? decisionLoop.constraints.join(" | ") : "None"}\n` +
+        `Tool trace:\n${decisionLoop.toolTrace.map((step) => `- ${step.tool}: ${step.summary}`).join("\n")}\n` +
+        `Final recommendation gate: ${decisionLoop.recommendation}\n` +
+        `Instruction: do not exceed the bounded loop. If the model cannot answer within the loop budget, choose the safe default and state the missing constraint clearly.\n--- End decision loop state ---`
+      : ""
+
+    const isPlanMode = mode === "PLAN" || mode === "DECISION"
     const task = isPlanMode ? "PLAN" : "CONVERSATIONAL"
-    const maxTokens = isPlanMode ? 3072 : 800
+    const maxTokens = isPlanMode ? 8192 : 1200
 
     let result: { text: string; provider: "openrouter" | "gemini"; model?: string }
+    const finalUser = `${user}${decisionLoopContext}`
 
     try {
       result = await callOpenRouterWithFallback({
         system,
-        user,
+        user: finalUser,
         task,
         maxTokens,
         temperature: 0.2,

@@ -200,72 +200,66 @@ export default function GoalsPage() {
       </div>
 
       {/* Summary row */}
-      <div className="grid grid-cols-3 gap-4 mb-2">
-        <div className="relative overflow-hidden rounded-2xl p-5 shadow-md" style={{ background: "linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)", border: "1px solid #a5b4fc" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
+        <div className="relative overflow-hidden rounded-2xl p-5 shadow-sm bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "#3730a3" }}>Total Targets</p>
-              <p className="text-xs font-medium mt-0.5" style={{ color: "#4338ca" }}>All active goals</p>
+              <p className="text-xs font-bold uppercase tracking-wider">Total Targets</p>
+              <p className="text-xs font-medium mt-0.5 opacity-80">All active goals</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm" style={{ background: "#4f46e5" }}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm bg-indigo-600 text-white">
               <Target className="h-4 w-4 text-white" />
             </div>
           </div>
-          <p className="text-4xl font-black mt-4 tracking-tight" style={{ color: "#1e1b4b" }}>{activeGoalsCount}</p>
+          <p className="text-4xl font-black mt-4 tracking-tight">{activeGoalsCount}</p>
         </div>
 
-        <div className="relative overflow-hidden rounded-2xl p-5 shadow-md" style={{ background: "linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)", border: "1px solid #6ee7b7" }}>
+        <div className="relative overflow-hidden rounded-2xl p-5 shadow-sm bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "#065f46" }}>Completed</p>
-              <p className="text-xs font-medium mt-0.5" style={{ color: "#047857" }}>Fully achieved</p>
+              <p className="text-xs font-bold uppercase tracking-wider">Completed</p>
+              <p className="text-xs font-medium mt-0.5 opacity-80">Fully achieved</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm" style={{ background: "#059669" }}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm bg-emerald-600 text-white">
               <CheckCircle2 className="h-4 w-4 text-white" />
             </div>
           </div>
-          <p className="text-4xl font-black mt-4 tracking-tight" style={{ color: "#064e3b" }}>{completedGoalsCount}</p>
+          <p className="text-4xl font-black mt-4 tracking-tight">{completedGoalsCount}</p>
         </div>
 
-        <div className="relative overflow-hidden rounded-2xl p-5 shadow-md" style={{ background: "linear-gradient(135deg, #fef9c3 0%, #fde68a 100%)", border: "1px solid #fcd34d" }}>
+        <div className="relative overflow-hidden rounded-2xl p-5 shadow-sm bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "#713f12" }}>In Progress</p>
-              <p className="text-xs font-medium mt-0.5" style={{ color: "#92400e" }}>Still working on it</p>
+              <p className="text-xs font-bold uppercase tracking-wider">In Progress</p>
+              <p className="text-xs font-medium mt-0.5 opacity-80">Still working on it</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm" style={{ background: "#d97706" }}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm bg-amber-600 text-white">
               <Clock className="h-4 w-4 text-white" />
             </div>
           </div>
-          <p className="text-4xl font-black mt-4 tracking-tight" style={{ color: "#451a03" }}>{inProgressGoalsCount}</p>
+          <p className="text-4xl font-black mt-4 tracking-tight">{inProgressGoalsCount}</p>
         </div>
       </div>
 
-      {/* TABS INTEGRATION - Vertical Tab Triggers, Horizontal Content Layout */}
-      <Tabs defaultValue="all" className="flex flex-col lg:flex-row gap-8 items-start">
-        
-        {/* Sleek Vertical Tab Triggers */}
-        <TabsList className="flex flex-row lg:flex-col w-full lg:w-64 h-auto bg-transparent border-b lg:border-b-0 lg:border-r border-border/60 rounded-none p-0 items-stretch lg:pr-6 shrink-0 gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
-          <TabsTrigger 
-            value="all" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
-          >
-            <span>📊</span>
-            <span>All Goals</span>
+      {/* Tabs */}
+      <Tabs defaultValue="all" className="w-full">
+        <TabsList variant="line" className="w-full border-b border-border/60">
+          <TabsTrigger value="all" className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider">
+            <span className="flex items-center gap-2">
+              <span>📊</span>
+              <span>All Goals</span>
+            </span>
           </TabsTrigger>
-          <TabsTrigger 
-            value="analysis" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
-          >
-            <span>📈</span>
-            <span>Analysis</span>
+          <TabsTrigger value="analysis" className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider">
+            <span className="flex items-center gap-2">
+              <span>📈</span>
+              <span>Analysis</span>
+            </span>
           </TabsTrigger>
         </TabsList>
-
-        <div className="flex-1 w-full min-w-0">
           
           {/* TAB 1: ALL GOALS */}
-          <TabsContent value="all" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="all" className="mt-4 focus-visible:outline-none">
           {/* Filter Header Row */}
           <div className="flex items-center justify-between mb-5 bg-muted/20 p-3 rounded-xl border border-border/40">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
@@ -304,7 +298,7 @@ export default function GoalsPage() {
         </TabsContent>
 
         {/* TAB 2: ANALYSIS OVERVIEW */}
-        <TabsContent value="analysis" className="mt-0 outline-none">
+        <TabsContent value="analysis" className="mt-4 outline-none">
           <div className="space-y-6">
             <Card className="border-border/60 shadow-sm bg-background/50">
               <CardHeader>
@@ -358,7 +352,6 @@ export default function GoalsPage() {
             </div>
           </div>
         </TabsContent>
-        </div>
       </Tabs>
 
       <GoalForm

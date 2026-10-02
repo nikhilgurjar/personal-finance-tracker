@@ -1,24 +1,29 @@
 // app/dashboard/savings/page.tsx
 "use client"
 
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { SAVINGS_HISTORY, SAVINGS_TYPES } from "@/constants/finance"
-import { Plus, TrendingUp, CalendarDays, Edit2, Trash2, Shield, Building, AppWindow as AppIcon, ArrowUpDown, ChevronLeft, ChevronRight, Info, PiggyBank, Target, ShieldAlert, Clock } from "lucide-react"
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
+import { Plus, TrendingUp, CalendarDays, Edit2, Trash2, Shield, Building, AppWindow as AppIcon, ArrowUpDown, ChevronLeft, ChevronRight, Info, PiggyBank, Target, ShieldAlert, Clock, Sparkles } from "lucide-react"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts"
 import { SavingsForm } from "@/components/forms/savings-form"
 import { useFinanceData, Saving, Goal } from "@/hooks/use-finance-data"
 import { getGoalProgress } from "@/lib/goalProgress"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AI_CHAT_HANDOFF_STORAGE_KEY,
+  ASSET_ALLOCATION_PROMPT,
+} from "@/lib/ai/chatHandoff"
 
 // Ledger event type styling
 const TX_TYPE_STYLES: Record<string, { color: string; bg: string; label: string }> = {
@@ -31,10 +36,101 @@ const TX_TYPE_STYLES: Record<string, { color: string; bg: string; label: string 
   SWAPPED_OUT:        { color: "text-orange-600 dark:text-orange-400",bg: "bg-orange-500/10 border-orange-500/20",   label: "Swapped Out" },
 }
 
+const FILTER_PILLS = [
+  "All",
+  "High Liquidity (Bank, Cash)",
+  "Locked (FD, PPF)",
+  "Market (MF, Stocks)",
+] as const
+
+const PIE_COLORS = [
+  "#3b82f6", // blue
+  "#10b981", // emerald
+  "#8b5cf6", // violet
+  "#f59e0b", // amber
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+  "#6366f1", // indigo
+  "#14b8a6", // teal
+  "#f97316", // orange
+  "#84cc16", // lime
+]
+
+const TYPE_NAME_MAP: Record<string, string> = {
+  fd: "FD",
+  mf: "Mutual Funds",
+  etf: "ETF",
+  ppf: "PPF",
+  pf: "PF",
+  savings_account: "Bank / Savings",
+  rd: "RD",
+  nps: "NPS",
+  stocks: "Stocks",
+  gold: "Gold / SGB",
+  crypto: "Crypto",
+  other: "Other",
+}
+
+const matchesActiveFilter = (sav: Saving, filter: string): boolean => {
+  if (filter === "All") return true
+  const type = (sav.type || "").toLowerCase()
+  const name = (sav.name || "").toLowerCase()
+
+  if (filter === "High Liquidity (Bank, Cash)") {
+    return (
+      type === "savings_account" ||
+      type === "cash" ||
+      type === "bank" ||
+      name.includes("cash") ||
+      name.includes("bank") ||
+      name.includes("savings")
+    )
+  }
+
+  if (filter === "Locked (FD, PPF)") {
+    return (
+      type === "fd" ||
+      type === "ppf" ||
+      type === "pf" ||
+      type === "rd" ||
+      type === "nps" ||
+      name.includes("fd") ||
+      name.includes("fixed deposit") ||
+      name.includes("ppf") ||
+      name.includes("provident")
+    )
+  }
+
+  if (filter === "Market (MF, Stocks)") {
+    return (
+      type === "mf" ||
+      type === "stocks" ||
+      type === "etf" ||
+      type === "gold" ||
+      type === "crypto" ||
+      name.includes("mutual fund") ||
+      name.includes("mf") ||
+      name.includes("stock") ||
+      name.includes("etf") ||
+      name.includes("share")
+    )
+  }
+
+  return true
+}
+
 export default function SavingsPage() {
+  const router = useRouter()
   const { savings, deleteSaving, apps, addApp, providers, addProvider, goals, expenses, savingTransactions, isDemo } = useFinanceData()
   const [editingSaving, setEditingSaving] = useState<Saving | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+
+  // Filter Pills State
+  const [activeFilter, setActiveFilter] = useState<string>("All")
+
+  // AI Optimizer State
+  const [optimizerOpen, setOptimizerOpen] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   // Saving Assets Table State
   const [savingSearchTerm, setSavingSearchTerm] = useState("")
@@ -81,6 +177,36 @@ export default function SavingsPage() {
     return acc
   }, {} as Record<string, string>)
 
+  // Grouped savings for asset distribution PieChart
+  const groupedSavings = useMemo(() => {
+    const map: Record<string, number> = {}
+    savings.forEach((s) => {
+      const raw = (s.type || "other").toLowerCase()
+      const typeLabel = TYPE_NAME_MAP[raw] || TYPE_MAP[raw]?.replace(/^[^\s]+\s+/, "") || s.type || "Other"
+      map[typeLabel] = (map[typeLabel] || 0) + safeNumber(s.amount)
+    })
+    return Object.entries(map).map(([type, amount]) => ({
+      type,
+      amount,
+    }))
+  }, [savings, TYPE_MAP])
+
+  const handleOptimizeAllocation = () => {
+    setAiError(null)
+    try {
+      localStorage.setItem(AI_CHAT_HANDOFF_STORAGE_KEY, ASSET_ALLOCATION_PROMPT)
+      setOptimizerOpen(false)
+      router.push("/dashboard/ai-plan")
+    } catch (error: unknown) {
+      setAiError(
+        error instanceof Error
+          ? `Could not open the AI Coach: ${error.message}`
+          : "Could not open the AI Coach. Please try again."
+      )
+      setOptimizerOpen(true)
+    }
+  }
+
   const getSavingsGoalIds = (sav: Saving) => {
     const ids = new Set<string>(sav.linkedGoals || [])
     goals.forEach((g) => {
@@ -125,34 +251,44 @@ export default function SavingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">Savings</h1>
-          <p className="text-sm text-muted-foreground mt-1 font-medium">Link, audit, and project your financial security cushions</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">Savings</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 font-medium">Link, audit, and project your financial security cushions</p>
         </div>
-        <Button 
-          size="sm" 
-          onClick={() => {
-            setEditingSaving(null)
-            setFormOpen(true)
-          }}
-          className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform self-start sm:self-auto"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Saving</span>
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <Button 
+            variant="secondary" 
+            className="gap-2 flex-1 sm:flex-initial text-xs sm:text-sm"
+            onClick={handleOptimizeAllocation}
+          >
+            <Sparkles className="w-4 h-4 text-purple-500" />
+            <span>Optimize Allocation</span>
+          </Button>
+          <Button 
+            size="sm" 
+            onClick={() => {
+              setEditingSaving(null)
+              setFormOpen(true)
+            }}
+            className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform flex-1 sm:flex-initial text-xs sm:text-sm"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Saving</span>
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">Total Cumulative Savings</CardTitle>
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
+            <CardTitle className="text-xs sm:text-sm font-semibold text-muted-foreground">Total Cumulative Savings</CardTitle>
+            <TrendingUp className="h-4 w-4 text-emerald-500 shrink-0" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalSaved)}</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight break-all">₹{formatCurrency(totalSaved)}</p>
             <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border-emerald-500/20">
               Active Growth
             </Badge>
@@ -161,11 +297,11 @@ export default function SavingsPage() {
 
         <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">Monthly Liquidation Avg</CardTitle>
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-semibold text-muted-foreground">Monthly Liquidation Avg</CardTitle>
+            <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(avgMonthlySaved)}</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight break-all">₹{formatCurrency(avgMonthlySaved)}</p>
             <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-muted-foreground bg-muted">
               per month (estimated)
             </Badge>
@@ -174,11 +310,11 @@ export default function SavingsPage() {
 
         <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs sm:col-span-2 lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">Diversified Products</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-semibold text-muted-foreground">Diversified Products</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground shrink-0" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-extrabold text-foreground tracking-tight">{savings.length}</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">{savings.length}</p>
             <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-muted-foreground bg-muted">
               active assets
             </Badge>
@@ -186,51 +322,82 @@ export default function SavingsPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="list" className="flex flex-col lg:flex-row gap-8 items-start">
-        
-        {/* premium Vertical Tab Triggers */}
-        <TabsList className="flex flex-row lg:flex-col w-full lg:w-64 h-auto bg-transparent border-b lg:border-b-0 lg:border-r border-border/60 rounded-none p-0 items-stretch lg:pr-6 shrink-0 gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
-          <TabsTrigger 
-            value="list" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+      {/* Asset Distribution Chart */}
+      <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-2 gap-2">
+          <div>
+            <CardTitle className="text-base sm:text-lg font-bold font-sans">Asset Distribution</CardTitle>
+            <CardDescription className="text-xs">Portfolio allocation breakdown by asset type</CardDescription>
+          </div>
+          <Button 
+            variant="secondary" 
+            size="sm"
+            className="gap-2 self-start sm:self-auto text-xs"
+            onClick={handleOptimizeAllocation}
           >
-            <span>🐷</span>
-            <span>Savings Assets</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="goals" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
-          >
-            <span>🎯</span>
-            <span>Savings Goals</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="trend" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
-          >
-            <span>📈</span>
-            <span>Historical Trend</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="registry" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
-          >
-            <span>💼</span>
-            <span>Apps & Providers</span>
-          </TabsTrigger>
-        </TabsList>
+            <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+            <span>Optimize Allocation</span>
+          </Button>
+        </CardHeader>
+        <CardContent className="flex justify-center items-center py-2 min-w-0 max-w-full overflow-hidden">
+          {groupedSavings.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-8">No savings assets recorded yet.</p>
+          ) : (
+            <div className="w-full h-[260px] min-w-0 flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={groupedSavings}
+                    dataKey="amount"
+                    nameKey="type"
+                    innerRadius={55}
+                    outerRadius={75}
+                    paddingAngle={5}
+                  >
+                    {groupedSavings.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => [`₹${formatCurrency(Number(value))}`, "Amount"]} />
+                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <div className="flex-1 w-full min-w-0">
+      <Tabs defaultValue="list" className="w-full min-w-0 max-w-full">
+        <div className="w-full overflow-x-auto scrollbar-hide -mx-1 px-1">
+          <TabsList variant="line" className="w-max sm:w-full min-w-full justify-start">
+            <TabsTrigger value="list" className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs shrink-0">
+              <span>🐷</span>
+              <span>Savings Assets</span>
+            </TabsTrigger>
+            <TabsTrigger value="goals" className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs shrink-0">
+              <span>🎯</span>
+              <span>Savings Goals</span>
+            </TabsTrigger>
+            <TabsTrigger value="trend" className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs shrink-0">
+              <span>📈</span>
+              <span>Historical Trend</span>
+            </TabsTrigger>
+            <TabsTrigger value="registry" className="px-3 sm:px-5 py-2 sm:py-2.5 text-xs shrink-0">
+              <span>💼</span>
+              <span>Apps & Providers</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
           
           {/* Tab 1: Savings List Table */}
           <TabsContent value="list" className="mt-0 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
-              <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 flex-wrap gap-4">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 space-y-0 gap-3">
                 <div>
-                  <CardTitle className="text-xl font-bold font-sans">Active Financial Assets</CardTitle>
+                  <CardTitle className="text-lg sm:text-xl font-bold font-sans">Active Financial Assets</CardTitle>
                   <CardDescription className="text-xs">Linked saving deposits, SIP mutual funds, and equities</CardDescription>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <Input
                     placeholder="Search name, app, provider..."
                     value={savingSearchTerm}
@@ -238,7 +405,7 @@ export default function SavingsPage() {
                       setSavingSearchTerm(e.target.value)
                       setSavingCurrentPage(1)
                     }}
-                    className="h-8 text-xs w-[180px] bg-background"
+                    className="h-8 text-xs w-full sm:w-[180px] bg-background"
                   />
                   <Select
                     value={savingOwnerFilter}
@@ -247,7 +414,7 @@ export default function SavingsPage() {
                       setSavingCurrentPage(1)
                     }}
                   >
-                    <SelectTrigger className="w-[140px] h-8 text-xs bg-background">
+                    <SelectTrigger className="w-full sm:w-[140px] h-8 text-xs bg-background">
                       <SelectValue placeholder="All Owners" />
                     </SelectTrigger>
                     <SelectContent>
@@ -261,7 +428,31 @@ export default function SavingsPage() {
                   </Select>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Filter Chips */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide w-full max-w-full min-w-0">
+                  {FILTER_PILLS.map((pill) => {
+                    const isActive = activeFilter === pill
+                    return (
+                      <button
+                        key={pill}
+                        type="button"
+                        onClick={() => {
+                          setActiveFilter(pill)
+                          setSavingCurrentPage(1)
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                          isActive
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/50"
+                        }`}
+                      >
+                        {pill}
+                      </button>
+                    )
+                  })}
+                </div>
+
                 {(() => {
                   const filteredAndSortedSavings = savings
                     .filter((sav) => {
@@ -273,7 +464,8 @@ export default function SavingsPage() {
                         matchedApp.toLowerCase().includes(savingSearchTerm.toLowerCase()) ||
                         matchedProvider.toLowerCase().includes(savingSearchTerm.toLowerCase()) ||
                         sav.owner.toLowerCase().includes(savingSearchTerm.toLowerCase())
-                      return matchOwner && matchSearch
+                      const matchFilter = matchesActiveFilter(sav, activeFilter)
+                      return matchOwner && matchSearch && matchFilter
                     })
                     .sort((a, b) => {
                       let comparison = 0
@@ -313,8 +505,102 @@ export default function SavingsPage() {
 
                   return (
                     <div className="space-y-4">
-                      <div className="rounded-xl border border-border/40 overflow-hidden bg-background/30">
-                        <Table>
+                      {/* Mobile Card List (<md) */}
+                      <div className="space-y-3 md:hidden">
+                        {paginatedSavings.map((sav) => {
+                          const matchedApp = apps.find(a => a.value === sav.app)?.label || sav.app
+                          const matchedProvider = providers.find(p => p.value === sav.provider)?.label || sav.provider
+                          const fullTypeLabel = TYPE_MAP[sav.type] || sav.type
+                          const typeIcon = fullTypeLabel.match(/[\p{Emoji}\u200d]+/gu)?.[0] || "💰"
+                          const goalIds = getSavingsGoalIds(sav)
+
+                          return (
+                            <div key={sav.id} className="p-3.5 rounded-xl border border-border/50 bg-background/50 space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2.5 min-w-0">
+                                  <span className="text-xl shrink-0 mt-0.5">{typeIcon}</span>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-sm text-foreground truncate">{sav.name}</p>
+                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                                      <span>👤 {sav.owner}</span>
+                                      <span>·</span>
+                                      <span>📱 {matchedApp}</span>
+                                      <span>·</span>
+                                      <span>🏦 {matchedProvider}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="font-black text-sm text-foreground">₹{formatCurrency(sav.amount)}</p>
+                                  <p className="text-[10px] text-muted-foreground font-semibold">{sav.frequency || "One-time"}</p>
+                                </div>
+                              </div>
+
+                              {goalIds.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-0.5">
+                                  {goalIds.map((gid) => {
+                                    const goalMatch = goals.find((g) => g.id === gid)
+                                    return goalMatch ? (
+                                      <Badge key={gid} variant="outline" className="text-[9px] font-bold py-0.5 px-1.5 bg-primary/5 text-primary border-primary/15">
+                                        🎯 {goalMatch.name}
+                                      </Badge>
+                                    ) : null
+                                  })}
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between pt-2 border-t border-border/30">
+                                <Badge variant="secondary" className="text-[10px] font-semibold text-muted-foreground bg-muted/60">
+                                  {fullTypeLabel}
+                                </Badge>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs text-primary hover:bg-primary/10"
+                                    onClick={() => {
+                                      setSelectedSaving(sav)
+                                      setSavingDetailsOpen(true)
+                                    }}
+                                  >
+                                    <Info className="h-3.5 w-3.5 mr-1" />
+                                    Details
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      setEditingSaving(sav)
+                                      setFormOpen(true)
+                                    }}
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                    onClick={() => {
+                                      if (confirm(`Delete saving asset ${sav.name}?`)) {
+                                        deleteSaving(sav.id)
+                                      }
+                                    }}
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Desktop Table (md+) */}
+                      <div className="rounded-xl border border-border/40 overflow-x-auto bg-background/30 w-full hidden md:block">
+                        <Table className="w-full">
                           <TableHeader>
                             <TableRow>
                               <TableHead className="cursor-pointer select-none" onClick={() => handleSort("name")}>
@@ -425,8 +711,8 @@ export default function SavingsPage() {
 
                       {/* Pagination Controls */}
                       {totalPages > 1 && (
-                        <div className="flex items-center justify-between px-2 py-1 text-xs">
-                          <p className="text-muted-foreground font-semibold">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-2 py-1 text-xs">
+                          <p className="text-muted-foreground font-semibold text-center sm:text-left text-[11px] sm:text-xs">
                             Showing {(savingCurrentPage - 1) * savingRowsPerPage + 1}–{Math.min(savingCurrentPage * savingRowsPerPage, filteredAndSortedSavings.length)} of {filteredAndSortedSavings.length} entries
                           </p>
                           <div className="flex items-center gap-1">
@@ -461,12 +747,12 @@ export default function SavingsPage() {
           <TabsContent value="trend" className="mt-0 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader>
-                <CardTitle className="text-xl font-bold">Historical Net Reserves</CardTitle>
+                <CardTitle className="text-lg sm:text-xl font-bold">Historical Net Reserves</CardTitle>
                 <CardDescription className="text-xs">Cumulative saving allocations (Last 6 months)</CardDescription>
               </CardHeader>
               <CardContent className="pt-2">
                 {!hasSavingsTrend ? (
-                  <div className="flex flex-col items-center justify-center h-[290px] text-center px-4">
+                  <div className="flex flex-col items-center justify-center h-[280px] sm:h-[300px] text-center px-4">
                     <TrendingUp className="h-10 w-10 text-muted-foreground/40 mb-3" />
                     <p className="text-sm font-semibold text-muted-foreground">No historical reserves recorded</p>
                     <p className="text-xs text-muted-foreground/60 mt-1 max-w-[280px]">
@@ -474,38 +760,40 @@ export default function SavingsPage() {
                     </p>
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={290}>
-                    <AreaChart data={dynamicSavingsHistory}>
-                      <defs>
-                        <linearGradient id="savingsGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.35} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}   />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 116, 139, 0.08)" vertical={false} />
-                      <XAxis
-                        dataKey="month"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 11, fontWeight: 600, fill: "hsl(var(--muted-foreground))" }}
-                      />
-                      <YAxis
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 11, fontWeight: 600, fill: "hsl(var(--muted-foreground))" }}
-                        tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
-                      />
-                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                      <Area
-                        type="monotone"
-                        dataKey="saved"
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={2.5}
-                        fill="url(#savingsGrad)"
-                        className="transition-all duration-300"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <div className="w-full h-[280px] sm:h-[320px] min-w-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={dynamicSavingsHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="savingsGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}   />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 116, 139, 0.08)" vertical={false} />
+                        <XAxis
+                          dataKey="month"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fontWeight: 600, fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fontWeight: 600, fill: "hsl(var(--muted-foreground))" }}
+                          tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+                        />
+                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: "4 4" }} />
+                        <Area
+                          type="monotone"
+                          dataKey="saved"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2.5}
+                          fill="url(#savingsGrad)"
+                          className="transition-all duration-300"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -530,9 +818,9 @@ export default function SavingsPage() {
                       placeholder="e.g. Kuvera, Coin..."
                       value={newAppName}
                       onChange={(e) => setNewAppName(e.target.value)}
-                      className="h-9 text-xs rounded-lg"
+                      className="h-9 text-xs rounded-lg flex-1 min-w-0"
                     />
-                    <Button type="submit" size="sm" className="font-semibold text-xs h-9">
+                    <Button type="submit" size="sm" className="font-semibold text-xs h-9 shrink-0">
                       Register App
                     </Button>
                   </form>
@@ -565,9 +853,9 @@ export default function SavingsPage() {
                       placeholder="e.g. SURYODAY SFB, Motilal..."
                       value={newProviderName}
                       onChange={(e) => setNewProviderName(e.target.value)}
-                      className="h-9 text-xs rounded-lg"
+                      className="h-9 text-xs rounded-lg flex-1 min-w-0"
                     />
-                    <Button type="submit" size="sm" className="font-semibold text-xs h-9">
+                    <Button type="submit" size="sm" className="font-semibold text-xs h-9 shrink-0">
                       Register Provider
                     </Button>
                   </form>
@@ -584,133 +872,107 @@ export default function SavingsPage() {
                   </div>
                 </CardContent>
               </Card>
-</div>
+            </div>
           </TabsContent>
 
           {/* Tab 2: Goals list table */}
           <TabsContent value="goals" className="mt-0 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
-          <CardHeader className="flex flex-row items-center justify-between pb-4 space-y-0 flex-wrap gap-4">
-            <div>
-              <CardTitle className="text-xl font-bold font-sans">Financial Milestone backing</CardTitle>
-              <CardDescription className="text-xs">Goals list in table format. Creation/edits allowed only on Goals page.</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Search goals..."
-                value={goalSearchTerm}
-                onChange={(e) => {
-                  setGoalSearchTerm(e.target.value)
-                  setGoalCurrentPage(1)
-                }}
-                className="h-8 text-xs w-[180px] bg-background"
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              // Helper to query linked savings details for any goal
-              const getGoalSavingsBackingLocal = (g: Goal) => {
-                const allocations = (g.savings_allocations && g.savings_allocations.length > 0)
-                  ? g.savings_allocations
-                  : (g.savings_ids || []).map((id) => ({ id, amount: 0 }))
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 space-y-0 gap-3">
+                <div>
+                  <CardTitle className="text-lg sm:text-xl font-bold font-sans">Financial Milestone backing</CardTitle>
+                  <CardDescription className="text-xs">Goals list with backing asset allocations. Edits allowed on Goals page.</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Input
+                    placeholder="Search goals..."
+                    value={goalSearchTerm}
+                    onChange={(e) => {
+                      setGoalSearchTerm(e.target.value)
+                      setGoalCurrentPage(1)
+                    }}
+                    className="h-8 text-xs w-full sm:w-[180px] bg-background"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  // Helper to query linked savings details for any goal
+                  const getGoalSavingsBackingLocal = (g: Goal) => {
+                    const allocations = (g.savings_allocations && g.savings_allocations.length > 0)
+                      ? g.savings_allocations
+                      : (g.savings_ids || []).map((id) => ({ id, amount: 0 }))
 
-                const fallbackAllocations = savings
-                  .filter((s) => s.linkedGoals?.includes(g.id) && !allocations.some((alloc) => alloc.id === s.id))
-                  .map((s) => ({ id: s.id, amount: 0 }))
+                    const fallbackAllocations = savings
+                      .filter((s) => s.linkedGoals?.includes(g.id) && !allocations.some((alloc) => alloc.id === s.id))
+                      .map((s) => ({ id: s.id, amount: 0 }))
 
-                const combined = [...allocations, ...fallbackAllocations]
+                    const combined = [...allocations, ...fallbackAllocations]
 
-                return combined
-                  .map((alloc) => {
-                    const saving = savings.find((s) => s.id === alloc.id)
-                    if (!saving) return null
-                    const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
-                    return {
-                      saving,
-                      allocatedAmount: alloc.amount,
-                      amount: effectiveAmount,
-                    }
-                  })
-                  .filter((item): item is { saving: Saving; allocatedAmount: number; amount: number } => item !== null)
-              }
-
-              const filteredAndSortedGoals = goals
-                .filter((g) => g.name.toLowerCase().includes(goalSearchTerm.toLowerCase()))
-                .sort((a, b) => {
-                  let comparison = 0
-                  if (goalSortBy === "name") {
-                    comparison = a.name.localeCompare(b.name)
-                  } else if (goalSortBy === "target") {
-                    comparison = safeNumber(a.target) - safeNumber(b.target)
-                  } else if (goalSortBy === "progress") {
-                    const backingA = getGoalSavingsBackingLocal(a).reduce((sum, item) => sum + safeNumber(item.amount), 0)
-                    const spentA = expenses.filter(e => e.goalId === a.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
-                    const progressA = safeNumber(a.current) + backingA + spentA
-                    
-                    const backingB = getGoalSavingsBackingLocal(b).reduce((sum, item) => sum + safeNumber(item.amount), 0)
-                    const spentB = expenses.filter(e => e.goalId === b.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
-                    const progressB = safeNumber(b.current) + backingB + spentB
-                    
-                    comparison = progressA - progressB
+                    return combined
+                      .map((alloc) => {
+                        const saving = savings.find((s) => s.id === alloc.id)
+                        if (!saving) return null
+                        const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
+                        return {
+                          saving,
+                          allocatedAmount: alloc.amount,
+                          amount: effectiveAmount,
+                        }
+                      })
+                      .filter((item): item is { saving: Saving; allocatedAmount: number; amount: number } => item !== null)
                   }
-                  return goalSortOrder === "asc" ? comparison : -comparison
-                })
 
-              const totalPages = Math.ceil(filteredAndSortedGoals.length / goalRowsPerPage)
-              const paginatedGoals = filteredAndSortedGoals.slice(
-                (goalCurrentPage - 1) * goalRowsPerPage,
-                goalCurrentPage * goalRowsPerPage
-              )
+                  const filteredAndSortedGoals = goals
+                    .filter((g) => g.name.toLowerCase().includes(goalSearchTerm.toLowerCase()))
+                    .sort((a, b) => {
+                      let comparison = 0
+                      if (goalSortBy === "name") {
+                        comparison = a.name.localeCompare(b.name)
+                      } else if (goalSortBy === "target") {
+                        comparison = safeNumber(a.target) - safeNumber(b.target)
+                      } else if (goalSortBy === "progress") {
+                        const backingA = getGoalSavingsBackingLocal(a).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                        const spentA = expenses.filter(e => e.goalId === a.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
+                        const progressA = safeNumber(a.current) + backingA + spentA
+                        
+                        const backingB = getGoalSavingsBackingLocal(b).reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                        const spentB = expenses.filter(e => e.goalId === b.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
+                        const progressB = safeNumber(b.current) + backingB + spentB
+                        
+                        comparison = progressA - progressB
+                      }
+                      return goalSortOrder === "asc" ? comparison : -comparison
+                    })
 
-              const handleSort = (field: "name" | "target" | "progress") => {
-                if (goalSortBy === field) {
-                  setGoalSortOrder(goalSortOrder === "asc" ? "desc" : "asc")
-                } else {
-                  setGoalSortBy(field)
-                  setGoalSortOrder("asc")
-                }
-                setGoalCurrentPage(1)
-              }
+                  const totalPages = Math.ceil(filteredAndSortedGoals.length / goalRowsPerPage)
+                  const paginatedGoals = filteredAndSortedGoals.slice(
+                    (goalCurrentPage - 1) * goalRowsPerPage,
+                    goalCurrentPage * goalRowsPerPage
+                  )
 
-              if (filteredAndSortedGoals.length === 0) {
-                return (
-                  <div className="text-center py-10">
-                    <p className="text-sm text-muted-foreground font-medium">No backing goals registered.</p>
-                  </div>
-                )
-              }
+                  const handleSort = (field: "name" | "target" | "progress") => {
+                    if (goalSortBy === field) {
+                      setGoalSortOrder(goalSortOrder === "asc" ? "desc" : "asc")
+                    } else {
+                      setGoalSortBy(field)
+                      setGoalSortOrder("asc")
+                    }
+                    setGoalCurrentPage(1)
+                  }
 
-              return (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-border/40 overflow-hidden bg-background/30">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="cursor-pointer select-none" onClick={() => handleSort("name")}>
-                            <div className="flex items-center gap-1">
-                              <span>Goal Name</span>
-                              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                          </TableHead>
-                          <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("target")}>
-                            <div className="flex items-center gap-1 justify-end">
-                              <span>Target</span>
-                              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                          </TableHead>
-                          <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("progress")}>
-                            <div className="flex items-center gap-1 justify-end">
-                              <span>Total Saved</span>
-                              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                          </TableHead>
-                          <TableHead>Deadline</TableHead>
-                          <TableHead>Progress bar</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  if (filteredAndSortedGoals.length === 0) {
+                    return (
+                      <div className="text-center py-10">
+                        <p className="text-sm text-muted-foreground font-medium">No backing goals registered.</p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Mobile Goals Cards (<md) */}
+                      <div className="space-y-3 md:hidden">
                         {paginatedGoals.map((g) => {
                           const backing = getGoalSavingsBackingLocal(g)
                           const totalBacking = backing.reduce((sum, item) => sum + safeNumber(item.amount), 0)
@@ -720,83 +982,177 @@ export default function SavingsPage() {
                           const done = pct === 100
 
                           return (
-                            <TableRow key={g.id}>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
+                            <div key={g.id} className="p-3.5 rounded-xl border border-border/50 bg-background/50 space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
                                   <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.color || "bg-primary"}`} />
-                                  <span className="font-bold text-xs">{g.name}</span>
+                                  <span className="font-bold text-sm text-foreground truncate">{g.name}</span>
                                   {done && (
-                                    <Badge className="bg-emerald-600/90 text-white border-none font-bold text-[8px] py-0 px-1">
+                                    <Badge className="bg-emerald-600/90 text-white border-none font-bold text-[8px] py-0 px-1 shrink-0">
                                       ✓ Met
                                     </Badge>
                                   )}
                                 </div>
-                              </TableCell>
-                              <TableCell className="font-bold text-xs text-right">₹{formatCurrency(g.target)}</TableCell>
-                              <TableCell className="font-extrabold text-xs text-primary text-right">₹{formatCurrency(netSaved)}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground font-semibold">{g.deadline || "No deadline"}</TableCell>
-                              <TableCell className="min-w-[120px]">
-                                <div className="flex items-center gap-2">
-                                  <Progress value={pct} className="h-2 flex-1" />
-                                  <span className="text-[10px] font-bold text-muted-foreground shrink-0">{pct}%</span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">
                                 <Button
                                   variant="ghost"
-                                  size="icon-xs"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-primary hover:bg-primary/10 shrink-0"
                                   onClick={() => {
                                     setSelectedGoal(g)
                                     setGoalDetailsOpen(true)
                                   }}
-                                  title="View Details Only"
                                 >
-                                  <Info className="h-3.5 w-3.5 text-primary" />
+                                  <Info className="h-3.5 w-3.5 mr-1" />
+                                  Details
                                 </Button>
-                              </TableCell>
-                            </TableRow>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground font-semibold">Total Saved</p>
+                                  <p className="font-extrabold text-sm text-primary">₹{formatCurrency(netSaved)}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] text-muted-foreground font-semibold">Target</p>
+                                  <p className="font-bold text-sm text-foreground">₹{formatCurrency(g.target)}</p>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1 pt-1">
+                                <div className="flex justify-between items-center text-[10px] text-muted-foreground font-semibold">
+                                  <span>Progress</span>
+                                  <span>{pct}%</span>
+                                </div>
+                                <Progress value={pct} className="h-2" />
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/30">
+                                <span className="flex items-center gap-1">
+                                  <CalendarDays className="h-3 w-3" />
+                                  {g.deadline ? `Due ${g.deadline}` : "No deadline"}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-medium">
+                                  {backing.length} linked asset{backing.length !== 1 ? "s" : ""}
+                                </span>
+                              </div>
+                            </div>
                           )
                         })}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-2 py-1 text-xs">
-                      <p className="text-muted-foreground font-semibold">
-                        Showing {(goalCurrentPage - 1) * goalRowsPerPage + 1}–{Math.min(goalCurrentPage * goalRowsPerPage, filteredAndSortedGoals.length)} of {filteredAndSortedGoals.length} entries
-                      </p>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon-xs"
-                          disabled={goalCurrentPage === 1}
-                          onClick={() => setGoalCurrentPage((p) => Math.max(1, p - 1))}
-                        >
-                          <ChevronLeft className="h-3.5 w-3.5" />
-                        </Button>
-                        <span className="font-bold px-2">{goalCurrentPage} / {totalPages}</span>
-                        <Button
-                          variant="outline"
-                          size="icon-xs"
-                          disabled={goalCurrentPage === totalPages}
-                          onClick={() => setGoalCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Button>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-          </CardContent>
-          </Card>
-      </TabsContent>
 
-        </div>
-      </Tabs>
+                      {/* Desktop Goals Table (md+) */}
+                      <div className="rounded-xl border border-border/40 overflow-x-auto bg-background/30 w-full hidden md:block">
+                        <Table className="w-full">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="cursor-pointer select-none" onClick={() => handleSort("name")}>
+                                <div className="flex items-center gap-1">
+                                  <span>Goal Name</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("target")}>
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span>Target</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead className="cursor-pointer select-none text-right" onClick={() => handleSort("progress")}>
+                                <div className="flex items-center gap-1 justify-end">
+                                  <span>Total Saved</span>
+                                  <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                                </div>
+                              </TableHead>
+                              <TableHead>Deadline</TableHead>
+                              <TableHead>Progress bar</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {paginatedGoals.map((g) => {
+                              const backing = getGoalSavingsBackingLocal(g)
+                              const totalBacking = backing.reduce((sum, item) => sum + safeNumber(item.amount), 0)
+                              const totalSpent = expenses.filter(e => e.goalId === g.id).reduce((sum, e) => sum + safeNumber(e.amount), 0)
+                              const netSaved = safeNumber(g.current) + totalBacking + totalSpent
+                              const pct = safeNumber(g.target) > 0 ? Math.min(100, Math.round((netSaved / safeNumber(g.target)) * 100)) : 0
+                              const done = pct === 100
+
+                              return (
+                                <TableRow key={g.id}>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.color || "bg-primary"}`} />
+                                      <span className="font-bold text-xs">{g.name}</span>
+                                      {done && (
+                                        <Badge className="bg-emerald-600/90 text-white border-none font-bold text-[8px] py-0 px-1">
+                                          ✓ Met
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="font-bold text-xs text-right">₹{formatCurrency(g.target)}</TableCell>
+                                  <TableCell className="font-extrabold text-xs text-primary text-right">₹{formatCurrency(netSaved)}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground font-semibold">{g.deadline || "No deadline"}</TableCell>
+                                  <TableCell className="min-w-[120px]">
+                                    <div className="flex items-center gap-2">
+                                      <Progress value={pct} className="h-2 flex-1" />
+                                      <span className="text-[10px] font-bold text-muted-foreground shrink-0">{pct}%</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      onClick={() => {
+                                        setSelectedGoal(g)
+                                        setGoalDetailsOpen(true)
+                                      }}
+                                      title="View Details Only"
+                                    >
+                                      <Info className="h-3.5 w-3.5 text-primary" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-2 py-1 text-xs">
+                          <p className="text-muted-foreground font-semibold text-center sm:text-left text-[11px] sm:text-xs">
+                            Showing {(goalCurrentPage - 1) * goalRowsPerPage + 1}–{Math.min(goalCurrentPage * goalRowsPerPage, filteredAndSortedGoals.length)} of {filteredAndSortedGoals.length} entries
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={goalCurrentPage === 1}
+                              onClick={() => setGoalCurrentPage((p) => Math.max(1, p - 1))}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="font-bold px-2">{goalCurrentPage} / {totalPages}</span>
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              disabled={goalCurrentPage === totalPages}
+                              onClick={() => setGoalCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
       {/* Editing dialog hookup */}
       <SavingsForm
@@ -825,8 +1181,8 @@ export default function SavingsPage() {
 
             return (
               <div className="space-y-4 pt-2">
-                <div className="rounded-xl border border-border/60 bg-muted/40 p-4 space-y-2">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-xl border border-border/60 bg-muted/40 p-3.5 sm:p-4 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
                     <div>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Asset Balance</p>
                       <p className="text-lg font-black mt-0.5">₹{formatCurrency(selectedSaving.amount)}</p>
@@ -1036,11 +1392,11 @@ export default function SavingsPage() {
 
                       return (
                         <div key={saving.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-background/50 text-xs font-semibold hover:border-primary/20 transition-colors">
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <span>🐷</span>
-                            <div>
-                              <p className="font-bold text-foreground truncate max-w-[170px]">{saving.name}</p>
-                              <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-[170px]">
+                            <div className="min-w-0">
+                              <p className="font-bold text-foreground truncate max-w-[130px] sm:max-w-[200px]">{saving.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-medium mt-0.5 truncate max-w-[130px] sm:max-w-[200px]">
                                 {matchedApp} · {matchedProvider}
                               </p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">{detailLabel}</p>
@@ -1069,6 +1425,35 @@ export default function SavingsPage() {
               </div>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── AI SAVINGS OPTIMIZER DIALOG ─── */}
+      <Dialog open={optimizerOpen} onOpenChange={setOptimizerOpen}>
+        <DialogContent className="sm:max-w-md backdrop-blur-lg bg-background/95 border-border/80">
+          <DialogHeader className="pb-2 border-b border-border/40">
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-500" />
+              <span>Could not open AI Coach</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Your optimization request has not been submitted.
+            </DialogDescription>
+          </DialogHeader>
+          {aiError && (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {aiError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setOptimizerOpen(false)}>
+              Close
+            </Button>
+            <Button size="sm" onClick={handleOptimizeAllocation} className="gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              Try again
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,20 +1,35 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import Link from "next/link"
 import { useFinanceData, type Goal, type Saving } from "@/hooks/use-finance-data"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { MarkdownContent } from "@/components/ai-plan/markdown"
 import { modelDisplayLabel } from "@/lib/ai/modelConfig"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { ExpenseForm } from "@/components/forms/expense-form"
 import { SavingsForm } from "@/components/forms/savings-form"
 import { GoalForm } from "@/components/forms/goal-form"
 import { SIPForm } from "@/components/forms/sip-form"
 import { DebtForm } from "@/components/forms/debt-form"
 import { safeNumber, formatCurrency, cn } from "@/lib/utils"
+import {
+  generateAIResponse,
+  getAISettingsStorageKeys,
+  isAIProvider,
+  type AIProvider,
+} from "@/lib/ai/aiClient"
+import { recordAITrace } from "@/lib/ai/aiObservability"
+import { AI_CHAT_HANDOFF_STORAGE_KEY } from "@/lib/ai/chatHandoff"
 import {
   Sparkles,
   Send,
@@ -24,17 +39,14 @@ import {
   TrendingUp,
   PiggyBank,
   Wallet,
-  RotateCcw,
   Trash2,
   Bookmark,
   BookmarkCheck,
   Zap,
   Brain,
-  AlertCircle,
+  ArrowLeftRight,
   TrendingDown,
   BarChart3,
-  ArrowLeftRight,
-  PlusCircle,
   Landmark,
   Activity,
   ChevronDown,
@@ -50,7 +62,7 @@ interface Message {
   id: string
   role: "user" | "assistant"
   content: string
-  provider?: "gemini" | "openrouter"
+  provider?: AIProvider
   model?: string
   isPlan?: boolean
   error?: boolean
@@ -71,26 +83,56 @@ const BUILD_PLAN_PROMPT =
   "Build a robust monthly finance plan from all available data. Use my actual income, expenses, savings, goals, SIPs, accounts, and lend/borrow records. If assumptions are needed, state them briefly and still give a concrete plan with analytics, priorities, monthly allocation, goal progress, SIP/debt actions, and next steps."
 
 const SUGGESTIONS = [
+  "Optimize my asset allocation",
   "What are my expenses this month?",
   "Where should I cut spending?",
-  "How much can I save monthly?",
   "Show my goals progress",
   "Can I afford ₹50,000 more expense?",
-  "Build my full wealth plan",
 ]
 
 const CHAT_STORAGE_KEY = "finio-ai-plan-chat"
 const PLAN_STORAGE_KEY = "finio-savings-plan"
 
 type QuickAddType = "expense" | "saving" | "goal" | "sip" | "debt" | null
+type AIConfiguration = {
+  provider: AIProvider
+  apiKey: string
+  model?: string
+  userId?: string
+} | null
+
+function Alert({
+  variant,
+  children,
+}: {
+  variant: "destructive"
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive",
+        variant === "destructive" && "text-destructive"
+      )}
+    >
+      {children}
+    </div>
+  )
+}
 
 // ─── Helper components ────────────────────────────────────────────────────────
 
-function ProviderBadge({ provider, model }: { provider?: "gemini" | "openrouter"; model?: string }) {
+function ProviderBadge({ provider, model }: { provider?: AIProvider; model?: string }) {
   if (!provider) return null
-  const config = {
+  const config: Record<AIProvider, { label: string; classes: string }> = {
     gemini: { label: "Gemini", classes: "bg-blue-500/10 border-blue-500/20 text-blue-400" },
-    openrouter: { label: model ? `OpenRouter · ${modelDisplayLabel(model)}` : "OpenRouter", classes: "bg-purple-500/10 border-purple-500/20 text-purple-400" },
+    groq: { label: "Groq", classes: "bg-orange-500/10 border-orange-500/20 text-orange-400" },
+    openrouter: {
+      label: model ? `OpenRouter · ${modelDisplayLabel(model)}` : "OpenRouter",
+      classes: "bg-purple-500/10 border-purple-500/20 text-purple-400",
+    },
+    mistral: { label: "Mistral", classes: "bg-amber-500/10 border-amber-500/20 text-amber-400" },
   }
   const { label, classes } = config[provider]
   return (
@@ -136,7 +178,8 @@ function getGoalBackingAmount(goal: Goal, savings: Saving[]) {
   const explicitBacking = [...allocations, ...linkedAllocations].reduce((sum, allocation) => {
     const saving = savings.find((item) => item.id === allocation.id)
     if (!saving) return sum
-    return sum + safeNumber(allocation.amount > 0 ? allocation.amount : saving.amount)
+    const availableBalance = safeNumber(saving.amount)
+    return sum + (allocation.amount > 0 ? Math.min(allocation.amount, availableBalance) : availableBalance)
   }, 0)
 
   const inferredBackingAmount = savings
@@ -151,6 +194,15 @@ function getGoalBackingAmount(goal: Goal, savings: Saving[]) {
   return explicitBacking + inferredBackingAmount
 }
 
+function getGoalDeadlineStatus(deadline?: string) {
+  if (!deadline) return "not set"
+  const parsedDeadline = new Date(`${deadline.slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(parsedDeadline.getTime())) return "unrecognized date"
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return parsedDeadline < today ? "past; needs confirmation" : "upcoming"
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AIPlanPage() {
@@ -159,20 +211,28 @@ export default function AIPlanPage() {
   const [loading, setLoading] = useState(false)
   const [savedPlan, setSavedPlan] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<Date | null>(null)
+  const [savedPlanOpen, setSavedPlanOpen] = useState(false)
+  const [pendingHandoffPrompt, setPendingHandoffPrompt] = useState<string | null>(null)
   const [quickAddOpen, setQuickAddOpen] = useState<QuickAddType>(null)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [activePanelTab, setActivePanelTab] = useState<"chat" | "plan">("chat")
   const [maximizedPanel, setMaximizedPanel] = useState<"chat" | "plan" | null>(null)
+  const [aiConfiguration, setAIConfiguration] = useState<AIConfiguration>(null)
+  const [aiConfigurationLoaded, setAIConfigurationLoaded] = useState(false)
+  const [aiConfigurationError, setAIConfigurationError] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const pendingHandoffSentRef = useRef(false)
 
-  const { accounts, expenses, goals, savings, sips, debts, income, user, isDemo } = useFinanceData()
+  const { accounts, expenses, goals, savings, sips, debts, income, user } = useFinanceData()
 
   const localData = useMemo(
     () => ({ accounts, expenses, goals, savings, sips, debts, income }),
     [accounts, expenses, goals, savings, sips, debts, income]
   )
+  const activeAIConfiguration =
+    aiConfiguration?.userId === user?.uid ? aiConfiguration : null
 
   // ── Derived analytics ─────────────────────────────────────────────────────
   const monthlyIncome = income
@@ -237,44 +297,77 @@ export default function AIPlanPage() {
     const totals = goals.reduce(
       (acc, goal) => {
         acc.target += safeNumber(goal.target)
-        acc.backed += safeNumber(goal.current) + getGoalBackingAmount(goal, savings)
+        const spent = expenses
+          .filter((expense) => expense.goalId === goal.id)
+          .reduce((sum, expense) => sum + safeNumber(expense.amount), 0)
+        acc.backed += safeNumber(goal.current) + getGoalBackingAmount(goal, savings) + spent
         return acc
       },
       { target: 0, backed: 0 }
     )
     return totals.target > 0 ? Math.min(100, Math.round((totals.backed / totals.target) * 100)) : 0
-  }, [goals, savings])
+  }, [expenses, goals, savings])
 
   // ── Quick add config ──────────────────────────────────────────────────────
   const quickActions = [
     { type: "expense" as const, label: "Expense", icon: TrendingDown, color: "text-rose-500", bg: "bg-rose-500/10" },
     { type: "saving" as const, label: "Saving", icon: PiggyBank, color: "text-violet-500", bg: "bg-violet-500/10" },
     { type: "goal" as const, label: "Goal", icon: Target, color: "text-blue-500", bg: "bg-blue-500/10" },
-    { type: "sip" as const, label: "SIP", icon: BarChart3, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+    { type: "sip" as const, label: "SIP", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { type: "debt" as const, label: "Lend/Borrow", icon: ArrowLeftRight, color: "text-amber-500", bg: "bg-amber-500/10" },
   ]
 
   // ── Persistence ───────────────────────────────────────────────────────────
   useEffect(() => {
-    try {
-      const savedChat = localStorage.getItem(CHAT_STORAGE_KEY)
-      if (savedChat) {
-        const parsed: Message[] = JSON.parse(savedChat).map((m: Message) => ({
-          ...m,
-          timestamp: new Date(m.timestamp),
-        }))
-        if (parsed.length > 1) setMessages(parsed)
+    const timer = window.setTimeout(() => {
+      try {
+        const savedChat = localStorage.getItem(CHAT_STORAGE_KEY)
+        if (savedChat) {
+          const parsed: Message[] = JSON.parse(savedChat).map((m: Message) => ({
+            ...m,
+            timestamp: new Date(m.timestamp),
+          }))
+          if (parsed.length > 1) setMessages(parsed)
+        }
+        const savedPlanRaw = localStorage.getItem(PLAN_STORAGE_KEY)
+        if (savedPlanRaw) {
+          const { content, savedAt: at } = JSON.parse(savedPlanRaw)
+          setSavedPlan(content)
+          setSavedAt(new Date(at))
+        }
+        const pendingPrompt = localStorage.getItem(AI_CHAT_HANDOFF_STORAGE_KEY)
+        if (pendingPrompt) setPendingHandoffPrompt(pendingPrompt)
+      } catch {
+        // ignore malformed storage
       }
-      const savedPlanRaw = localStorage.getItem(PLAN_STORAGE_KEY)
-      if (savedPlanRaw) {
-        const { content, savedAt: at } = JSON.parse(savedPlanRaw)
-        setSavedPlan(content)
-        setSavedAt(new Date(at))
-      }
-    } catch {
-      // ignore malformed storage
-    }
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    let active = true
+    const storageKeys = getAISettingsStorageKeys(user?.uid)
+    const timer = window.setTimeout(() => {
+      try {
+        const configuredProvider = localStorage.getItem(storageKeys.provider)?.trim().toLowerCase()
+        const apiKey = localStorage.getItem(storageKeys.apiKey)?.trim()
+        const model = localStorage.getItem(storageKeys.model)?.trim()
+        if (configuredProvider && apiKey && isAIProvider(configuredProvider)) {
+          setAIConfiguration({ provider: configuredProvider, apiKey, model, userId: user?.uid })
+        }
+      } catch {
+        setAIConfigurationError("Unable to read your AI settings from this browser.")
+      } finally {
+        if (active) setAIConfigurationLoaded(true)
+      }
+    }, 0)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [user?.uid])
 
   useEffect(() => {
     try {
@@ -293,6 +386,7 @@ export default function AIPlanPage() {
     async (text?: string) => {
       const question = (text ?? input).trim()
       if (!question || loading) return
+      if (!activeAIConfiguration) return
 
       const userMsg: Message = {
         id: crypto.randomUUID(),
@@ -304,7 +398,7 @@ export default function AIPlanPage() {
       setMessages((prev) => [...prev, userMsg])
       setInput("")
       setLoading(true)
-      setActivePanelTab("chat")
+      const requestStartedAt = Date.now()
 
       try {
         const history = messages
@@ -312,41 +406,132 @@ export default function AIPlanPage() {
           .slice(-10)
           .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }))
 
-        const res = await fetch("/api/ai-plan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            uid: user?.uid ?? null,
-            isDemo,
-            localData: isDemo ? localData : undefined,
-            history,
-            savedPlan: savedPlan ?? undefined,
-          }),
+        const financeContext = Object.entries(localData)
+          .map(([section, records]) => `${section}: ${JSON.stringify(records.slice(0, 100))}`)
+          .join("\n")
+        const historyContext = history
+          .slice(-10)
+          .map(({ role, content }) => `${role === "user" ? "User" : "Coach"}: ${content.slice(0, 1200)}`)
+          .join("\n")
+        const goalLedger = goals.map((goal) => {
+          const availableBacking = getGoalBackingAmount(goal, savings)
+          const availableCash = safeNumber(goal.current) + availableBacking
+          const spent = expenses
+            .filter((expense) => expense.goalId === goal.id)
+            .reduce((sum, expense) => sum + safeNumber(expense.amount), 0)
+          const fulfilled = availableCash + spent
+          const target = safeNumber(goal.target)
+          return {
+            goal: goal.name,
+            target,
+            availableNow: availableCash,
+            alreadySpentTowardGoal: spent,
+            totalFulfilled: fulfilled,
+            stillNeeded: Math.max(0, target - fulfilled),
+            deadline: goal.deadline ?? null,
+            deadlineStatus: getGoalDeadlineStatus(goal.deadline),
+          }
         })
+        const prompt = [
+          "You are Finio Wealth Coach, a direct and data-driven personal finance assistant for Indian users.",
+          "Answer the user's question using the financial data below. Do not invent financial figures. Use Indian rupee formatting and clearly state when relevant data is missing.",
+          "Keep focused answers under 400 words and full plans under 650 words. Finish every list/table and end with a complete sentence; do not add unrelated sections.",
+          `Today's date: ${new Date().toLocaleDateString("en-IN")}`,
+          `Financial data:\n${financeContext || "No financial records are available."}`,
+          `Authoritative goal ledger (use these amounts; already-spent money is achieved toward the target but is not liquid):\n${JSON.stringify(goalLedger)}`,
+          "If a goal deadline is in the past, tell me it may be outdated and ask whether it should be updated or the goal is still pending with a new date. Do not treat it as a future deadline or give date-specific allocation advice until clarified.",
+          "When checking short-term liquidity, count only currently available cash/assets toward liquidity. Do not ask me to save again for expenses already linked to and paid toward a goal.",
+          `Computed analytics: monthly income ₹${formatCurrency(monthlyIncome)}, tracked expenses ₹${formatCurrency(monthlyExpenses)}, active SIPs ₹${formatCurrency(activeSIPTotal)}, estimated surplus ₹${formatCurrency(monthlySurplus)}, total savings ₹${formatCurrency(totalSavings)}.`,
+          historyContext ? `Conversation history:\n${historyContext}` : "",
+          savedPlan ? `Previously saved plan:\n${savedPlan.slice(0, 2000)}` : "",
+          `User's message: ${question}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+        const result = await generateAIResponse(
+          prompt,
+          activeAIConfiguration.provider,
+          activeAIConfiguration.apiKey,
+          activeAIConfiguration.model
+        )
 
-        const data = await res.json()
-        if (!res.ok) throw new Error(data?.error ?? "Something went wrong")
+        let modelFallbackNotice = ""
+        let continuationNotice = ""
+        let traceNotice = ""
+        if (result.fallbackFrom) {
+          const storageKeys = getAISettingsStorageKeys(user?.uid)
+          setAIConfiguration({ ...activeAIConfiguration, model: result.model })
+          try {
+            localStorage.setItem(storageKeys.model, result.model)
+            modelFallbackNotice = `\n\n*The selected model "${result.fallbackFrom}" was unavailable, so I automatically switched to "${result.model}" and saved that selection.*`
+          } catch {
+            modelFallbackNotice = `\n\n*The selected model "${result.fallbackFrom}" was unavailable, so I automatically switched to "${result.model}". Save this model in Settings to keep using it.*`
+          }
+        }
+        if (result.incomplete) {
+          const reason = result.continuationWarning
+            ? `Continuation failed: ${result.continuationWarning}`
+            : "The provider still reported its output limit after three continuation attempts."
+          continuationNotice = `\n\n**This answer may be incomplete.** ${reason} You can ask me to continue.`
+        }
+        if (user) {
+          try {
+            await recordAITrace(await user.getIdToken(), {
+              provider: result.provider,
+              model: result.model,
+              status: "success",
+              durationMs: Date.now() - requestStartedAt,
+              inputTokens: result.inputTokens,
+              outputTokens: result.outputTokens,
+              finishReason: result.finishReason,
+              incomplete: result.incomplete,
+              fallbackFrom: result.fallbackFrom,
+            })
+          } catch (error: unknown) {
+            const message =
+              error instanceof Error ? error.message : "LangSmith trace could not be recorded."
+            traceNotice = `\n\n*LangSmith trace not recorded: ${message}*`
+          }
+        }
 
         const assistantMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: data.answer,
-          provider: data.provider,
-          model: data.model,
-          isPlan: data.isPlan,
+          content: `${result.text}${modelFallbackNotice}${continuationNotice}${traceNotice}`,
+          provider: result.provider,
+          model: result.model,
+          isPlan: /build|create|generate|full|complete|robust|monthly|12.month/i.test(question) &&
+            /\b(plan|roadmap|strategy|wealth)\b/i.test(question),
           timestamp: new Date(),
         }
 
         setMessages((prev) => [...prev, assistantMsg])
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error"
+        let traceNotice = ""
+        if (user) {
+          try {
+            await recordAITrace(await user.getIdToken(), {
+              provider: activeAIConfiguration.provider,
+              model: activeAIConfiguration.model ?? "provider-default",
+              status: "error",
+              durationMs: Date.now() - requestStartedAt,
+              errorStatus: Number(message.match(/API error \((\d{3})\)/)?.[1]) || undefined,
+            })
+          } catch (traceError: unknown) {
+            const traceMessage =
+              traceError instanceof Error
+                ? traceError.message
+                : "LangSmith trace could not be recorded."
+            traceNotice = `\n\nLangSmith trace not recorded: ${traceMessage}`
+          }
+        }
         setMessages((prev) => [
           ...prev,
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `Sorry, I ran into an error: **${message}**`,
+            content: `Sorry, I ran into an error: **${message}**${traceNotice}`,
             error: true,
             timestamp: new Date(),
           },
@@ -355,8 +540,54 @@ export default function AIPlanPage() {
         setLoading(false)
       }
     },
-    [input, loading, user, isDemo, localData, messages, savedPlan]
+    [
+      input,
+      loading,
+      activeAIConfiguration,
+      localData,
+      messages,
+      savedPlan,
+      expenses,
+      goals,
+      savings,
+      monthlyIncome,
+      monthlyExpenses,
+      activeSIPTotal,
+      monthlySurplus,
+      totalSavings,
+      user,
+    ]
   )
+
+  useEffect(() => {
+    if (
+      !pendingHandoffPrompt ||
+      !aiConfigurationLoaded ||
+      !activeAIConfiguration ||
+      loading ||
+      pendingHandoffSentRef.current
+    ) {
+      return
+    }
+
+    pendingHandoffSentRef.current = true
+    try {
+      localStorage.removeItem(AI_CHAT_HANDOFF_STORAGE_KEY)
+    } catch {
+      window.setTimeout(() => {
+        setAIConfigurationError(
+          "The AI Coach opened, but the saved request could not be cleared from this browser."
+        )
+      }, 0)
+    }
+    void sendMessage(pendingHandoffPrompt)
+  }, [
+    activeAIConfiguration,
+    aiConfigurationLoaded,
+    loading,
+    pendingHandoffPrompt,
+    sendMessage,
+  ])
 
   const savePlan = useCallback((content: string) => {
     const now = new Date()
@@ -384,6 +615,7 @@ export default function AIPlanPage() {
   const clearSavedPlan = useCallback(() => {
     setSavedPlan(null)
     setSavedAt(null)
+    setSavedPlanOpen(false)
     try { localStorage.removeItem(PLAN_STORAGE_KEY) } catch { /* ignore */ }
   }, [])
 
@@ -396,9 +628,31 @@ export default function AIPlanPage() {
     }
   }
 
+  if (!aiConfigurationLoaded) {
+    return <div className="mx-auto w-full max-w-7xl px-3 py-6" aria-live="polite">Loading AI settings…</div>
+  }
+
+  if (!activeAIConfiguration) {
+    return (
+      <div className="mx-auto w-full max-w-7xl px-3 py-6">
+        <Alert variant="destructive">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              {aiConfigurationError ??
+                "Please configure your free AI API key in Settings to use the AI Coach."}
+            </p>
+            <Button asChild variant="outline" className="shrink-0">
+              <Link href="/dashboard/settings">Open Settings</Link>
+            </Button>
+          </div>
+        </Alert>
+      </div>
+    )
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-[100dvh] max-w-7xl mx-auto w-full px-3 sm:px-5 py-4 flex flex-col gap-3 sm:gap-4 pb-8">
+    <div className="h-[calc(100dvh-9rem)] min-h-[28rem] max-w-7xl mx-auto w-full px-3 sm:px-5 py-4 flex flex-col gap-3 sm:gap-4">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 shrink-0">
@@ -413,19 +667,32 @@ export default function AIPlanPage() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={() => sendMessage(BUILD_PLAN_PROMPT)}
-          disabled={loading}
-          size="sm"
-          className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-sm shrink-0 text-xs sm:text-sm"
-        >
-          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-          Build My Plan
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {savedPlan && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSavedPlanOpen(true)}
+              className="text-xs"
+            >
+              <BookmarkCheck className="h-3.5 w-3.5 mr-1.5" />
+              Saved plan
+            </Button>
+          )}
+          <Button
+            onClick={() => sendMessage(BUILD_PLAN_PROMPT)}
+            disabled={loading}
+            size="sm"
+            className="bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 shadow-sm text-xs sm:text-sm"
+          >
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+            Build My Plan
+          </Button>
+        </div>
       </div>
 
       {/* ── Stats strip ── */}
-      <div className="grid grid-cols-4 gap-1.5 shrink-0">
+      <div className="hidden">
         {[
           {
             label: "Income",
@@ -494,7 +761,7 @@ export default function AIPlanPage() {
       </div>
 
       {/* ── Data readiness + analytics (collapsible) ── */}
-      <div className="rounded-xl border border-border/50 bg-gradient-to-r from-blue-500/5 via-violet-500/5 to-purple-600/5 overflow-hidden shrink-0">
+      <div className="hidden rounded-xl border border-border/50 bg-gradient-to-r from-blue-500/5 via-violet-500/5 to-purple-600/5 overflow-hidden shrink-0">
         {/* Summary row — always visible */}
         <button
           onClick={() => setAnalyticsOpen((v) => !v)}
@@ -612,7 +879,7 @@ export default function AIPlanPage() {
       </div>
 
       {/* ── Mobile panel tab switcher ── */}
-      <div className="flex gap-0 rounded-xl border border-border/60 overflow-hidden lg:hidden bg-muted/20 shrink-0">
+      <div className="hidden gap-0 rounded-xl border border-border/60 overflow-hidden lg:hidden bg-muted/20 shrink-0">
         <button
           onClick={() => setActivePanelTab("chat")}
           className={cn(
@@ -641,15 +908,11 @@ export default function AIPlanPage() {
       </div>
 
       {/* ── Main panels ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-7 gap-3 sm:gap-4 w-full h-[88vh] lg:h-[75vh] shrink-0" style={{ gridAutoRows: '1fr' }}>
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 w-full flex-1 min-h-0">
 
         {/* ── Chat panel ── */}
         <Card
-          className={cn(
-            "border-border/60 flex flex-col overflow-hidden h-full min-h-0 transition-all",
-            activePanelTab !== "chat" && "hidden lg:flex",
-            maximizedPanel === "chat" ? "lg:col-span-7" : maximizedPanel === "plan" ? "hidden lg:hidden" : "lg:col-span-4"
-          )}
+          className="col-span-1 flex h-full min-h-0 flex-col overflow-hidden border-border/60"
         >
           <CardHeader className="py-3 px-4 border-b border-border/40 bg-gradient-to-r from-blue-600/5 to-violet-600/5">
             <div className="flex items-center justify-between gap-2">
@@ -671,6 +934,17 @@ export default function AIPlanPage() {
                     <span className="hidden sm:inline">Save Plan</span>
                   </Button>
                 )}
+                {savedPlan && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSavedPlanOpen(true)}
+                    className="h-7 text-[10px] px-2.5 gap-1"
+                  >
+                    <BookmarkCheck className="h-3 w-3" />
+                    <span className="hidden sm:inline">View saved plan</span>
+                  </Button>
+                )}
                 {messages.length > 1 && (
                   <Button
                     variant="ghost"
@@ -682,15 +956,6 @@ export default function AIPlanPage() {
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setMaximizedPanel(p => p === "chat" ? null : "chat")}
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hidden lg:flex"
-                  title={maximizedPanel === "chat" ? "Restore" : "Maximize"}
-                >
-                  {maximizedPanel === "chat" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -848,11 +1113,7 @@ export default function AIPlanPage() {
 
         {/* ── Saved Plan panel ── */}
         <Card
-          className={cn(
-            "border-border/60 flex flex-col overflow-hidden h-full min-h-0 transition-all",
-            activePanelTab !== "plan" && "hidden lg:flex",
-            maximizedPanel === "plan" ? "lg:col-span-7" : maximizedPanel === "chat" ? "hidden lg:hidden" : "lg:col-span-3"
-          )}
+          className="hidden"
         >
           <CardHeader className="py-3 px-4 border-b border-border/40">
             <div className="flex items-center justify-between gap-2">
@@ -951,6 +1212,29 @@ export default function AIPlanPage() {
         open={quickAddOpen === "debt"}
         onOpenChange={(open) => setQuickAddOpen(open ? "debt" : null)}
       />
+      <Dialog open={savedPlanOpen} onOpenChange={setSavedPlanOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>My Savings Plan</DialogTitle>
+            <DialogDescription>
+              {savedAt
+                ? `Saved ${savedAt.toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}`
+                : "Your saved plan"}
+            </DialogDescription>
+          </DialogHeader>
+          {savedPlan && <MarkdownContent text={savedPlan} />}
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={clearSavedPlan}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Remove saved plan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

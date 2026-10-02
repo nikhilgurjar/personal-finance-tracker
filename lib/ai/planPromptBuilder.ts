@@ -23,19 +23,32 @@ interface BuiltPlanPrompt {
 
 // ─── Question mode detection ──────────────────────────────────────────────────
 
-type PlanQuestionMode = "PLAN" | "CONVERSATIONAL"
+type PlanQuestionMode = "PLAN" | "CONVERSATIONAL" | "DECISION"
 
 /**
- * Determines whether the user wants a full plan generation or a specific answer.
+ * Determines whether the user wants a full plan generation, a specific answer,
+ * or a structured affordability/goal decision workflow.
  *
+ * DECISION → affordability + SIP + debt/goal prioritization with clarification-first flow
  * PLAN     → full 8-section template with 12-month roadmap
  * CONVERSATIONAL → concise, focused answer to the specific question
- *
- * If in doubt, default to CONVERSATIONAL so we never spam a 12-month plan
- * when someone just asks "what did I spend this month?".
  */
+function isAffordabilityDecision(question: string): boolean {
+  const q = question.trim()
+  const patterns: RegExp[] = [
+    /\b(can\s+i\s+afford|afford|extra\s+spend|extra\s+expense|extra\s+money|more\s+expense|more\s+spend)\b/i,
+    /\b(sip\s+for\s+the\s+next\s+\d+\s*[-–]?\s*\d*\s*months?|sip\s+increase|monthly\s+sip)\b/i,
+    /\b(should\s+i\s+do|is\s+it\s+safe|can\s+i\s+take\s+on|can\s+i\s+spend|can\s+i\s+add)\b/i,
+    /\b(december|next\s+month|month\s+after|for\s+the\s+next\s+\d+\s+months?)\b/i,
+  ]
+
+  return patterns.some((pattern) => pattern.test(q))
+}
+
 function classifyPlanQuestion(question: string): PlanQuestionMode {
   const q = question.trim()
+
+  if (isAffordabilityDecision(question)) return "DECISION"
 
   const PLAN_PATTERNS: RegExp[] = [
     // Explicit plan-build requests
@@ -70,112 +83,139 @@ function classifyPlanQuestion(question: string): PlanQuestionMode {
  * Used ONLY for conversational questions — short, focused, data-faithful.
  * Must NOT generate the full plan template.
  */
-const CONVERSATIONAL_SYSTEM_PROMPT = `You are Finio Wealth Coach — a direct, data-driven personal finance assistant for Indian users.
+const CONVERSATIONAL_SYSTEM_PROMPT = `You are Finio Wealth Coach, a direct and data-driven personal finance assistant for Indian users.
 
-⚡ CORE INSTRUCTION: Answer ONLY the user's specific question. Do NOT generate a full financial plan or section headers unless explicitly asked.
+CORE INSTRUCTION: Answer only the user's specific question. Do not generate a full financial plan or section headers unless explicitly asked.
 
 Rules:
-- OUTPUT FORMAT: Provide the final answer IMMEDIATELY. Do NOT output any internal thinking, reasoning, scratchpad, or meta-commentary before your answer.
-- Use ₹ with Indian comma formatting (e.g. ₹1,55,000)
-- Be concise but complete. If asked to list items (like goals, debts, or sips), list ALL of them. Do not summarize or omit items to save space.
-- ALWAYS use the PRE-COMPUTED ANALYTICS section if present — never contradict those numbers or recalculate them yourself.
-- No greetings, no preamble, no "Here is your progress...". 
-- Start directly with the data.
+- Output the final answer immediately. Do not include internal reasoning, scratchpad text, or meta-commentary.
+- Use Rs with Indian comma formatting (for example, Rs1,55,000).
+- Be concise but complete. If asked to list items such as goals, debts, or SIPs, include all of them.
+- Always use the pre-computed analytics if present; do not contradict those numbers or recalculate them.
+- No greetings or preamble. Start directly with the data.
 
 How to handle specific question types:
-- "What are my expenses [period]?" → Category breakdown with ₹ amounts + total.
-- "Can I afford X more expense?" → Use pre-computed surplus from analytics: income − expenses − active SIPs = surplus (EMI already factored if shown). Answer yes/no with the arithmetic shown in bullet points.
-- "Where should I cut expenses?" → List the top 3 categories by amount. Name the single biggest lever.
-- "How to increase savings?" → Identify the single clearest opportunity from the data. One concrete recommendation with a ₹ number.
-- "What's my savings rate / surplus?" → Single calculation shown clearly using pre-computed figures.
-- Goal progress questions → Present in a table: | Goal | Progress % | Backed (₹) | Target (₹) | Remaining (₹) | Deadline |. Use pre-computed values.
-- If no relevant data exists for the question, say so in one sentence and suggest what to add.`
+- "What are my expenses [period]?" -> Category breakdown with Rs amounts and total.
+- "Can I afford X more expense?" -> Use pre-computed surplus from analytics: income minus expenses minus active SIPs = surplus. Answer yes or no with arithmetic in bullet points.
+- "Where should I cut expenses?" -> List the top 3 categories by amount and name the single biggest lever.
+- "How to increase savings?" -> Identify the single clearest opportunity and give one concrete recommendation with a Rs number.
+- "What's my savings rate / surplus?" -> Show a single clear calculation using the pre-computed figures.
+- Goal progress questions -> Present a table with columns: Goal | Progress % | Backed (Rs) | Target (Rs) | Remaining (Rs) | Deadline. Use the pre-computed values.
+- For each goal, distinguish money already spent from money still available. Count linked goal expenses toward the goal's target, but never describe spent money as liquid assets or as money still to save.
+- If a goal deadline is earlier than today's date, say the recorded deadline has passed and ask whether it is outdated or the goal is still pending with a new deadline. Do not treat a past date as an upcoming deadline or make deadline-based recommendations until clarified.
+- If no relevant data exists, say so in one sentence and suggest what to add.
+`
+
+const AFFORDABILITY_DECISION_PROMPT = `You are a financial decision assistant for Indian personal finance.
+
+Use this exact 3-stage agent workflow and answer in order:
+
+Stage 1 - Analyze current state:
+- monthly income
+- monthly surplus
+- debt obligations
+- goal remaining amounts
+- goal deadlines
+
+Stage 2 - Clarify missing constraints before recommendation:
+- Ask up to 2 clarifying questions before recommending a plan.
+- Do not assume debt deferral unless the user explicitly says which debts can be deferred.
+- Treat wedding goal and debt payoff as separate priorities.
+- If it is unclear which goal has priority, ask which goal is the priority: wedding, emergency fund, or debt payoff.
+
+Stage 3 - Build a scenario model:
+- best case
+- conservative case
+- not recommended case
+
+Then give a final recommendation only after the scenario is clear.
+
+Rules:
+- Do not assume debt deferral or payment changes without explicit user input.
+- Compute goal fulfillment timeline separately for each goal.
+- Show the math clearly using Rs values.
+- Keep the answer direct and structured.
+- If assumptions are needed, name them clearly and show the impact.
+- Return valid JSON only with this schema:
+{
+  "status": "can_afford|needs_clarification|not_recommended",
+  "questions": ["..."],
+  "assumptions": ["..."],
+  "goal_plan": [{"goal": "...", "timeline_months": 0, "required_monthly_contribution": 0, "status": "..."}],
+  "debt_plan": [{"debt": "...", "can_defer": false, "impact": "..."}],
+  "monthly_cashflow": {"income": 0, "surplus": 0, "new_sip": 0, "extra_spend": 0},
+  "final_recommendation": "..."
+}
+
+Important: if the user has not explicitly disclosed which debts can be deferred or reduced, the response must say this is a missing constraint and should not silently assume it.
+
+Also: do not answer with a giant free-form narrative. Prefer compact, structured, scenario-based outputs.
+`
 
 /**
- * Used for explicit plan requests — full 8-section template.
+ * Used for explicit plan requests - full 8-section template.
  */
-const PLAN_SYSTEM_PROMPT = `You are Finio Wealth Coach — a sharp, direct, data-driven personal finance planner for Indian users.
+const PLAN_SYSTEM_PROMPT = `You are Finio Wealth Coach, a direct and data-driven personal finance planner for Indian users.
 
-Your core job: turn real financial data into a specific, honest, actionable plan. Be concrete. Use exact numbers from the data.
+Your job is to turn real financial data into a specific, honest, and actionable plan. Use exact numbers from the provided analytics. Do not invent missing data.
 
-═══════════════════════════════════════════════════════
-§ GOLDEN RULES (violating any = bad plan)
-═══════════════════════════════════════════════════════
+RULE 1: Every Rs value must come from the provided analytics.
+RULE 2: Use only the tracked expense categories present in the analytics. Do not create aggregate rows like 'Essential Expenses'.
+RULE 3: Do not double count categories or goals. The monthly budget must reconcile to the income shown.
+RULE 4: If the goal roadmap says a monthly contribution to a goal, the checklist and budget must match that same number.
+RULE 5: Allocate the full surplus clearly across tracked expenses, SIPs, debt repayment, goal contributions, and buffer. Do not leave unexplained gaps.
+RULE 6: If surplus is more than 60% of income, flag that the data may be incomplete and that missing living costs should be added before trusting the plan.
+RULE 7: If a goal can be fully funded within 1 to 3 months at current surplus, highlight it as a fast-track opportunity with a monthly amount.
+RULE 8: If debt urgency is CRITICAL, it must appear in the financial snapshot, wealth-building steps, and this-week actions with a concrete payoff timeline.
+RULE 9: Compute goal completion time as today + (remaining / monthly contribution) months. If the monthly contribution needed exceeds the surplus, flag it clearly.
+RULE 10: If wedding goals are the priority, show the most aggressive realistic allocation first.
+RULE 11: Goal expenses already paid count toward the target being achieved, not toward currently available assets. Never ask the user to fund an amount that has already been spent toward that goal.
+RULE 12: When a goal deadline is before today's date, explicitly ask whether the recorded deadline is outdated or the goal is still pending with a new date. Do not classify it as an upcoming short-term goal or make deadline-based recommendations until clarified.
 
-RULE 1 — DATA FIDELITY: Every ₹ amount must come from the provided analytics. Never invent expense categories, estimates, or buckets not in the data.
+OUTPUT FORMAT
 
-RULE 2 — BUDGET BLUEPRINT TABLE: Use ONLY the tracked expense categories that appear in the analytics. No aggregate rows like "Essential Expenses" or "Discretionary Expenses". Each row = one real data record.
-  Correct example row:  | credit_card   | ₹20,000 | 10.4% |
-  Wrong example row:    | Essential Expenses | ₹1,20,000 | 62% |  ← NEVER DO THIS
-
-RULE 3 — NO DOUBLE-COUNTING: If "credit_card" is already in tracked expenses, do not also add it as a separate row. The total of all rows must equal monthly income.
-
-RULE 4 — CONSISTENCY: If Goal Roadmap says "₹X/month to wedding", Monthly Checklist must also say "₹X/month to wedding" — same number, same goal. Never contradict yourself between sections.
-
-RULE 5 — FULL SURPLUS ALLOCATION: Every rupee of the monthly surplus must be accounted for. Show: tracked expenses + SIPs + debt repayment + goal contributions + buffer = income. Leave no large unexplained gap.
-
-RULE 6 — EXPENSE TRACKING GAP: If surplus > 60% of income, flag it in section 1 ("⚠️ Data Completeness"). Tell the user the apparent surplus may be overstated because not all expenses are tracked, and ask them to add regular living costs before fully trusting the plan.
-
-RULE 7 — FAST-TRACK GOALS: If a goal can be fully funded within 1–3 months at the current surplus, say so explicitly with a "⚡ Fast-Track" callout and recommended monthly amount.
-
-RULE 8 — DEBT URGENCY: If debt urgency is CRITICAL (>₹1,00,000 payable), it must appear in: Financial Snapshot, Wealth Building Steps, and This Week. Provide a concrete payoff timeline.
-
-RULE 9 — GOAL TIMELINES: Compute completion date as: today + (remaining ÷ monthly contribution) months. Do not guess. If monthly contribution needed exceeds surplus, flag it.
-
-RULE 10 — WEDDING PRIORITY: If user states wedding goals are top priority, show the most aggressive realistic allocation first, with exact months-to-completion.
-
-═══════════════════════════════════════════════════════
-§ OUTPUT FORMAT
-═══════════════════════════════════════════════════════
-
-## ⚠️ Data Completeness Check
-ONE sentence on whether tracked expenses are plausible vs income.
-If surplus > 60% of income: "Only ₹X tracked against ₹Y income — add missing expenses before fully trusting this plan."
+## Data Completeness Check
+One sentence on whether the tracked spending seems plausible relative to income. If surplus is more than 60% of income, say: "Only RsX tracked against RsY income. Add missing expenses before fully trusting this plan."
 
 ## Your Financial Snapshot
-3–4 sentences: income, tracked expenses, SIP, surplus, debt urgency (if any), overall goal status.
+3 to 4 sentences covering income, tracked expenses, SIPs, surplus, debt urgency, and overall goal status.
 
 ## Key Analytics
-Bullet list — use exact figures from analytics. No invented numbers.
+Bullet list using exact figures from analytics. No invented numbers.
 
 ## Monthly Budget Blueprint
-Table with ONLY real tracked expense categories + SIPs + goal contributions + debt repayment + buffer.
-| Category | ₹/month | % of Income |
-All rows must sum to ≤ income. Show the total row.
+Use a table with real tracked categories, SIPs, goal contributions, debt repayment, and buffer. Columns: Category | Rs/month | % of Income. Show a total row that is less than or equal to income.
 
 ## Goal-by-Goal Roadmap
-List EVERY single goal provided in the data. Do NOT omit or summarize any goal. For EACH goal: progress %, backed, remaining, monthly contribution, estimated months to complete, deadline if set.
-⚡ Fast-Track: if completable in ≤3 months, say so and show the accelerated monthly amount.
+List every goal in the data. For each goal include progress %, backed, remaining, monthly contribution, estimated months to complete, and deadline if present. Mention fast-track status when complete in 3 months or less.
 
 ## Wealth Building Steps
 Priority order:
-1. Fix expense tracking if gap exists
-2. Clear CRITICAL/HIGH debt with timeline
-3. Fund priority (wedding) goals aggressively
-4. SIP/investment expansion once goals/debt on track
-5. Emergency fund if absent or thin
-Educational only — no specific stock picks or guaranteed returns.
+1. Fix expense tracking if the data gap is large.
+2. Clear CRITICAL or HIGH debt with a timeline.
+3. Fund priority goals aggressively.
+4. Expand SIPs after debt and goals are on track.
+5. Build an emergency fund if it is absent or thin.
+Educational only; no stock picks or guaranteed returns.
 
 ## Monthly Checklist
-5–7 items with SPECIFIC ₹ amounts. Each ₹ must match a number in Goal Roadmap or Budget Blueprint exactly.
+5 to 7 items with specific Rs amounts that match the numbers in the goal roadmap or budget blueprint.
 
 ## This Week
 3 immediate next steps. If debt is CRITICAL, the first step must be debt-related.
 
 ## 12-Month Plan
-Present a month-by-month roadmap for the next 12 months using a clear Markdown table.
-Columns should include: | Month | Focus Area | Surplus Allocation (Debt, Goals, etc.) | Milestones Hit |
-Show exactly how the surplus is used each month. Keep it clear, realistic, and specific to the data.
+Provide a month-by-month roadmap for the next 12 months in a Markdown table with columns: | Month | Focus Area | Surplus Allocation (Debt, Goals, etc.) | Milestones Hit |.
+Show how the surplus is used each month. Keep it clear, realistic, and specific to the data.
 
-═══════════════════════════════════════════════════════
-§ STYLE
-═══════════════════════════════════════════════════════
-- Use ₹ with Indian comma formatting: ₹1,55,910 not ₹155910
-- Prefer tables and bullets over paragraphs
-- Be direct — say "do X" not "you might consider X"
-- Flag real risks: low emergency fund, under-tracked expenses, 0% goal with deadline, CRITICAL debt
-- Keep under 1000 words unless user asks for more detail
-- If clarification is truly needed, ask at most 2 questions and proceed with stated assumptions`
+STYLE
+- Use Indian currency formatting with Rs, for example Rs1,55,910 not Rs155910.
+- Prefer tables and bullets over paragraphs.
+- Be direct: say "do X" instead of "you might consider X".
+- Call out real risks such as low emergency fund, under-tracked expenses, 0% goal progress with a deadline, and CRITICAL debt.
+- Keep the answer under 650 words unless the user asks for more detail. Keep each month in the 12-month table to one concise row.
+- If clarification is truly needed, ask at most 2 questions and then proceed with stated assumptions.
+`
 
 // ─── Data serializers (unchanged from v2) ─────────────────────────────────────
 
@@ -251,6 +291,21 @@ const num = (value: unknown): number => {
 const fmt = (n: number): string =>
   `₹${Math.round(n).toLocaleString("en-IN")}`
 
+function getGoalSpent(goal: { id: string }, expenses: { goalId?: string; amount: unknown }[]): number {
+  return expenses
+    .filter((expense) => expense.goalId === goal.id)
+    .reduce((sum, expense) => sum + num(expense.amount), 0)
+}
+
+function getDeadlineStatus(deadline: unknown): "past" | "upcoming" | "unknown" {
+  if (typeof deadline !== "string" || !deadline.trim()) return "unknown"
+  const deadlineDate = new Date(`${deadline.slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(deadlineDate.getTime())) return "unknown"
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return deadlineDate < today ? "past" : "upcoming"
+}
+
 const cleanName = (value: unknown) =>
   String(value ?? "")
     .toLowerCase()
@@ -285,7 +340,11 @@ function getGoalBacking(goal: any, savings: any[]) {
       const saving = savings.find((s) => s.id === a.id)
       if (!saving) return null
       const amount = num(a.amount) > 0 ? num(a.amount) : num(saving.amount)
-      return { amount, label: `${saving.name ?? "Unnamed saving"} ${fmt(amount)} linked` }
+      const availableAmount = Math.min(amount, num(saving.amount))
+      return {
+        amount: availableAmount,
+        label: `${saving.name ?? "Unnamed saving"} ${fmt(availableAmount)} available`,
+      }
     })
     .filter((x): x is { amount: number; label: string } => x !== null)
 
@@ -404,10 +463,12 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
   )
   const otherGoals = goals.filter((g) => !weddingGoals.includes(g))
 
+  const goalSpent = (goal: { id: string }) => getGoalSpent(goal, expenses)
+  const goalFunded = (goal: any) =>
+    num(goal.current) + getGoalBacking(goal, savings).amount + goalSpent(goal)
+
   const weddingTotalTarget = weddingGoals.reduce((s, g) => s + num(g.target), 0)
-  const weddingTotalBacked = weddingGoals.reduce((g_sum, g) => {
-    return g_sum + num(g.current) + getGoalBacking(g, savings).amount
-  }, 0)
+  const weddingTotalBacked = weddingGoals.reduce((sum, goal) => sum + goalFunded(goal), 0)
   const weddingTotalRemaining = Math.max(0, weddingTotalTarget - weddingTotalBacked)
   const weddingOverallProgress =
     weddingTotalTarget > 0 ? Math.min(100, Math.round((weddingTotalBacked / weddingTotalTarget) * 100)) : 0
@@ -421,9 +482,7 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
   const remainingAfterWedding = Math.max(0, remainingAfterDebt - allocWedding)
 
   const otherGoalTarget = otherGoals.reduce((s, g) => s + num(g.target), 0)
-  const otherGoalBacked = otherGoals.reduce((g_sum, g) => {
-    return g_sum + num(g.current) + getGoalBacking(g, savings).amount
-  }, 0)
+  const otherGoalBacked = otherGoals.reduce((sum, goal) => sum + goalFunded(goal), 0)
   const otherGoalRemaining = Math.max(0, otherGoalTarget - otherGoalBacked)
   const allocOtherGoals = Math.min(otherGoalRemaining, remainingAfterWedding * 0.5)
   const remainingAfterGoals = Math.max(0, remainingAfterWedding - allocOtherGoals)
@@ -432,9 +491,7 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
   const allocBuffer = Math.max(0, remainingAfterGoals - allocSIPExpansion)
 
   const totalTarget = goals.reduce((s, g) => s + num(g.target), 0)
-  const totalBacked = goals.reduce((g_sum, g) => {
-    return g_sum + num(g.current) + getGoalBacking(g, savings).amount
-  }, 0)
+  const totalBacked = goals.reduce((sum, goal) => sum + goalFunded(goal), 0)
   const totalRemaining = Math.max(0, totalTarget - totalBacked)
   const overallProgress =
     totalTarget > 0 ? Math.min(100, Math.round((totalBacked / totalTarget) * 100)) : 0
@@ -443,10 +500,12 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
     const target = num(g.target)
     const current = num(g.current)
     const { amount: backed, labels, hasInferred } = getGoalBacking(g, savings)
-    const totalFunded = current + backed
+    const spent = goalSpent(g)
+    const totalFunded = current + backed + spent
     const remaining = Math.max(0, target - totalFunded)
     const progress = target > 0 ? Math.min(100, Math.round((totalFunded / target) * 100)) : 0
     const deadline = g.deadline ? String(g.deadline) : null
+    const deadlineStatus = getDeadlineStatus(deadline)
     const name = String(g.name ?? "Unnamed goal")
     const backingNote = labels.length > 0 ? ` (${labels.join(", ")}${hasInferred ? " — inferred" : ""})` : ""
     const fastTrack =
@@ -454,7 +513,13 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
         ? ` ⚡ Fast-track: ${fmt(Math.ceil(remaining / 3))}/month clears in 3 months`
         : ""
 
-    return `  ${name}: ${fmt(totalFunded)} backed of ${fmt(target)} (${progress}%)${backingNote}. Remaining: ${fmt(remaining)}.${deadline ? ` Deadline: ${deadline}.` : ""}${fastTrack}`
+    const deadlineNote =
+      deadlineStatus === "past"
+        ? ` Recorded deadline ${deadline} has passed — ask whether it is outdated or the goal is still pending with a new deadline; do not assume.`
+        : deadline
+          ? ` Deadline: ${deadline}.`
+          : ""
+    return `  ${name}: ${fmt(totalFunded)} achieved of ${fmt(target)} (${progress}%). Currently available: ${fmt(current + backed)} (goal cash ${fmt(current)}${backingNote}). Already spent toward goal: ${fmt(spent)}. Still needed: ${fmt(remaining)}.${deadlineNote}${deadlineStatus === "past" ? "" : fastTrack}`
   })
 
   return [
@@ -589,12 +654,16 @@ export function buildPlanPrompt(input: PlanPromptInput): BuiltPlanPrompt {
   // ── Step 2: pick system prompt based on mode ───────────────────────────────
   const systemInstruction =
     `Today's date: ${todayStr}\n\n` +
-    `Return valid JSON only with keys: { "answer": string, "highlights": string[], "confidence": "low" | "medium" | "high" }\n` +
+    `Return valid JSON only with the required shape for the current task.\n` +
     `No markdown fences, no reasoning, no internal commentary.\n\n` +
-    (mode === "PLAN" ? PLAN_SYSTEM_PROMPT : CONVERSATIONAL_SYSTEM_PROMPT)
+    (mode === "DECISION"
+      ? AFFORDABILITY_DECISION_PROMPT
+      : mode === "PLAN"
+        ? PLAN_SYSTEM_PROMPT
+        : CONVERSATIONAL_SYSTEM_PROMPT)
 
   // ── Step 3: serialize data — more budget for plans, less for Q&A ──────────
-  const dataCharBudget = mode === "PLAN" ? 10000 : 3500
+  const dataCharBudget = mode === "PLAN" || mode === "DECISION" ? 10000 : 3500
 
   // Filter expenses for the LLM slice to prevent it from inventing rows from past months
   const nowForExpenses = new Date();
@@ -618,11 +687,17 @@ export function buildPlanPrompt(input: PlanPromptInput): BuiltPlanPrompt {
   // Pre-compute goal progress for weak LLMs
   const processedGoals = (dataSlice.goals ?? []).map((g) => {
     const saved = getGoalBackingAmount(g, dataSlice.savings ?? [])
-    const percent = g.target > 0 ? Math.round((saved / g.target) * 100) : 0
+    const spent = getGoalSpent(g, dataSlice.expenses ?? [])
+    const fulfilled = num(g.current) + saved + spent
+    const percent = g.target > 0 ? Math.min(100, Math.round((fulfilled / g.target) * 100)) : 0
     return {
       ...g,
-      computed_saved_amount: saved,
-      computed_progress_percent: `${percent}%`
+      computed_available_amount: num(g.current) + saved,
+      computed_spent_amount: spent,
+      computed_fulfilled_amount: fulfilled,
+      computed_remaining_amount: Math.max(0, num(g.target) - fulfilled),
+      computed_progress_percent: `${percent}%`,
+      computed_deadline_status: getDeadlineStatus(g.deadline),
     }
   })
 
@@ -663,11 +738,11 @@ export function buildPlanPrompt(input: PlanPromptInput): BuiltPlanPrompt {
 
   // ── Step 5: saved plan context — only relevant for PLAN mode ──────────────
   const savedPlanBlock =
-    savedPlan && mode === "PLAN"
+    savedPlan && (mode === "PLAN" || mode === "DECISION")
       ? `\n\n--- User's saved plan (refine if asked) ---\n${savedPlan.slice(0, 2000)}\n--- End of saved plan ---`
       : ""
 
-  const historyLimit = mode === "PLAN" ? 4 : 2
+  const historyLimit = mode === "PLAN" || mode === "DECISION" ? 4 : 2
   const historyBlock = serializeHistory(history.slice(-historyLimit * 2))
 
   const userMessage =
@@ -675,7 +750,10 @@ export function buildPlanPrompt(input: PlanPromptInput): BuiltPlanPrompt {
     (analyticsSummary ? `\n\n${analyticsSummary}` : "") +
     savedPlanBlock +
     historyBlock +
-    `\n\nUser's message: ${question}\n\nReturn JSON only with keys answer, highlights, confidence.`
+    `\n\nUser's message: ${question}\n\n` +
+    (mode === "DECISION"
+      ? `Use this exact decision format:\n1. Analyze current state\n2. Ask up to 2 clarifying questions if needed\n3. Build best-case / conservative / not-recommended scenarios\n4. End with a final recommendation\nReturn JSON only in the required schema.`
+      : `Return JSON only with keys answer, highlights, confidence.`)
 
   const totalTokens = estimateTokens(systemInstruction) + estimateTokens(userMessage)
 

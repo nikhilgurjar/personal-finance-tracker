@@ -5,17 +5,103 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useFinanceData } from "@/hooks/use-finance-data"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Shield, User, Cloud, HelpCircle, Key, AppWindow, Download, FileSpreadsheet, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { buildExportCsv, downloadCsv } from "@/lib/exportData"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  AI_PROVIDERS,
+  DEFAULT_AI_MODELS,
+  getAISettingsStorageKeys,
+  isAIProvider,
+  listAvailableAIModels,
+  recommendAIModel,
+  type AIProvider,
+  type AIModelOption,
+} from "@/lib/ai/aiClient"
+import {
+  addSharedAIModel,
+  listSharedAIModels,
+  type SharedAIModel,
+} from "@/lib/ai/modelRegistry"
 
 export default function SettingsPage() {
   const { user, isDemo, apps, addApp, providers, addProvider, goals, savings, expenses, debts, sips, income } = useFinanceData()
   const [newAppName, setNewAppName] = useState("")
   const [newProviderName, setNewProviderName] = useState("")
   const [exportStatus, setExportStatus] = useState<"idle" | "done">("idle")
+  const [aiProvider, setAIProvider] = useState<AIProvider>("groq")
+  const [aiApiKey, setAIApiKey] = useState("")
+  const [selectedAIModel, setSelectedAIModel] = useState("")
+  const [newAIModelId, setNewAIModelId] = useState("")
+  const [newAIModelLabel, setNewAIModelLabel] = useState("")
+  const [sharedAIModels, setSharedAIModels] = useState<SharedAIModel[]>([])
+  const [discoveredAIModels, setDiscoveredAIModels] = useState<AIModelOption[]>([])
+  const [aiSettingsMessage, setAISettingsMessage] = useState<string | null>(null)
+  const [aiSettingsError, setAISettingsError] = useState<string | null>(null)
+  const [aiModelCatalogLoading, setAIModelCatalogLoading] = useState(false)
+  const [aiModelDiscoveryLoading, setAIModelDiscoveryLoading] = useState(false)
+  const [aiSettingsLoadedFor, setAISettingsLoadedFor] = useState<string | null>(null)
+
+  useEffect(() => {
+    const storageKeys = getAISettingsStorageKeys(user?.uid)
+    const timer = window.setTimeout(() => {
+      try {
+        const savedProvider = localStorage.getItem(storageKeys.provider)?.trim().toLowerCase()
+        if (savedProvider && isAIProvider(savedProvider)) setAIProvider(savedProvider)
+        setAIApiKey(localStorage.getItem(storageKeys.apiKey) ?? "")
+        setSelectedAIModel(localStorage.getItem(storageKeys.model) ?? "")
+      } catch {
+        setAISettingsError("Unable to read AI settings from this browser.")
+      } finally {
+        setAISettingsLoadedFor(user?.uid ?? "")
+      }
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [user?.uid])
+
+  useEffect(() => {
+    let active = true
+    const timer = window.setTimeout(() => {
+      if (!user || isDemo) {
+        setSharedAIModels([])
+        setAIModelCatalogLoading(false)
+        return
+      }
+
+      setAIModelCatalogLoading(true)
+      setAISettingsError(null)
+      listSharedAIModels()
+        .then((models) => {
+          if (active) setSharedAIModels(models)
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setAISettingsError(
+              error instanceof Error ? error.message : "Unable to load the shared AI model catalog."
+            )
+          }
+        })
+        .finally(() => {
+          if (active) setAIModelCatalogLoading(false)
+        })
+    }, 0)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [user, isDemo])
 
   const handleExport = () => {
     const csv = buildExportCsv({ goals, savings, expenses, debts, sips, income })
@@ -40,6 +126,101 @@ export default function SettingsPage() {
     setNewProviderName("")
     alert(`"${newProviderName}" fund house provider registered!`)
   }
+
+  const handleSaveAISettings = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!aiApiKey.trim()) {
+      setAISettingsError("Enter an API key for the selected provider.")
+      setAISettingsMessage(null)
+      return
+    }
+
+    try {
+      const storageKeys = getAISettingsStorageKeys(user?.uid)
+      localStorage.setItem(storageKeys.provider, aiProvider)
+      localStorage.setItem(storageKeys.apiKey, aiApiKey.trim())
+      if (selectedAIModel) localStorage.setItem(storageKeys.model, selectedAIModel)
+      else localStorage.removeItem(storageKeys.model)
+      setAISettingsError(null)
+      setAISettingsMessage("AI provider, key, and model saved in this browser.")
+    } catch {
+      setAISettingsError("Unable to save AI settings in this browser.")
+      setAISettingsMessage(null)
+    }
+  }
+
+  const handleDiscoverAIModels = async () => {
+    if (!aiApiKey.trim()) {
+      setAISettingsError("Enter an API key before discovering available models.")
+      setAISettingsMessage(null)
+      return
+    }
+
+    setAIModelDiscoveryLoading(true)
+    setAISettingsError(null)
+    setAISettingsMessage(null)
+    try {
+      const models = await listAvailableAIModels(aiProvider, aiApiKey.trim())
+      setDiscoveredAIModels(models)
+      const selectedIsAvailable = models.some((model) => model.modelId === selectedAIModel)
+      const recommendation = selectedIsAvailable
+        ? models.find((model) => model.modelId === selectedAIModel)
+        : recommendAIModel(aiProvider, models)
+      if (recommendation && !selectedIsAvailable) {
+        setSelectedAIModel(recommendation.modelId)
+      }
+      setAISettingsMessage(
+        recommendation
+          ? `Found ${models.length} supported models. ${selectedIsAvailable ? "Your selected model is available." : `Recommended ${recommendation.label}. Save settings to use it.`}`
+          : "The provider returned no models that support text generation."
+      )
+    } catch (error: unknown) {
+      setAISettingsError(
+        error instanceof Error ? error.message : "Unable to discover models for this provider."
+      )
+    } finally {
+      setAIModelDiscoveryLoading(false)
+    }
+  }
+
+  const handleAddAIModel = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || isDemo) {
+      setAISettingsError("Sign in with Firebase to add a model to the shared catalog.")
+      setAISettingsMessage(null)
+      return
+    }
+
+    try {
+      const model = await addSharedAIModel(
+        {
+          provider: aiProvider,
+          modelId: newAIModelId,
+          label: newAIModelLabel || newAIModelId,
+        }
+      )
+      setSharedAIModels((current) => [...current, model])
+      setSelectedAIModel(model.modelId)
+      setNewAIModelId("")
+      setNewAIModelLabel("")
+      setAISettingsError(null)
+      setAISettingsMessage("Model added to the shared catalog for all users.")
+    } catch (error: unknown) {
+      setAISettingsError(
+        error instanceof Error ? error.message : "Unable to add the model to the shared catalog."
+      )
+      setAISettingsMessage(null)
+    }
+  }
+
+  const availableAIModels = [
+    ...DEFAULT_AI_MODELS.filter((model) => model.provider === aiProvider),
+    ...discoveredAIModels.filter((model) => model.provider === aiProvider),
+    ...sharedAIModels.filter((model) => model.provider === aiProvider),
+  ].filter(
+    (model, index, models) =>
+      models.findIndex((candidate) => candidate.modelId === model.modelId) === index
+  )
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -217,6 +398,149 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+            </CardContent>
+          </Card>
+
+          {/* AI provider and shared model catalog */}
+          <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <Key className="h-5 w-5 text-primary" />
+                <span>AI Coach Provider & Models</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Your API key stays in this browser. Models you add are shared with all signed-in users.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <form onSubmit={handleSaveAISettings} className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5 text-xs font-medium">
+                    <span>Provider</span>
+                    <Select
+                      value={aiProvider}
+                      onValueChange={(value) => {
+                        if (isAIProvider(value)) {
+                          setAIProvider(value)
+                          setSelectedAIModel("")
+                          setDiscoveredAIModels([])
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AI_PROVIDERS.map((provider) => (
+                          <SelectItem key={provider} value={provider}>
+                            {provider[0].toUpperCase() + provider.slice(1)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="space-y-1.5 text-xs font-medium">
+                    <span>API key (saved only in this browser)</span>
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      value={aiSettingsLoadedFor === (user?.uid ?? "") ? aiApiKey : ""}
+                      onChange={(event) => setAIApiKey(event.target.value)}
+                      placeholder="Paste your provider API key"
+                      className="h-9 text-xs"
+                    />
+                  </label>
+                </div>
+                <label className="block space-y-1.5 text-xs font-medium">
+                  <span>Model</span>
+                  <Select
+                    value={selectedAIModel || "__default"}
+                    onValueChange={(value) =>
+                      setSelectedAIModel(value === "__default" ? "" : value)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Use provider default" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__default">Use provider default</SelectItem>
+                      {availableAIModels.map((model) => (
+                        <SelectItem key={model.modelId} value={model.modelId}>
+                          {model.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={aiSettingsLoadedFor !== (user?.uid ?? "")}
+                  >
+                    Save AI settings
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDiscoverAIModels}
+                    disabled={!aiApiKey.trim() || aiModelDiscoveryLoading}
+                  >
+                    {aiModelDiscoveryLoading ? "Checking models…" : "Find available models"}
+                  </Button>
+                </div>
+              </form>
+
+              <Separator />
+
+              <form onSubmit={handleAddAIModel} className="space-y-3">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider">Add a shared model</h4>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Add a model ID for the selected provider. It will appear in every user&apos;s model selector.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={newAIModelId}
+                    onChange={(event) => setNewAIModelId(event.target.value)}
+                    placeholder="Model ID (e.g. provider/model-name)"
+                    className="h-9 text-xs"
+                    required
+                  />
+                  <Input
+                    value={newAIModelLabel}
+                    onChange={(event) => setNewAIModelLabel(event.target.value)}
+                    placeholder="Display name (optional)"
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <Button type="submit" size="sm" variant="outline" disabled={!user || isDemo}>
+                  Add model to shared catalog
+                </Button>
+                {!user || isDemo ? (
+                  <p className="text-[11px] text-amber-600">
+                    Sign in to Firebase to share models with other users.
+                  </p>
+                ) : null}
+                {aiModelCatalogLoading ? (
+                  <p className="text-[11px] text-muted-foreground">Loading shared models…</p>
+                ) : null}
+              </form>
+
+              {aiSettingsError ? (
+                <p role="alert" className="text-xs text-destructive">{aiSettingsError}</p>
+              ) : null}
+              {aiSettingsMessage ? (
+                <p role="status" className="text-xs text-emerald-600">{aiSettingsMessage}</p>
+              ) : null}
+              <p className="text-[11px] text-muted-foreground">
+                {sharedAIModels.length} shared custom {sharedAIModels.length === 1 ? "model" : "models"} available.
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Metadata-only LangSmith traces are enabled when <code>LANGSMITH_API_KEY</code> is configured on the server. Prompts and answers are never sent to LangSmith.
+              </p>
             </CardContent>
           </Card>
 

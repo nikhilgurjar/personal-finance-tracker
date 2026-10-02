@@ -38,7 +38,8 @@ export function getGoalSavingsBacking(goal: Goal, savings: Saving[]): GoalBackin
     .map((alloc) => {
       const saving = savings.find((s) => s.id === alloc.id)
       if (!saving) return null
-      const effectiveAmount = alloc.amount > 0 ? alloc.amount : saving.amount
+      const effectiveAmount =
+        alloc.amount > 0 ? Math.min(alloc.amount, safeNumber(saving.amount)) : safeNumber(saving.amount)
       return {
         saving,
         allocatedAmount: alloc.amount,

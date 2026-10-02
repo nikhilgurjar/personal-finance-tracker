@@ -225,36 +225,35 @@ export default function SIPsPage() {
 
       <SIPForm open={formOpen} onOpenChange={setFormOpen} initialData={editingSIP} />
 
-      <Tabs defaultValue="active" className="flex flex-col lg:flex-row gap-8 items-start">
+      <Tabs defaultValue="active" className="w-full">
         
-        <TabsList className="flex flex-row lg:flex-col w-full lg:w-64 h-auto bg-transparent border-b lg:border-b-0 lg:border-r border-border/60 rounded-none p-0 items-stretch lg:pr-6 shrink-0 gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
+        <TabsList variant="line" className="w-full border-b border-border/60">
           <TabsTrigger 
             value="active" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>✅</span>
             <span>Active SIPs</span>
           </TabsTrigger>
           <TabsTrigger 
             value="projection" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📊</span>
             <span>Projections</span>
           </TabsTrigger>
           <TabsTrigger 
             value="all" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📋</span>
             <span>All SIPs</span>
           </TabsTrigger>
         </TabsList>
 
-        <div className="flex-1 w-full min-w-0">
           
           {/* Active SIPs */}
-          <TabsContent value="active" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="active" className="mt-4 focus-visible:outline-none">
             <div className="grid grid-cols-1 gap-4">
               {activeSIPs.length === 0 ? (
                 <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
@@ -308,7 +307,7 @@ export default function SIPsPage() {
           </TabsContent>
 
           {/* Projections */}
-          <TabsContent value="projection" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="projection" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-bold">SIP Growth Projection</CardTitle>
@@ -341,7 +340,7 @@ export default function SIPsPage() {
           </TabsContent>
 
           {/* All SIPs */}
-          <TabsContent value="all" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="all" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-bold">All SIP Schedules</CardTitle>
@@ -389,7 +388,6 @@ export default function SIPsPage() {
               </CardContent>
             </Card>
           </TabsContent>
-        </div>
       </Tabs>
 
       {/* Trigger History Section */}

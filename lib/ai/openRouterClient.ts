@@ -29,7 +29,7 @@ export class OpenRouterExhaustedError extends Error {
 }
 
 function isRetryableStatus(status: number): boolean {
-  return status === 404 || status === 429 || status === 502 || status === 503 || status === 504
+  return status === 408 || status === 404 || status === 429 || status === 502 || status === 503 || status === 504
 }
 
 export interface OpenRouterCallOptions {
@@ -64,41 +64,57 @@ async function callSingleModel(
     top_p: 0.85,
   }
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  })
+  const controller = new AbortController()
+  const timeoutMs = 15000
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
-  if (isRetryableStatus(res.status)) {
-    const errText = await res.text()
-    throw Object.assign(new Error(`OpenRouter ${modelId} rate-limited/unavailable (${res.status})`), {
-      code: 429,
-      modelId,
-      status: res.status,
-      detail: errText,
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
     })
+
+    if (isRetryableStatus(res.status)) {
+      const errText = await res.text()
+      throw Object.assign(new Error(`OpenRouter ${modelId} rate-limited/unavailable (${res.status})`), {
+        code: 429,
+        modelId,
+        status: res.status,
+        detail: errText,
+      })
+    }
+
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`OpenRouter error ${res.status} for ${modelId}: ${errText}`)
+    }
+
+    const data = await res.json()
+    const text: string =
+      data?.choices?.[0]?.message?.content ??
+      "Sorry, I couldn't generate a response."
+
+    const usedModel: string = data?.model ?? modelId
+    if (!isFreeModel(usedModel)) {
+      logger.warn("openRouterClient", `response model does not look free`, { requested: modelId, received: usedModel })
+    }
+
+    return { text: stripThinkTags(text), model: usedModel }
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      const timeoutError = new Error(`OpenRouter ${modelId} request timed out after ${timeoutMs}ms`)
+      ;(timeoutError as Error & { code?: number }).code = 408
+      throw timeoutError
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
   }
-
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`OpenRouter error ${res.status} for ${modelId}: ${errText}`)
-  }
-
-  const data = await res.json()
-  const text: string =
-    data?.choices?.[0]?.message?.content ??
-    "Sorry, I couldn't generate a response."
-
-  const usedModel: string = data?.model ?? modelId
-  if (!isFreeModel(usedModel)) {
-    logger.warn("openRouterClient", `response model does not look free`, { requested: modelId, received: usedModel })
-  }
-
-  return { text: stripThinkTags(text), model: usedModel }
 }
 
 export async function callOpenRouterWithFallback(
@@ -120,10 +136,12 @@ export async function callOpenRouterWithFallback(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
       const code = (err as { code?: number })?.code
+      const status = (err as { status?: number })?.status ?? 0
+      const isTimeout = /timed out after/i.test(message) || code === 408 || status === 408
       errors.push(`${modelId}: ${message}`)
 
-      if (code === 429 || isRetryableStatus((err as { status?: number })?.status ?? 0)) {
-        logger.warn("openRouterClient", `retrying after failure`, { modelId, message })
+      if (isTimeout || code === 429 || isRetryableStatus(status)) {
+        logger.warn("openRouterClient", `retrying after failure`, { modelId, message, code, status })
         continue
       }
 

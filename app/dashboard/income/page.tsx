@@ -175,33 +175,31 @@ export default function IncomePage() {
 
       <IncomeForm open={formOpen} onOpenChange={setFormOpen} initialData={editingIncome} />
 
-      <Tabs defaultValue="trends" className="flex flex-col lg:flex-row gap-8 items-start">
+      <Tabs defaultValue="trends" className="w-full">
         
-        <TabsList className="flex flex-row lg:flex-col w-full lg:w-64 h-auto bg-transparent border-b lg:border-b-0 lg:border-r border-border/60 rounded-none p-0 items-stretch lg:pr-6 shrink-0 gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
+        <TabsList variant="line" className="w-full border-b border-border/60">
           <TabsTrigger 
             value="trends" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📈</span>
             <span>Monthly Trends</span>
           </TabsTrigger>
           <TabsTrigger 
             value="distribution" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>🎯</span>
             <span>Source Distribution</span>
           </TabsTrigger>
           <TabsTrigger 
             value="ledger" 
-            className="data-[state=active]:bg-primary/8 data-[state=active]:text-primary justify-start px-4 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all gap-2 text-muted-foreground hover:bg-muted/50 border border-transparent data-[state=active]:border-primary/10"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📝</span>
             <span>Income Ledger</span>
           </TabsTrigger>
         </TabsList>
-
-        <div className="flex-1 w-full min-w-0">
           
           {/* Monthly Trends */}
           <TabsContent value="trends" className="mt-0 focus-visible:outline-none">
@@ -472,7 +470,6 @@ export default function IncomePage() {
               </CardContent>
             </Card>
           </TabsContent>
-        </div>
       </Tabs>
     </div>
   )

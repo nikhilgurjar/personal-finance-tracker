@@ -21,7 +21,7 @@ export function TopBar() {
     <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-border/60 bg-card px-4 gap-3">
       {/* Left */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <SidebarTrigger className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground" />
+        <SidebarTrigger className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" />
         <Separator orientation="vertical" className="h-4 bg-border/60" />
         <span className="truncate text-[13px] font-medium text-foreground/80">
           Dashboard
