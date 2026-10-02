@@ -10,6 +10,10 @@ import { Input } from "@/components/ui/input"
 import { Shield, User, Cloud, HelpCircle, Key, AppWindow, Download, FileSpreadsheet, CheckCircle2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { buildExportCsv, downloadCsv } from "@/lib/exportData"
+import { exportToExcel } from "@/lib/exportExcel"
+import { backupToDrive } from "@/lib/driveClient"
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth"
+import { auth } from "@/lib/firebase"
 import {
   Select,
   SelectContent,
@@ -38,6 +42,9 @@ export default function SettingsPage() {
   const [newAppName, setNewAppName] = useState("")
   const [newProviderName, setNewProviderName] = useState("")
   const [exportStatus, setExportStatus] = useState<"idle" | "done">("idle")
+  const [excelExportStatus, setExcelExportStatus] = useState<"idle" | "loading" | "done">("idle")
+  const [driveBackupStatus, setDriveBackupStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
+  const [driveBackupError, setDriveBackupError] = useState<string | null>(null)
   const [aiProvider, setAIProvider] = useState<AIProvider>("groq")
   const [aiApiKey, setAIApiKey] = useState("")
   const [selectedAIModel, setSelectedAIModel] = useState("")
@@ -109,6 +116,54 @@ export default function SettingsPage() {
     downloadCsv(csv, `finio_export_${date}.csv`)
     setExportStatus("done")
     setTimeout(() => setExportStatus("idle"), 3000)
+  }
+
+  const handleExcelExport = async () => {
+    try {
+      setExcelExportStatus("loading")
+      await exportToExcel({ goals, savings, expenses, debts, sips, income })
+      setExcelExportStatus("done")
+      setTimeout(() => setExcelExportStatus("idle"), 3000)
+    } catch (err) {
+      console.error("Excel export error:", err)
+      setExcelExportStatus("idle")
+    }
+  }
+
+  const handleDriveBackup = async () => {
+    setDriveBackupStatus("loading")
+    setDriveBackupError(null)
+    try {
+      const provider = new GoogleAuthProvider()
+      provider.addScope("https://www.googleapis.com/auth/drive.appdata")
+      const result = await signInWithPopup(auth, provider)
+      const credential = GoogleAuthProvider.credentialFromResult(result)
+      const accessToken = credential?.accessToken
+
+      if (!accessToken) {
+        throw new Error("Could not retrieve Google access token for Drive backup.")
+      }
+
+      const financeData = {
+        goals,
+        savings,
+        expenses,
+        debts,
+        sips,
+        income,
+        apps,
+        providers,
+        exportedAt: new Date().toISOString(),
+      }
+
+      await backupToDrive(financeData, accessToken)
+      setDriveBackupStatus("done")
+      setTimeout(() => setDriveBackupStatus("idle"), 3000)
+    } catch (err: unknown) {
+      console.error("Backup to Drive error:", err)
+      setDriveBackupError(err instanceof Error ? err.message : "Failed to backup to Google Drive")
+      setDriveBackupStatus("error")
+    }
   }
 
   const handleAddApp = async (e: React.FormEvent) => {
@@ -290,10 +345,10 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="text-xl font-bold flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-primary" />
-                <span>Export Your Data</span>
+                <span>Export & Backup Your Data</span>
               </CardTitle>
               <CardDescription className="text-xs">
-                Download your goals, savings, debts, SIP schedule, and income as a CSV file
+                Download your financial data as CSV or formatted Excel workbook, or backup to Google Drive
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -302,6 +357,7 @@ export default function SettingsPage() {
                   {[
                     { label: "Goals", count: goals.length },
                     { label: "Savings", count: savings.length },
+                    { label: "Expenses", count: expenses.length },
                     { label: "Debts", count: debts.length },
                     { label: "SIP Schedules", count: sips.length },
                     { label: "Income", count: income.length },
@@ -313,28 +369,73 @@ export default function SettingsPage() {
                   ))}
                 </div>
                 <p className="text-[11px] text-muted-foreground font-medium">
-                  The CSV file will include all sections with headers and a net-position summary for debts.
-                  It opens correctly in Microsoft Excel, Google Sheets, and any text editor.
+                  Export as raw CSV, multi-sheet Excel spreadsheet with summary metrics & formatted currency, or securely backup to your private Google Drive app folder.
                 </p>
               </div>
-              <Button
-                id="export-data-btn"
-                onClick={handleExport}
-                className="gap-2 font-semibold"
-                variant={exportStatus === "done" ? "outline" : "default"}
-              >
-                {exportStatus === "done" ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    <span className="text-emerald-600">Downloaded!</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    <span>Export as CSV</span>
-                  </>
-                )}
-              </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  id="export-data-btn"
+                  onClick={handleExport}
+                  className="gap-2 font-semibold"
+                  variant={exportStatus === "done" ? "outline" : "default"}
+                >
+                  {exportStatus === "done" ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <span className="text-emerald-600">Downloaded!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      <span>Export as CSV</span>
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  id="export-excel-btn"
+                  onClick={handleExcelExport}
+                  disabled={excelExportStatus === "loading"}
+                  className="gap-2 font-semibold"
+                  variant={excelExportStatus === "done" ? "outline" : "secondary"}
+                >
+                  {excelExportStatus === "done" ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <span className="text-emerald-600">Downloaded Excel!</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>Export to Excel</span>
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  id="drive-backup-btn"
+                  onClick={handleDriveBackup}
+                  disabled={driveBackupStatus === "loading"}
+                  className="gap-2 font-semibold"
+                  variant={driveBackupStatus === "done" ? "outline" : "outline"}
+                >
+                  {driveBackupStatus === "done" ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <span className="text-emerald-600">Backed Up!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Cloud className="h-4 w-4 text-blue-500" />
+                      <span>{driveBackupStatus === "loading" ? "Backing Up..." : "Backup to Google Drive"}</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {driveBackupError ? (
+                <p role="alert" className="text-xs text-destructive mt-2">{driveBackupError}</p>
+              ) : null}
             </CardContent>
           </Card>
 

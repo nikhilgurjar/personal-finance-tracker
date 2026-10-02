@@ -2,7 +2,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { ColumnMapping, ParseResult, SourceType } from "./types";
 
-const COLUMN_PATTERNS: Record<string, RegExp[]> = {
+const COLUMN_PATTERNS: Record<keyof ColumnMapping, RegExp[]> = {
   date: [/date/i, /txn.*date/i, /transaction.*date/i, /posting.*date/i, /value.*date/i],
   amount: [/amount/i, /debit/i, /withdrawal/i, /txn.*amount/i],
   credit: [/credit/i, /deposit/i],
@@ -34,7 +34,7 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
     for (const header of headers) {
       if (used.has(header)) continue;
       if (patterns.some(p => p.test(header))) {
-        (mapping as Record<string, string | null>)[key] = header;
+        mapping[key as keyof ColumnMapping] = header;
         used.add(header);
         break;
       }
