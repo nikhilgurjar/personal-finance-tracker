@@ -135,7 +135,7 @@ export default function SettingsPage() {
     setDriveBackupError(null)
     try {
       const provider = new GoogleAuthProvider()
-      provider.addScope("https://www.googleapis.com/auth/drive.appdata")
+      provider.addScope("https://www.googleapis.com/auth/drive.file")
       const result = await signInWithPopup(auth, provider)
       const credential = GoogleAuthProvider.credentialFromResult(result)
       const accessToken = credential?.accessToken
@@ -369,7 +369,7 @@ export default function SettingsPage() {
                   ))}
                 </div>
                 <p className="text-[11px] text-muted-foreground font-medium">
-                  Export as raw CSV, multi-sheet Excel spreadsheet with summary metrics & formatted currency, or securely backup to your private Google Drive app folder.
+                  Export as raw CSV, multi-sheet Excel spreadsheet with summary metrics & formatted currency, or backup to a visible "Finio Backups" folder in your Google Drive.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
