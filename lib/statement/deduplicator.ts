@@ -28,13 +28,14 @@ export function findDuplicates(
   }
 
   // Step 2: Track accepted transactions in the current run for in-batch deduplication
-  const acceptedInBatch: NormalizedTransaction[] = [];
+  const acceptedByAmountAndDay = new Map<string, NormalizedTransaction[]>();
 
   return newTransactions.map((newTx) => {
     // Skip if already excluded (e.g., CC bill payment, ATM withdrawal, self transfer)
     if (newTx.excluded) return newTx;
 
     const newTxDate = new Date(newTx.date).getTime();
+    const baseDay = Math.floor(newTxDate / (1000 * 60 * 60 * 24));
 
     // 1. Check against EXISTING expenses in database
     const duplicateOfExisting = existingExpenses.find((ex) => {
@@ -72,27 +73,35 @@ export function findDuplicates(
     }
 
     // 2. Check against OTHER transactions in the current batch (intra-batch deduplication)
-    const duplicateInBatch = acceptedInBatch.find((prevTx) => {
-      if (prevTx.amount !== newTx.amount) return false;
+    let duplicateInBatch: NormalizedTransaction | undefined;
+    for (let dayOffset = -2; dayOffset <= 2; dayOffset++) {
+      const key = `${newTx.amount}_${baseDay + dayOffset}`;
+      const candidates = acceptedByAmountAndDay.get(key);
+      if (candidates) {
+        duplicateInBatch = candidates.find((prevTx) => {
+          if (prevTx.amount !== newTx.amount) return false;
 
-      const prevDate = new Date(prevTx.date).getTime();
-      const diffDays = Math.abs(newTxDate - prevDate) / (1000 * 60 * 60 * 24);
-      if (diffDays > 2) return false;
+          const prevDate = new Date(prevTx.date).getTime();
+          const diffDays = Math.abs(newTxDate - prevDate) / (1000 * 60 * 60 * 24);
+          if (diffDays > 2) return false;
 
-      // Same UPI ref or UTR
-      if (newTx.reference && prevTx.reference && newTx.reference === prevTx.reference) return true;
-      if (newTx.upiId && prevTx.upiId && newTx.upiId === prevTx.upiId && diffDays === 0) return true;
+          // Same UPI ref or UTR
+          if (newTx.reference && prevTx.reference && newTx.reference === prevTx.reference) return true;
+          if (newTx.upiId && prevTx.upiId && newTx.upiId === prevTx.upiId && diffDays === 0) return true;
 
-      // Same merchant name & exact date
-      if (
-        diffDays === 0 &&
-        newTx.merchantName.toLowerCase() === prevTx.merchantName.toLowerCase()
-      ) {
-        return true;
+          // Same merchant name & exact date
+          if (
+            diffDays === 0 &&
+            newTx.merchantName.toLowerCase() === prevTx.merchantName.toLowerCase()
+          ) {
+            return true;
+          }
+
+          return false;
+        });
+        if (duplicateInBatch) break;
       }
-
-      return false;
-    });
+    }
 
     if (duplicateInBatch) {
       newTx.excluded = true;
@@ -103,7 +112,12 @@ export function findDuplicates(
     }
 
     // Accepted as a valid unique transaction
-    acceptedInBatch.push(newTx);
+    const myKey = `${newTx.amount}_${baseDay}`;
+    if (!acceptedByAmountAndDay.has(myKey)) {
+      acceptedByAmountAndDay.set(myKey, []);
+    }
+    acceptedByAmountAndDay.get(myKey)!.push(newTx);
+
     return newTx;
   });
 }
