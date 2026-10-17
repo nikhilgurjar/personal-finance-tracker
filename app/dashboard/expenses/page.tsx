@@ -454,6 +454,13 @@ export default function ExpensesPage() {
                                           </Badge>
                                         </div>
                                       )}
+                                      {exp.linkedIncomeId && (
+                                        <div className="inline-flex mt-0.5">
+                                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-muted/30 text-muted-foreground border-border/50">
+                                            🏷️ Tagged to Last Salary
+                                          </Badge>
+                                        </div>
+                                      )}
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-xs text-muted-foreground">

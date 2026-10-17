@@ -36,10 +36,10 @@ export default function IncomePage() {
 
   const totalIncome = income.reduce((s, i) => s + safeNumber(i.amount), 0)
 
-  // Dynamic 5-Month Trend Calculation
-  const getPastMonths = (count = 5) => {
+  // Dynamic 6-Month Trend Calculation
+  const getPastMonths = (count = 6) => {
     const list = []
-    const now = new Date("2026-05-30") // Base date to align with mock data
+    const now = isDemo ? new Date("2026-05-30") : new Date() // Base date to align with mock data or current date
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const monthStr = d.toLocaleString("default", { month: "short" })
@@ -49,7 +49,7 @@ export default function IncomePage() {
     return list
   }
 
-  const dynamicMonthlyTrend = getPastMonths(5)
+  const dynamicMonthlyTrend = getPastMonths(6)
   dynamicMonthlyTrend.forEach(item => {
     const incVal = income
       .filter(i => i.date.startsWith(item.key))
@@ -66,6 +66,8 @@ export default function IncomePage() {
         item.income = 95000
       } else if (item.key === "2026-01") {
         item.income = 95000
+      } else if (item.key === "2025-12") {
+        item.income = 90000
       } else {
         item.income = incVal
       }
