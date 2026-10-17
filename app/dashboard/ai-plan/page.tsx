@@ -19,7 +19,7 @@ import {
 import { ExpenseForm } from "@/components/forms/expense-form"
 import { SavingsForm } from "@/components/forms/savings-form"
 import { GoalForm } from "@/components/forms/goal-form"
-import { SIPForm } from "@/components/forms/sip-form"
+import { AutomationForm } from "@/components/forms/automation-form"
 import { DebtForm } from "@/components/forms/debt-form"
 import { safeNumber, formatCurrency, cn } from "@/lib/utils"
 import {
@@ -1204,7 +1204,7 @@ export default function AIPlanPage() {
         open={quickAddOpen === "goal"}
         onOpenChange={(open) => setQuickAddOpen(open ? "goal" : null)}
       />
-      <SIPForm
+      <AutomationForm
         open={quickAddOpen === "sip"}
         onOpenChange={(open) => setQuickAddOpen(open ? "sip" : null)}
       />

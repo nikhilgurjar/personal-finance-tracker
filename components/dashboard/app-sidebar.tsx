@@ -39,7 +39,7 @@ const PRIMARY_NAV = [
   { label: "Accounts",      href: "/dashboard/accounts",     icon: Wallet },
   { label: "Income",        href: "/dashboard/income",       icon: TrendingUp },
   { label: "Expenses",      href: "/dashboard/expenses",     icon: TrendingDown },
-  { label: "SIP Schedule",  href: "/dashboard/sips",         icon: BarChart3 },
+  { label: "Automations",   href: "/dashboard/automations",  icon: BarChart3 },
   { label: "Goals",         href: "/dashboard/goals",        icon: Target },
   { label: "Savings",       href: "/dashboard/savings",      icon: PiggyBank },
   { label: "AI Coach",      href: "/dashboard/ai-plan",      icon: Brain },

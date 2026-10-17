@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Trash2, Edit2, TrendingUp, BarChart3, Calendar, History, RotateCcw, ChevronDown } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts"
-import { SIPForm } from "@/components/forms/sip-form"
+import { AutomationForm } from "@/components/forms/automation-form"
 import { useFinanceData, SIPSchedule } from "@/hooks/use-finance-data"
 import { useState } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
-import { SIP_TYPES, SIP_STATUS } from "@/constants/finance"
+import { SIP_TYPES, SIP_STATUS, EXPENSE_CATEGORIES } from "@/constants/finance"
 
 const SIP_PROJECTION = [
   { month: "Month 1", invested: 5000, projected: 5200 },
@@ -21,7 +21,7 @@ const SIP_PROJECTION = [
   { month: "Month 36", invested: 180000, projected: 230000 },
 ]
 
-export default function SIPsPage() {
+export default function AutomationsPage() {
   const { sips, deleteSIP, goals, isDemo, triggerMonthSIPs, triggerHistory, undoLastTrigger } = useFinanceData()
   const [editingSIP, setEditingSIP] = useState<SIPSchedule | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -34,8 +34,9 @@ export default function SIPsPage() {
   const pausedSIPs = sips.filter(s => s.sipStatus === "paused")
   const completedSIPs = sips.filter(s => s.sipStatus === "completed")
 
-  const totalMonthlySIP = activeSIPs.reduce((s, sip) => s + safeNumber(sip.amount), 0)
-  const totalInvested = sips.reduce((s, sip) => s + safeNumber(sip.totalInvested || 0), 0)
+  const totalMonthlySIP = activeSIPs.filter(s => s.automationType !== "expense").reduce((s, sip) => s + safeNumber(sip.amount), 0)
+  const totalMonthlyExpense = activeSIPs.filter(s => s.automationType === "expense").reduce((s, sip) => s + safeNumber(sip.amount), 0)
+  const totalInvested = sips.filter(s => s.automationType !== "expense").reduce((s, sip) => s + safeNumber(sip.totalInvested || 0), 0)
 
   // Dynamic SIP Growth Projection
   const getSIPProjection = () => {
@@ -140,8 +141,8 @@ export default function SIPsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">SIP Schedule</h1>
-          <p className="text-sm text-muted-foreground mt-1 font-medium">Manage systematic investment plans and automate wealth building</p>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">Automations</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-medium">Manage recurring expenses and systematic investment plans</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <Button 
@@ -150,7 +151,7 @@ export default function SIPsPage() {
             onClick={handleTriggerMonthSIP}
             disabled={triggeringMonth || activeSIPs.length === 0}
             className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform"
-            title={activeSIPs.length === 0 ? "No active SIPs to trigger" : "Trigger monthly SIPs"}
+            title={activeSIPs.length === 0 ? "No active automations to trigger" : "Trigger monthly automations"}
           >
             <Calendar className="h-4 w-4" />
             <span>{triggeringMonth ? "Triggering..." : "Trigger Month"}</span>
@@ -164,7 +165,7 @@ export default function SIPsPage() {
             className="font-semibold gap-1.5 shadow-sm hover:scale-[1.01] transition-transform"
           >
             <Plus className="h-4 w-4" />
-            <span>Create SIP</span>
+            <span>Create Automation</span>
           </Button>
         </div>
       </div>
@@ -184,33 +185,33 @@ export default function SIPsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">Monthly SIP</CardTitle>
+            <CardTitle className="text-sm font-semibold text-muted-foreground">Monthly Investment</CardTitle>
             <TrendingUp className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalMonthlySIP)}</p>
             <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border-emerald-500/20">
-              {activeSIPs.length} active SIPs
+              {activeSIPs.filter(s => s.automationType !== "expense").length} active
             </Badge>
           </CardContent>
         </Card>
 
         <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">Total Invested</CardTitle>
-            <BarChart3 className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-semibold text-muted-foreground">Monthly Recurring Expenses</CardTitle>
+            <TrendingUp className="h-4 w-4 text-rose-500" style={{ transform: "rotate(180deg)" }} />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalInvested)}</p>
-            <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-blue-600 bg-blue-500/10 border-blue-500/20">
-              Cumulative
+            <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalMonthlyExpense)}</p>
+            <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-rose-600 bg-rose-500/10 border-rose-500/20">
+              {activeSIPs.filter(s => s.automationType === "expense").length} active
             </Badge>
           </CardContent>
         </Card>
 
         <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs sm:col-span-2 lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">SIPs Status</CardTitle>
+            <CardTitle className="text-sm font-semibold text-muted-foreground">Automations Status</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -223,7 +224,7 @@ export default function SIPsPage() {
         </Card>
       </div>
 
-      <SIPForm open={formOpen} onOpenChange={setFormOpen} initialData={editingSIP} />
+      <AutomationForm open={formOpen} onOpenChange={setFormOpen} initialData={editingSIP} />
 
       <Tabs defaultValue="active" className="w-full">
         
@@ -233,7 +234,7 @@ export default function SIPsPage() {
             className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>✅</span>
-            <span>Active SIPs</span>
+            <span>Active Automations</span>
           </TabsTrigger>
           <TabsTrigger 
             value="projection" 
@@ -247,7 +248,7 @@ export default function SIPsPage() {
             className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
           >
             <span>📋</span>
-            <span>All SIPs</span>
+            <span>All Automations</span>
           </TabsTrigger>
         </TabsList>
 
@@ -258,7 +259,7 @@ export default function SIPsPage() {
               {activeSIPs.length === 0 ? (
                 <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
                   <CardContent className="flex items-center justify-center py-8">
-                    <p className="text-muted-foreground">No active SIPs</p>
+                    <p className="text-muted-foreground">No active automations</p>
                   </CardContent>
                 </Card>
               ) : (
@@ -267,17 +268,27 @@ export default function SIPsPage() {
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-lg">{sip.name}</h3>
-                          <p className="text-sm text-muted-foreground mt-1">{TYPE_MAP[sip.investmentType] || sip.investmentType}</p>
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-lg">{sip.name}</h3>
+                            <Badge variant={sip.automationType === "expense" ? "destructive" : "default"}>{sip.automationType === "expense" ? "Expense" : "Investment"}</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {sip.automationType === "expense"
+                              ? (EXPENSE_CATEGORIES.find(c => c.value === sip.expenseCategory)?.label || sip.expenseCategory || "Expense")
+                              : (TYPE_MAP[sip.investmentType] || sip.investmentType)}
+                          </p>
+                          <div className="flex gap-2 mt-2 flex-wrap">
                             <Badge variant="secondary" className="text-[10px]">₹{formatCurrency(sip.amount)}/{sip.frequency}</Badge>
+                            <Badge variant="secondary" className="text-[10px]">Trigger Day: {sip.triggerDay || 1}</Badge>
                             <Badge variant="secondary" className="text-[10px]">Started: {sip.startDate}</Badge>
                             {sip.linkedGoal && <Badge variant="secondary" className="text-[10px]">Goal Linked</Badge>}
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-emerald-600">₹{formatCurrency(sip.totalInvested || 0)}</p>
-                          <p className="text-xs text-muted-foreground">Invested</p>
+                          <p className={`text-2xl font-bold ${sip.automationType === "expense" ? "text-rose-500" : "text-emerald-600"}`}>
+                            ₹{formatCurrency(sip.automationType === "expense" ? sip.amount : (sip.totalInvested || 0))}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{sip.automationType === "expense" ? "Per trigger" : "Invested"}</p>
                           <div className="flex gap-1 mt-3">
                             <Button
                               variant="ghost"
@@ -310,16 +321,16 @@ export default function SIPsPage() {
           <TabsContent value="projection" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader className="pb-4">
-                <CardTitle className="text-xl font-bold">SIP Growth Projection</CardTitle>
+                <CardTitle className="text-xl font-bold">Investment Growth Projection</CardTitle>
                 <CardDescription>3-year investment growth estimate compounded at 12% annually</CardDescription>
               </CardHeader>
               <CardContent className="pb-0">
                 {!hasSIPProjection ? (
                   <div className="flex flex-col items-center justify-center h-[300px] text-center px-4">
                     <BarChart3 className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                    <p className="text-sm font-semibold text-muted-foreground">No active SIP projections</p>
+                    <p className="text-sm font-semibold text-muted-foreground">No active investment projections</p>
                     <p className="text-xs text-muted-foreground/60 mt-1 max-w-[280px]">
-                      Create an active SIP schedule to calculate dynamic compounding projections.
+                      Create an active investment automation to calculate dynamic compounding projections.
                     </p>
                   </div>
                 ) : (
@@ -343,20 +354,24 @@ export default function SIPsPage() {
           <TabsContent value="all" className="mt-4 focus-visible:outline-none">
             <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
               <CardHeader className="pb-4">
-                <CardTitle className="text-xl font-bold">All SIP Schedules</CardTitle>
+                <CardTitle className="text-xl font-bold">All Automations</CardTitle>
               </CardHeader>
               <CardContent>
                 {sips.length === 0 ? (
                   <div className="flex items-center justify-center py-8">
-                    <p className="text-muted-foreground">No SIPs created yet</p>
+                    <p className="text-muted-foreground">No automations created yet</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {sips.map((sip) => (
                       <div key={sip.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                         <div className="flex-1">
-                          <p className="font-semibold text-sm">{sip.name}</p>
-                          <p className="text-xs text-muted-foreground">{TYPE_MAP[sip.investmentType] || sip.investmentType} • {sip.frequency}</p>
+                          <p className="font-semibold text-sm">{sip.name} <Badge variant={sip.automationType === "expense" ? "destructive" : "default"} className="ml-2 scale-75">{sip.automationType === "expense" ? "Expense" : "Investment"}</Badge></p>
+                          <p className="text-xs text-muted-foreground">
+                            {sip.automationType === "expense"
+                              ? (EXPENSE_CATEGORIES.find(c => c.value === sip.expenseCategory)?.label || sip.expenseCategory || "Expense")
+                              : (TYPE_MAP[sip.investmentType] || sip.investmentType)} • {sip.frequency} • Day {sip.triggerDay || 1}
+                          </p>
                         </div>
                         <div className="text-right mr-3">
                           <p className="font-bold">₹{formatCurrency(sip.amount)}</p>

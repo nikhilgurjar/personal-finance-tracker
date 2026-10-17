@@ -133,6 +133,9 @@ export interface Income {
 export interface SIPSchedule {
   id: string
   name: string
+  automationType?: "expense" | "investment"
+  expenseCategory?: string
+  triggerDay?: number
   investmentType: string
   amount: number
   frequency: string
@@ -156,8 +159,10 @@ export interface TriggerHistory {
     sipId: string
     sipName: string
     amount: number
-    savingId: string
-    savingName: string
+    savingId?: string
+    savingName?: string
+    expenseCategory?: string
+    type: "expense" | "investment"
   }>
 }
 
@@ -1173,7 +1178,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     }
   }
 
-  // Trigger monthly SIPs
+  // Trigger monthly Automations
   const triggerMonthSIPs = async () => {
     const today = new Date("2026-05-30") // Use consistent date for demo
     const currentMonth = today.toISOString().substring(0, 7) // "2026-05"
@@ -1184,7 +1189,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const updatedSavings = [...savings]
     const triggeredSIPsList: TriggerHistory["triggeredSIPs"] = []
 
-    // Process each active SIP
+    // Process each active Automation
     for (const sip of sips.filter(s => s.sipStatus === "active")) {
       const triggeredMonths = sip.triggeredMonths || []
       
@@ -1194,40 +1199,70 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         continue
       }
 
-      // Find the linked saving
-      let linkedSavingId = sip.savingId
-      let linkedSavingName = ""
-      if (!linkedSavingId && sip.linkedGoal) {
-        // Try to find a saving from the linked goal
-        const linkedGoal = goals.find(g => g.id === sip.linkedGoal)
-        if (linkedGoal && linkedGoal.savings_ids && linkedGoal.savings_ids.length > 0) {
-          linkedSavingId = linkedGoal.savings_ids[0]
-        }
+      // Check if trigger day is reached
+      const triggerDay = sip.triggerDay || 1
+      if (today.getDate() < triggerDay) {
+        skipped++
+        continue
       }
 
-      // If we found a linked saving, add the SIP amount
-      if (linkedSavingId) {
-        const savingIndex = updatedSavings.findIndex(s => s.id === linkedSavingId)
-        if (savingIndex >= 0) {
-          linkedSavingName = updatedSavings[savingIndex].name
-          updatedSavings[savingIndex] = {
-            ...updatedSavings[savingIndex],
-            amount: updatedSavings[savingIndex].amount + sip.amount,
+      if (sip.automationType === "expense") {
+        // Create an Expense record
+        const newExpense: Omit<Expense, "id"> = {
+          date: today.toISOString().split("T")[0],
+          category: sip.expenseCategory || "other",
+          amount: sip.amount,
+          account: sip.account,
+          note: `Auto: ${sip.name}`,
+          goalId: sip.linkedGoal,
+        }
+        await addExpense(newExpense)
+
+        triggeredSIPsList.push({
+          sipId: sip.id,
+          sipName: sip.name,
+          amount: sip.amount,
+          expenseCategory: sip.expenseCategory,
+          type: "expense"
+        })
+        triggered++
+      } else {
+        // Find the linked saving
+        let linkedSavingId = sip.savingId
+        let linkedSavingName = ""
+        if (!linkedSavingId && sip.linkedGoal) {
+          // Try to find a saving from the linked goal
+          const linkedGoal = goals.find(g => g.id === sip.linkedGoal)
+          if (linkedGoal && linkedGoal.savings_ids && linkedGoal.savings_ids.length > 0) {
+            linkedSavingId = linkedGoal.savings_ids[0]
           }
-          
-          // Record this trigger
-          triggeredSIPsList.push({
-            sipId: sip.id,
-            sipName: sip.name,
-            amount: sip.amount,
-            savingId: linkedSavingId,
-            savingName: linkedSavingName,
-          })
-          triggered++
+        }
+
+        // If we found a linked saving, add the SIP amount
+        if (linkedSavingId) {
+          const savingIndex = updatedSavings.findIndex(s => s.id === linkedSavingId)
+          if (savingIndex >= 0) {
+            linkedSavingName = updatedSavings[savingIndex].name
+            updatedSavings[savingIndex] = {
+              ...updatedSavings[savingIndex],
+              amount: updatedSavings[savingIndex].amount + sip.amount,
+            }
+
+            // Record this trigger
+            triggeredSIPsList.push({
+              sipId: sip.id,
+              sipName: sip.name,
+              amount: sip.amount,
+              savingId: linkedSavingId,
+              savingName: linkedSavingName,
+              type: "investment"
+            })
+            triggered++
+          }
         }
       }
 
-      // Update SIP with new triggered month
+      // Update Automation with new triggered month
       const sipIndex = updatedSIPs.findIndex(s => s.id === sip.id)
       if (sipIndex >= 0) {
         updatedSIPs[sipIndex] = {
@@ -1310,6 +1345,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const lastTrigger = triggerHistory[0]
     const updatedSIPs = [...sips]
     const updatedSavings = [...savings]
+    let updatedExpenses = [...expenses]
 
     // Reverse the changes
     for (const triggeredSIP of lastTrigger.triggeredSIPs) {
@@ -1326,12 +1362,25 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         }
       }
 
-      // Reduce the saving amount
-      const savingIndex = updatedSavings.findIndex(s => s.id === triggeredSIP.savingId)
-      if (savingIndex >= 0) {
-        updatedSavings[savingIndex] = {
-          ...updatedSavings[savingIndex],
-          amount: Math.max(0, updatedSavings[savingIndex].amount - triggeredSIP.amount),
+      if (triggeredSIP.type === "expense") {
+        // Find and delete the auto-generated expense
+        // The closest heuristic is date matching today's month/day (date) and note containing the name
+        const matchIndex = updatedExpenses.findIndex(e => e.amount === triggeredSIP.amount && e.note === `Auto: ${triggeredSIP.sipName}`)
+        if (matchIndex >= 0) {
+            const expIdToDelete = updatedExpenses[matchIndex].id;
+            updatedExpenses.splice(matchIndex, 1);
+            if (!isDemo && user) {
+                await deleteDoc(doc(db, "users", user.uid, "expenses", expIdToDelete));
+            }
+        }
+      } else {
+        // Reduce the saving amount
+        const savingIndex = updatedSavings.findIndex(s => s.id === triggeredSIP.savingId)
+        if (savingIndex >= 0) {
+          updatedSavings[savingIndex] = {
+            ...updatedSavings[savingIndex],
+            amount: Math.max(0, updatedSavings[savingIndex].amount - triggeredSIP.amount),
+          }
         }
       }
     }
@@ -1343,11 +1392,13 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     // Update state
     setSIPs(updatedSIPs)
     setSavings(updatedSavings)
+    setExpenses(updatedExpenses)
 
     // Persist
     if (isDemo || !user) {
       localStorage.setItem("finio_sips", JSON.stringify(updatedSIPs))
       localStorage.setItem("finio_savings", JSON.stringify(updatedSavings))
+      localStorage.setItem("finio_expenses", JSON.stringify(updatedExpenses))
       localStorage.setItem("finio_trigger_history", JSON.stringify(updatedHistory))
     } else {
       // Persist to Firestore
