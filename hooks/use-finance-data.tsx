@@ -568,7 +568,8 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   }
 
   const loginWithEmail = async (email: string, password: string) => {
-    if (!isConfigured) {
+    // If we're not configured, OR if someone specifically requested the demo user
+    if (!isConfigured || email === "demo@finio.io") {
       // Mock log in locally
       setUser({
         displayName: "Demo User",
@@ -576,7 +577,9 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         uid: "demo_uid",
         photoURL: ""
       } as any)
-      setIsDemo(false)
+      // Note: when demo@finio.io is used, we intentionally set isDemo=true
+      // so it only writes to localStorage even if Firebase is configured.
+      setIsDemo(true)
       return
     }
     try {
@@ -1408,7 +1411,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const lastTrigger = triggerHistory[0]
     const updatedSIPs = [...sips]
     const updatedSavings = [...savings]
-    let updatedExpenses = [...expenses]
+    const updatedExpenses = [...expenses]
 
     // Reverse the changes
     for (const triggeredSIP of lastTrigger.triggeredSIPs) {
