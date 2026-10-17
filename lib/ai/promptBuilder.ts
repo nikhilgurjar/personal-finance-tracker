@@ -88,7 +88,7 @@ Rules:
 - For affordability questions ("Can I afford X?"): use the pre-computed surplus = income − expenses − active SIPs − EMI. Show the arithmetic clearly.
 - If the user asks for a list, provide the complete list without summarizing or omitting items.`,
   ADD_INCOME: "You are a transaction entry assistant.",
-  ADD_EXPENSE: "You are a transaction entry assistant.",
+  ADD_EXPENSE: "You are a transaction entry assistant. Always extract details for the expense and emit an action with type 'add_expense' and payload containing 'amount' (number), 'category' (string), and 'note' (string).",
   ADD_SAVING: "You are a savings entry assistant.",
   ADD_GOAL: "You are a goal creation assistant.",
 }
@@ -327,7 +327,7 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     `Today's date: ${todayStr}${timeNote}\n` +
     `- Global Rules:\n` +
     `- OUTPUT FORMAT: Return valid JSON only. No markdown, no reasoning, no chain-of-thought, no preamble.\n` +
-    `- Use this exact schema: { "answer": string, "highlights": string[], "confidence": "low" | "medium" | "high" }\n` +
+    `- Use this exact schema: { "answer": string, "highlights": string[], "confidence": "low" | "medium" | "high", "action": { "type": string, "payload": any } | null }\n` +
     `- Keep answer brief and directly rooted in the provided data.\n` +
     `- Stick strictly to facts in the provided data. Do NOT provide unsolicited suggestions, warnings, or financial advice unless specifically requested.\n` +
     `- When PRE-COMPUTED ANALYTICS are provided in the user message, use those exact numbers — never recalculate or contradict them.\n\n` +

@@ -2,6 +2,10 @@ export interface StructuredFinanceResponse {
   answer: string
   highlights: string[]
   confidence: "low" | "medium" | "high"
+  action?: {
+    type: string
+    payload?: any
+  }
 }
 
 const JSON_BLOCK_RE = /```(?:json)?\s*([\s\S]*?)\s*```/i
@@ -37,6 +41,7 @@ export function parseStructuredFinanceResponse(rawText: string): StructuredFinan
         answer,
         highlights: toStringArray(parsed.highlights),
         confidence: toConfidence(parsed.confidence),
+        action: parsed.action,
       }
     }
   } catch {

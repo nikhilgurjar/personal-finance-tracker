@@ -18,6 +18,10 @@ export interface AIResponse {
   inputTokens?: number
   outputTokens?: number
   finishReason?: string
+  action?: {
+    type: string
+    payload?: any
+  }
 }
 
 interface ModelGeneration {
