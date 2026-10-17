@@ -16,6 +16,7 @@ import {
   BarChart3,
   Sparkles,
   Brain,
+  FileText,
   X,
 } from "lucide-react"
 import {
@@ -43,6 +44,7 @@ const PRIMARY_NAV = [
   { label: "Goals",         href: "/dashboard/goals",        icon: Target },
   { label: "Savings",       href: "/dashboard/savings",      icon: PiggyBank },
   { label: "AI Coach",      href: "/dashboard/ai-plan",      icon: Brain },
+  { label: "Plan Notes",    href: "/dashboard/plan-notes",   icon: FileText },
   { label: "Lend & Borrow", href: "/dashboard/lend-borrow",  icon: ArrowLeftRight },
 ]
 
