@@ -1,9 +1,70 @@
 import { runFinanceDecisionLoop } from "../decisionLoop";
 import { testCases } from "./testCases";
+import { generateAIResponse } from "../aiClient";
+import { buildPrompt } from "../promptBuilder";
+import { evaluateWithGemini } from "./evalGrading";
 
-function runEvaluations() {
-  console.log("Starting AI Decision Loop Evaluations...\n");
+async function runEvaluations() {
+  console.log("Starting AI Decision Loop & LLM-as-a-Judge Evaluations...\n");
 
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("\x1b[33m[WARN]\x1b[0m GEMINI_API_KEY is missing. Falling back to deterministic tests only.");
+    console.warn("To run the multi-layer LLM evaluation: GEMINI_API_KEY=your_key pnpm run eval\n");
+    runDeterministicTests();
+    return;
+  }
+
+  let totalScore = 0;
+  let testCount = 0;
+
+  for (const tc of testCases) {
+    testCount++;
+    console.log(`\nEvaluating Test ${tc.id} (${tc.difficulty}): ${tc.description}`);
+
+    try {
+      // 1. Build the prompt using our main logic
+      const built = buildPrompt({
+        intent: "GENERAL",
+        dataSlice: tc.input.dataSlice,
+        question: tc.input.question,
+      });
+
+      // Combine System and User prompt for the actual request
+      const fullPrompt = `${built.system}\n\n${built.user}`;
+
+      // 2. Generate the answer using Gemini
+      const aiResponse = await generateAIResponse(fullPrompt, "gemini", apiKey, "gemini-2.5-flash");
+
+      // 3. Grade the answer using Gemini as a judge
+      const grade = await evaluateWithGemini(
+        apiKey,
+        tc.input.question,
+        JSON.stringify(tc.input.dataSlice, null, 2),
+        tc.expected.mode,
+        aiResponse.text
+      );
+
+      totalScore += grade.score;
+
+      // Color coding score
+      const color = grade.score >= 80 ? "\x1b[32m" : grade.score >= 50 ? "\x1b[33m" : "\x1b[31m";
+      console.log(`   ${color}Score: ${grade.score}/100\x1b[0m`);
+      console.log(`   Reasoning: ${grade.reasoning}`);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (e: any) {
+      console.log(`\x1b[31m[ERROR]\x1b[0m Exception running Test ${tc.id}: ${e.message}`);
+    }
+  }
+
+  console.log("\n========================================");
+  console.log(`Total Cases: ${testCount}`);
+  console.log(`Average Multi-Layer Score: ${(totalScore / testCount).toFixed(2)}/100`);
+  console.log("========================================\n");
+}
+
+function runDeterministicTests() {
   let passed = 0;
   let failed = 0;
 
@@ -13,13 +74,11 @@ function runEvaluations() {
       let isPass = true;
       const failReasons: string[] = [];
 
-      // Validate mode
       if (result.mode !== tc.expected.mode) {
         isPass = false;
         failReasons.push(`Expected mode '${tc.expected.mode}', got '${result.mode}'`);
       }
 
-      // Validate constraints
       if (tc.expected.hasConstraints !== undefined) {
         const hasConstraints = result.constraints && result.constraints.length > 0;
         if (hasConstraints !== tc.expected.hasConstraints) {
@@ -28,7 +87,6 @@ function runEvaluations() {
         }
       }
 
-      // Validate questions
       if (tc.expected.hasQuestions !== undefined) {
         const hasQuestions = result.questions && result.questions.length > 0;
         if (hasQuestions !== tc.expected.hasQuestions) {
