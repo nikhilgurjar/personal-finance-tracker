@@ -236,7 +236,7 @@ function buildFinancialAnalytics(dataSlice: Record<string, any[]>, intent: Inten
   const trackedExpenses = currentMonthExpenses.reduce((s, e) => s + num(e.amount), 0)
 
   // ── SIPs ──
-  const activeSips = sips.filter((s) => String(s.sipStatus ?? "").toLowerCase() === "active")
+  const activeSips = sips.filter((s) => String(s.sipStatus ?? "").toLowerCase() === "active" && String(s.automationType ?? "") !== "expense")
   const activeSipTotal = activeSips.reduce((s, sip) => s + num(sip.amount), 0)
 
   // ── EMI / loan payments in debts ──

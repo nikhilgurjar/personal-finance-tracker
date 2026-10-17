@@ -15,21 +15,24 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { SIP_TYPES, SIP_FREQUENCY, SIP_STATUS, SAVINGS_APPS } from "@/constants/finance"
+import { SIP_TYPES, SIP_FREQUENCY, SIP_STATUS, SAVINGS_APPS, AUTOMATION_TYPES, EXPENSE_CATEGORIES } from "@/constants/finance"
 import { useFinanceData, SIPSchedule } from "@/hooks/use-finance-data"
 import { useState, useEffect } from "react"
 import { Plus } from "lucide-react"
 
 const schema = z.object({
-  savingId:         z.string().min(1, "Linked Saving is required"),
+  automationType:   z.string().min(1, "Type is required"),
+  expenseCategory:  z.string().optional(),
+  triggerDay:       z.coerce.number().min(1).max(31).optional(),
+  savingId:         z.string().optional(),
   name:             z.string().min(1, "Name is required"),
-  investmentType:   z.string().min(1, "Type is required"),
+  investmentType:   z.string().optional(),
   amount:           z.coerce.number().positive("Must be positive"),
   frequency:        z.string().min(1, "Frequency is required"),
   startDate:        z.string().min(1, "Start date is required"),
   endDate:          z.string().optional(),
   account:          z.string().min(1, "Account is required"),
-  app:              z.string().min(1, "App is required"),
+  app:              z.string().optional(),
   sipStatus:        z.string().min(1, "Status is required"),
   totalInvested:    z.coerce.number().optional(),
   linkedGoal:       z.string().optional(),
@@ -38,14 +41,14 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-interface SIPFormProps {
+interface AutomationFormProps {
   initialData?: SIPSchedule | null
   triggerButton?: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
 
-export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOpenChange: controlledOnOpenChange }: SIPFormProps) {
+export function AutomationForm({ initialData, triggerButton, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AutomationFormProps) {
   const [localOpen, setLocalOpen] = useState(false)
   const isControlled = controlledOpen !== undefined
   const open = isControlled ? controlledOpen : localOpen
@@ -56,6 +59,9 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
   const form = useForm<FormValues>({
     resolver: zodResolver(schema as any),
     defaultValues: {
+      automationType: "investment",
+      expenseCategory: "",
+      triggerDay: 1,
       savingId: "",
       name: "",
       investmentType: "mf",
@@ -72,6 +78,7 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
     },
   })
 
+  const watchAutomationType = form.watch("automationType")
   const watchSavingId = form.watch("savingId")
 
   // Auto-populate Name, Investment Type, and App/Broker when a saving asset is selected
@@ -89,15 +96,18 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
   useEffect(() => {
     if (initialData && open) {
       form.reset({
+        automationType: (initialData.automationType as any) || "investment",
+        expenseCategory: initialData.expenseCategory || "",
+        triggerDay: initialData.triggerDay || 1,
         savingId: initialData.savingId || "",
         name: initialData.name,
-        investmentType: initialData.investmentType,
+        investmentType: initialData.investmentType || "mf",
         amount: initialData.amount,
         frequency: initialData.frequency,
         startDate: initialData.startDate,
         endDate: initialData.endDate || "",
         account: initialData.account,
-        app: initialData.app,
+        app: initialData.app || "",
         sipStatus: initialData.sipStatus,
         totalInvested: initialData.totalInvested || 0,
         linkedGoal: initialData.linkedGoal || "",
@@ -105,6 +115,9 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
       })
     } else if (!initialData && open) {
       form.reset({
+        automationType: "investment",
+        expenseCategory: "",
+        triggerDay: 1,
         savingId: "",
         name: "",
         investmentType: "mf",
@@ -124,15 +137,18 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
 
   async function onSubmit(values: FormValues) {
     const formattedData = {
-      savingId: values.savingId,
+      automationType: values.automationType as "expense" | "investment",
+      expenseCategory: values.automationType === "expense" ? values.expenseCategory : undefined,
+      triggerDay: values.triggerDay,
+      savingId: values.automationType === "investment" ? values.savingId : undefined,
       name: values.name,
-      investmentType: values.investmentType,
+      investmentType: values.automationType === "investment" ? values.investmentType! : "expense",
       amount: values.amount,
       frequency: values.frequency,
       startDate: values.startDate,
       endDate: values.endDate || undefined,
       account: values.account,
-      app: values.app,
+      app: values.automationType === "investment" ? values.app! : "none",
       sipStatus: values.sipStatus as "active" | "paused" | "completed",
       totalInvested: values.totalInvested,
       linkedGoal: values.linkedGoal === "none" ? undefined : (values.linkedGoal || undefined),
@@ -162,47 +178,16 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
       <DialogContent className="sm:max-w-lg backdrop-blur-lg bg-background/95 border-border/80 max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold tracking-tight">
-            {initialData ? "✏️ Edit SIP Schedule" : "📊 Create New SIP"}
+            {initialData ? "✏️ Edit Automation" : "📊 Create New Automation"}
           </DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
 
-            <FormField control={form.control as any} name="savingId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Linked Saving / Asset (Required)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select existing saving asset" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {savings.map((sav) => (
-                      <SelectItem key={sav.id} value={sav.id}>
-                        {sav.name} ({sav.provider})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control as any} name="name" render={({ field }) => (
-              <FormItem>
-                <FormLabel>SIP Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g., Axis Small Cap SIP" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField control={form.control as any} name="investmentType" render={({ field }) => (
+              <FormField control={form.control as any} name="automationType" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Investment Type</FormLabel>
+                  <FormLabel>Automation Type</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -210,7 +195,7 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {SIP_TYPES.map((t) => (
+                      {AUTOMATION_TYPES.map((t) => (
                         <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -218,6 +203,93 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
                   <FormMessage />
                 </FormItem>
               )} />
+
+              <FormField control={form.control as any} name="triggerDay" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Trigger Day (1-31)</FormLabel>
+                  <FormControl>
+                    <Input type="number" placeholder="10" min={1} max={31} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+
+            {watchAutomationType === "investment" && (
+              <FormField control={form.control as any} name="savingId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Linked Saving / Asset (Required)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select existing saving asset" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {savings.map((sav) => (
+                        <SelectItem key={sav.id} value={sav.id}>
+                          {sav.name} ({sav.provider})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
+
+            {watchAutomationType === "expense" && (
+              <FormField control={form.control as any} name="expenseCategory" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Expense Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {EXPENSE_CATEGORIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
+
+            <FormField control={form.control as any} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input placeholder={watchAutomationType === "investment" ? "e.g., Axis Small Cap SIP" : "e.g., House Rent"} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {watchAutomationType === "investment" && (
+                <FormField control={form.control as any} name="investmentType" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Investment Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SIP_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
 
               <FormField control={form.control as any} name="amount" render={({ field }) => (
                 <FormItem>
@@ -312,36 +384,40 @@ export function SIPForm({ initialData, triggerButton, open: controlledOpen, onOp
                 </FormItem>
               )} />
 
-              <FormField control={form.control as any} name="app" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>App/Broker</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select app" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {SAVINGS_APPS.map((app) => (
-                        <SelectItem key={app.value} value={app.value}>{app.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {watchAutomationType === "investment" && (
+                <FormField control={form.control as any} name="app" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>App/Broker</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select app" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {SAVINGS_APPS.map((app) => (
+                          <SelectItem key={app.value} value={app.value}>{app.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField control={form.control as any} name="totalInvested" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Total Invested (₹)</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {watchAutomationType === "investment" && (
+                <FormField control={form.control as any} name="totalInvested" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Total Invested (₹)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="0" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              )}
 
               <FormField control={form.control as any} name="linkedGoal" render={({ field }) => (
                 <FormItem>

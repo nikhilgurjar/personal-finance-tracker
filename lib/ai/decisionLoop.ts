@@ -119,7 +119,7 @@ function deriveBudgetFacts(dataSlice: Record<string, any[]>) {
     .reduce((sum, row) => sum + num(row.amount), 0)
 
   const trackedExpenses = expenses.reduce((sum, row) => sum + num(row.amount), 0)
-  const activeSips = (sips.filter((row) => String(row.sipStatus ?? "").toLowerCase() === "active").reduce((sum, row) => sum + num(row.amount), 0))
+  const activeSips = (sips.filter((row) => String(row.sipStatus ?? "").toLowerCase() === "active" && String(row.automationType ?? "") !== "expense").reduce((sum, row) => sum + num(row.amount), 0))
   const monthlySurplus = monthlyIncome - trackedExpenses - activeSips
   const payable = debts.reduce((sum, row) => sum + num(row.amount), 0)
   const totalGoalTarget = goals.reduce((sum, row) => sum + num(row.target), 0)
