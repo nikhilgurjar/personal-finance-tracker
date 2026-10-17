@@ -121,6 +121,14 @@ export interface DebtTransaction {
   note: string
 }
 
+export interface PlanNote {
+  id: string
+  title: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Income {
   id: string
   source: string
@@ -178,6 +186,7 @@ interface FinanceDataContextType {
   debts: DebtTransaction[]
   income: Income[]
   sips: SIPSchedule[]
+  planNotes: PlanNote[]
   triggerHistory: TriggerHistory[]
   savingTransactions: SavingTransaction[]
   accountTransactions: AccountTransaction[]
@@ -231,6 +240,11 @@ interface FinanceDataContextType {
   deleteSIP: (id: string) => Promise<void>
   triggerMonthSIPs: () => Promise<{ triggered: number; skipped: number }>
   undoLastTrigger: () => Promise<boolean>
+
+  // Plan Notes
+  addPlanNote: (note: Omit<PlanNote, "id" | "createdAt" | "updatedAt">) => Promise<string>
+  updatePlanNote: (id: string, note: Partial<PlanNote>) => Promise<void>
+  deletePlanNote: (id: string) => Promise<void>
   
   // Custom Apps & Providers
   addApp: (name: string) => Promise<void>
@@ -297,6 +311,8 @@ const INITIAL_SIPS: SIPSchedule[] = [
   { id: "sip_2", name: "Zerodha Direct SIP", investmentType: "mf", amount: 10000, frequency: "monthly", startDate: "2026-02-01", account: "acc_1", app: "zerodha", sipStatus: "active", totalInvested: 40000, linkedGoal: "goal_3", note: "Large Cap Fund SIP" },
 ]
 
+const INITIAL_PLAN_NOTES: PlanNote[] = []
+
 const INITIAL_TRIGGER_HISTORY: TriggerHistory[] = []
 
 const INITIAL_APPS = [...SAVINGS_APPS]
@@ -355,6 +371,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const [debts, setDebts] = useState<DebtTransaction[]>([])
   const [income, setIncome] = useState<Income[]>([])
   const [sips, setSIPs] = useState<SIPSchedule[]>([])
+  const [planNotes, setPlanNotes] = useState<PlanNote[]>([])
   const [triggerHistory, setTriggerHistory] = useState<TriggerHistory[]>([])
   const [savingTransactions, setSavingTransactions] = useState<SavingTransaction[]>([])
   const [accountTransactions, setAccountTransactions] = useState<AccountTransaction[]>([])
@@ -393,6 +410,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const localDebts = localStorage.getItem("finio_debts")
     const localIncome = localStorage.getItem("finio_income")
     const localSIPs = localStorage.getItem("finio_sips")
+    const localPlanNotes = localStorage.getItem("finio_plan_notes")
     const localTriggerHistory = localStorage.getItem("finio_trigger_history")
     const localSavingTransactions = localStorage.getItem("finio_saving_transactions")
     const localAccountTransactions = localStorage.getItem("finio_account_transactions")
@@ -439,6 +457,12 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     else {
       setSIPs(INITIAL_SIPS)
       localStorage.setItem("finio_sips", JSON.stringify(INITIAL_SIPS))
+    }
+
+    if (localPlanNotes) setPlanNotes(JSON.parse(localPlanNotes))
+    else {
+      setPlanNotes(INITIAL_PLAN_NOTES)
+      localStorage.setItem("finio_plan_notes", JSON.stringify(INITIAL_PLAN_NOTES))
     }
 
     if (localTriggerHistory) setTriggerHistory(JSON.parse(localTriggerHistory))
@@ -498,7 +522,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         return list
       }
 
-      const [accs, exps, gls, savs, dbts, incs, sipsData, aps, provs, savTrans, accTrans] = await Promise.all([
+      const [accs, exps, gls, savs, dbts, incs, sipsData, pn, aps, provs, savTrans, accTrans] = await Promise.all([
         fetchCol<Account>(`users/${uid}/accounts`),
         fetchCol<Expense>(`users/${uid}/expenses`),
         fetchCol<Goal>(`users/${uid}/goals`, normalizeGoal),
@@ -506,6 +530,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         fetchCol<DebtTransaction>(`users/${uid}/debts`),
         fetchCol<Income>(`users/${uid}/income`),
         fetchCol<SIPSchedule>(`users/${uid}/sips`),
+        fetchCol<PlanNote>(`users/${uid}/planNotes`),
         fetchCol<any>(`users/${uid}/apps`),
         fetchCol<any>(`users/${uid}/providers`),
         fetchCol<SavingTransaction>(`users/${uid}/saving_transactions`),
@@ -519,6 +544,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       setDebts(dbts)
       setIncome(incs)
       setSIPs(sipsData)
+      setPlanNotes(pn)
       setSavingTransactions(savTrans)
       setAccountTransactions(accTrans)
       setApps(aps)
@@ -543,7 +569,8 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   }
 
   const loginWithEmail = async (email: string, password: string) => {
-    if (!isConfigured) {
+    // If we're not configured, OR if someone specifically requested the demo user
+    if (!isConfigured || email === "demo@finio.io") {
       // Mock log in locally
       setUser({
         displayName: "Demo User",
@@ -551,6 +578,8 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         uid: "demo_uid",
         photoURL: ""
       } as any)
+      // Note: when demo@finio.io is used, we intentionally set isDemo=true
+      // so it only writes to localStorage even if Firebase is configured.
       setIsDemo(true)
       return
     }
@@ -1146,6 +1175,43 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     }
   }
 
+  // Plan Notes
+  const addPlanNote = async (note: Omit<PlanNote, "id" | "createdAt" | "updatedAt">): Promise<string> => {
+    const id = `pn_${Math.random().toString(36).substr(2, 9)}`
+    const now = new Date().toISOString()
+    const newNote: PlanNote = { id, ...note, createdAt: now, updatedAt: now }
+    const updated = [...planNotes, newNote]
+    setPlanNotes(updated)
+    if (isDemo || !user) {
+      localStorage.setItem("finio_plan_notes", JSON.stringify(updated))
+    } else {
+      await setDoc(doc(db, "users", user.uid, "planNotes", id), cleanUndefined(newNote))
+    }
+    return id
+  }
+
+  const updatePlanNote = async (id: string, note: Partial<PlanNote>) => {
+    const now = new Date().toISOString()
+    const updatedNote = { ...note, updatedAt: now }
+    const updated = planNotes.map((n) => (n.id === id ? { ...n, ...updatedNote } : n))
+    setPlanNotes(updated)
+    if (isDemo || !user) {
+      localStorage.setItem("finio_plan_notes", JSON.stringify(updated))
+    } else {
+      await setDoc(doc(db, "users", user.uid, "planNotes", id), cleanUndefined(updatedNote), { merge: true })
+    }
+  }
+
+  const deletePlanNote = async (id: string) => {
+    const updated = planNotes.filter((n) => n.id !== id)
+    setPlanNotes(updated)
+    if (isDemo || !user) {
+      localStorage.setItem("finio_plan_notes", JSON.stringify(updated))
+    } else {
+      await deleteDoc(doc(db, "users", user.uid, "planNotes", id))
+    }
+  }
+
   // SIPs
   const addSIP = async (sip: Omit<SIPSchedule, "id">) => {
     const id = `sip_${Math.random().toString(36).substr(2, 9)}`
@@ -1352,7 +1418,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const lastTrigger = triggerHistory[0]
     const updatedSIPs = [...sips]
     const updatedSavings = [...savings]
-    let updatedExpenses = [...expenses]
+    const updatedExpenses = [...expenses]
 
     // Reverse the changes
     for (const triggeredSIP of lastTrigger.triggeredSIPs) {
@@ -1448,6 +1514,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         debts,
         income,
         sips,
+        planNotes,
         triggerHistory,
         savingTransactions,
         accountTransactions,
@@ -1483,6 +1550,9 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         deleteSIP,
         triggerMonthSIPs,
         undoLastTrigger,
+        addPlanNote,
+        updatePlanNote,
+        deletePlanNote,
         addApp,
         addProvider,
       }}

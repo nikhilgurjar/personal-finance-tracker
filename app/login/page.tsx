@@ -461,34 +461,32 @@ export default function LoginPage() {
             </>
           )}
 
-          {/* ── OFFLINE DEMO BYPASS ── */}
-          {!isConfigured && (
-            <div style={{
-              marginTop: "20px", padding: "14px 16px", borderRadius: "12px",
-              background: "#fff8e1", border: "1.5px solid #ffe082"
-            }}>
-              <div className="flex items-center gap-2 mb-2">
-                <ShieldAlert style={{ width: "16px", height: "16px", color: "#f9a825", flexShrink: 0 }} />
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "#e65100" }}>Offline Demo Mode</span>
-              </div>
-              <p style={{ fontSize: "12px", color: "#795548", lineHeight: "1.6", marginBottom: "10px" }}>
-                Firebase is not configured. Click below to explore the dashboard with mock data.
-              </p>
-              <button
-                onClick={handleBypassDemo}
-                style={{
-                  width: "100%", height: "38px", borderRadius: "8px",
-                  background: "#f9a825", color: "#fff", fontWeight: 600,
-                  fontSize: "13px", border: "none", cursor: "pointer",
-                  transition: "background 0.15s"
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#f57f17")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#f9a825")}
-              >
-                Try Demo (No Login Required)
-              </button>
+          {/* ── DEMO BYPASS ── */}
+          <div style={{
+            marginTop: "20px", padding: "14px 16px", borderRadius: "12px",
+            background: "#fff8e1", border: "1.5px solid #ffe082"
+          }}>
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert style={{ width: "16px", height: "16px", color: "#f9a825", flexShrink: 0 }} />
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#e65100" }}>Demo Mode</span>
             </div>
-          )}
+            <p style={{ fontSize: "12px", color: "#795548", lineHeight: "1.6", marginBottom: "10px" }}>
+              Explore the dashboard with mock data without logging in.
+            </p>
+            <button
+              onClick={handleBypassDemo}
+              style={{
+                width: "100%", height: "38px", borderRadius: "8px",
+                background: "#f9a825", color: "#fff", fontWeight: 600,
+                fontSize: "13px", border: "none", cursor: "pointer",
+                transition: "background 0.15s"
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#f57f17")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#f9a825")}
+            >
+              Try Demo (No Login Required)
+            </button>
+          </div>
 
           {/* Bottom note */}
           <p style={{ fontSize: "12px", color: "#80868b", textAlign: "center", marginTop: "24px", lineHeight: "1.6" }}>
