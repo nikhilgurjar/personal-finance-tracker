@@ -142,8 +142,9 @@ export interface Income {
 export interface SIPSchedule {
   id: string
   name: string
-  automationType?: "expense" | "investment"
+  automationType?: "expense" | "investment" | "income"
   expenseCategory?: string
+  incomeSource?: string
   triggerDay?: number
   investmentType: string
   amount: number
@@ -171,7 +172,8 @@ export interface TriggerHistory {
     savingId?: string
     savingName?: string
     expenseCategory?: string
-    type: "expense" | "investment"
+    incomeSource?: string
+    type: "expense" | "investment" | "income"
   }>
 }
 
@@ -1299,6 +1301,24 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
           type: "expense"
         })
         triggered++
+      } else if (sip.automationType === "income") {
+        const newIncome: Omit<Income, "id"> = {
+          date: today.toISOString().split("T")[0],
+          amount: sip.amount,
+          source: sip.incomeSource || sip.name,
+          account: sip.account,
+          frequency: sip.frequency || "monthly"
+        }
+        await addIncome(newIncome)
+
+        triggeredSIPsList.push({
+          sipId: sip.id,
+          sipName: sip.name,
+          amount: sip.amount,
+          type: "income",
+          incomeSource: sip.incomeSource || sip.name
+        })
+        triggered++
       } else {
         // Find the linked saving
         let linkedSavingId = sip.savingId
@@ -1419,6 +1439,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const updatedSIPs = [...sips]
     const updatedSavings = [...savings]
     const updatedExpenses = [...expenses]
+    const updatedIncome = [...income]
 
     // Reverse the changes
     for (const triggeredSIP of lastTrigger.triggeredSIPs) {
@@ -1444,6 +1465,15 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             updatedExpenses.splice(matchIndex, 1);
             if (!isDemo && user) {
                 await deleteDoc(doc(db, "users", user.uid, "expenses", expIdToDelete));
+            }
+        }
+      } else if (triggeredSIP.type === "income") {
+        const matchIndex = updatedIncome.findIndex(i => i.amount === triggeredSIP.amount && i.source === (triggeredSIP.incomeSource || triggeredSIP.sipName))
+        if (matchIndex >= 0) {
+            const incIdToDelete = updatedIncome[matchIndex].id;
+            updatedIncome.splice(matchIndex, 1);
+            if (!isDemo && user) {
+                await deleteDoc(doc(db, "users", user.uid, "income", incIdToDelete));
             }
         }
       } else {

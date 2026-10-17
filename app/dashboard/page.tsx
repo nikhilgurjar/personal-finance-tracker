@@ -9,9 +9,22 @@ import { Sparkles, Wallet, TrendingDown, PiggyBank, Target, TrendingUp, BarChart
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { getGoalProgress } from "@/lib/goalProgress"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts"
+import { useState, useEffect } from "react"
 
 export default function OverviewPage() {
   const { accounts, expenses, goals, savings, user, income, sips, isDemo } = useFinanceData()
+  const [greeting, setGreeting] = useState("Good morning")
+
+  useEffect(() => {
+    const hours = new Date().getHours()
+    if (hours >= 12 && hours < 17) {
+      setGreeting("Good afternoon")
+    } else if (hours >= 17) {
+      setGreeting("Good evening")
+    } else {
+      setGreeting("Good morning")
+    }
+  }, [])
 
   // Calculate dynamic stats
   const totalBalance = accounts
@@ -129,7 +142,7 @@ export default function OverviewPage() {
       <div className="flex items-center gap-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-transparent">
-            Good morning, {displayName} 👋
+            {greeting}, {displayName} 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1 font-medium">Here's your live personal finance snapshot</p>
         </div>

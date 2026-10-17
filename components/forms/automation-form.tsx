@@ -23,6 +23,7 @@ import { Plus } from "lucide-react"
 const schema = z.object({
   automationType:   z.string().min(1, "Type is required"),
   expenseCategory:  z.string().optional(),
+  incomeSource:     z.string().optional(),
   triggerDay:       z.coerce.number().min(1).max(31).optional(),
   savingId:         z.string().optional(),
   name:             z.string().min(1, "Name is required"),
@@ -117,6 +118,7 @@ export function AutomationForm({ initialData, triggerButton, open: controlledOpe
       form.reset({
         automationType: "investment",
         expenseCategory: "",
+        incomeSource: "",
         triggerDay: 1,
         savingId: "",
         name: "",
@@ -137,8 +139,9 @@ export function AutomationForm({ initialData, triggerButton, open: controlledOpe
 
   async function onSubmit(values: FormValues) {
     const formattedData = {
-      automationType: values.automationType as "expense" | "investment",
+      automationType: values.automationType as "expense" | "investment" | "income",
       expenseCategory: values.automationType === "expense" ? values.expenseCategory : undefined,
+      incomeSource: values.automationType === "income" ? values.incomeSource : undefined,
       triggerDay: values.triggerDay,
       savingId: values.automationType === "investment" ? values.savingId : undefined,
       name: values.name,
@@ -214,6 +217,18 @@ export function AutomationForm({ initialData, triggerButton, open: controlledOpe
                 </FormItem>
               )} />
             </div>
+
+            {watchAutomationType === "income" && (
+              <FormField control={form.control as any} name="incomeSource" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Income Source</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Salary, Dividend, Rent" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
 
             {watchAutomationType === "investment" && (
               <FormField control={form.control as any} name="savingId" render={({ field }) => (

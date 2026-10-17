@@ -163,6 +163,7 @@ export const INCOME_FREQUENCY = [
 export const AUTOMATION_TYPES = [
   { value: "expense", label: "Recurring Expense" },
   { value: "investment", label: "Recurring Investment" },
+  { value: "income", label: "Recurring Income" },
 ]
 
 export const SIP_TYPES = [

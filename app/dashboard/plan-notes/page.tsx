@@ -24,9 +24,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { ChevronLeft } from "lucide-react"
 
 export default function PlanNotesPage() {
   const { planNotes, addPlanNote, updatePlanNote, deletePlanNote, user, isDemo } = useFinanceData()
+  const isMobile = useIsMobile()
 
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -43,12 +46,12 @@ export default function PlanNotesPage() {
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
   }, [planNotes, searchQuery])
 
-  // Select first note automatically if none selected and notes exist
+  // Select first note automatically if none selected and notes exist, except on mobile
   useEffect(() => {
-    if (!activeNoteId && sortedNotes.length > 0) {
+    if (!activeNoteId && sortedNotes.length > 0 && !isMobile) {
       setActiveNoteId(sortedNotes[0].id)
     }
-  }, [activeNoteId, sortedNotes])
+  }, [activeNoteId, sortedNotes, isMobile])
 
   const activeNote = useMemo(() => {
     return planNotes.find(n => n.id === activeNoteId) || null
@@ -98,7 +101,8 @@ export default function PlanNotesPage() {
     <div className="flex h-[calc(100vh-8rem)] min-h-[500px] border rounded-xl overflow-hidden bg-background w-full shadow-sm">
 
       {/* ── Sidebar (List of Notes) ── */}
-      <div className="w-1/3 min-w-[280px] max-w-[350px] border-r flex flex-col bg-muted/20">
+      {(!isMobile || !activeNoteId) && (
+      <div className="w-full md:w-1/3 md:min-w-[280px] md:max-w-[350px] md:border-r flex flex-col bg-muted/20">
         <div className="p-4 border-b space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold flex items-center gap-2">
@@ -174,13 +178,21 @@ export default function PlanNotesPage() {
           </div>
         </ScrollArea>
       </div>
+      )}
 
       {/* ── Editor Area ── */}
+      {(!isMobile || activeNoteId) && (
       <div className="flex-1 flex flex-col bg-background min-w-0">
         {activeNote ? (
           <>
             <div className="px-6 py-4 border-b flex items-center justify-between shrink-0">
               <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2 md:mb-0">
+                  {isMobile && (
+                    <Button variant="ghost" size="icon" onClick={() => setActiveNoteId(null)} className="mr-1 h-8 w-8">
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  )}
                 {isEditingTitle ? (
                   <Input
                     autoFocus
@@ -206,7 +218,8 @@ export default function PlanNotesPage() {
                     </Button>
                   </div>
                 )}
-                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-4">
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-4 md:ml-0 ml-10">
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" /> Created {format(new Date(activeNote.createdAt), "MMM d, yyyy")}
                   </span>
@@ -242,6 +255,7 @@ export default function PlanNotesPage() {
           </div>
         )}
       </div>
+      )}
 
     </div>
   )
