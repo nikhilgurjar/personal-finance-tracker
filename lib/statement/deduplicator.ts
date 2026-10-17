@@ -27,8 +27,20 @@ export function findDuplicates(
     }
   }
 
-  // Step 2: Track accepted transactions in the current run for in-batch deduplication
+  // Step 2: Pre-bucket existing expenses by amount for O(1) lookups
+  const existingByAmount = new Map<number, ExistingExpense[]>();
+  for (const ex of existingExpenses) {
+    let list = existingByAmount.get(ex.amount);
+    if (!list) {
+      list = [];
+      existingByAmount.set(ex.amount, list);
+    }
+    list.push(ex);
+  }
+
+  // Step 3: Track accepted transactions in the current run for in-batch deduplication
   const acceptedInBatch: NormalizedTransaction[] = [];
+  const acceptedByAmount = new Map<number, NormalizedTransaction[]>();
 
   return newTransactions.map((newTx) => {
     // Skip if already excluded (e.g., CC bill payment, ATM withdrawal, self transfer)
@@ -37,10 +49,8 @@ export function findDuplicates(
     const newTxDate = new Date(newTx.date).getTime();
 
     // 1. Check against EXISTING expenses in database
-    const duplicateOfExisting = existingExpenses.find((ex) => {
-      // Must be EXACT same amount
-      if (ex.amount !== newTx.amount) return false;
-
+    const candidates = existingByAmount.get(newTx.amount) || [];
+    const duplicateOfExisting = candidates.find((ex) => {
       // Must be within ±2 days (to account for posting date delay)
       const exDate = new Date(ex.date).getTime();
       const diffDays = Math.abs(newTxDate - exDate) / (1000 * 60 * 60 * 24);
@@ -72,9 +82,8 @@ export function findDuplicates(
     }
 
     // 2. Check against OTHER transactions in the current batch (intra-batch deduplication)
-    const duplicateInBatch = acceptedInBatch.find((prevTx) => {
-      if (prevTx.amount !== newTx.amount) return false;
-
+    const batchCandidates = acceptedByAmount.get(newTx.amount) || [];
+    const duplicateInBatch = batchCandidates.find((prevTx) => {
       const prevDate = new Date(prevTx.date).getTime();
       const diffDays = Math.abs(newTxDate - prevDate) / (1000 * 60 * 60 * 24);
       if (diffDays > 2) return false;
@@ -104,6 +113,12 @@ export function findDuplicates(
 
     // Accepted as a valid unique transaction
     acceptedInBatch.push(newTx);
+    let list = acceptedByAmount.get(newTx.amount);
+    if (!list) {
+      list = [];
+      acceptedByAmount.set(newTx.amount, list);
+    }
+    list.push(newTx);
     return newTx;
   });
 }
