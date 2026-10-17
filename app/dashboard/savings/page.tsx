@@ -358,7 +358,7 @@ export default function SavingsPage() {
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: any) => [`₹${formatCurrency(Number(value))}`, "Amount"]} />
+                  <Tooltip formatter={(value: any, name: any) => [`₹${formatCurrency(Number(value))}`, name]} />
                   <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
                 </PieChart>
               </ResponsiveContainer>

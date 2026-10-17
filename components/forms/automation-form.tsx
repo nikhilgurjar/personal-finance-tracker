@@ -452,7 +452,7 @@ export function AutomationForm({ initialData, triggerButton, open: controlledOpe
             )} />
 
             <Button type="submit" className="w-full font-semibold">
-              {initialData ? "Update SIP" : "Create SIP"}
+              {initialData ? "Update Automation" : "Create Automation"}
             </Button>
           </form>
         </Form>

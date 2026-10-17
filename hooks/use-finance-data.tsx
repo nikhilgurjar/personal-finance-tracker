@@ -66,6 +66,7 @@ export interface Expense {
   goalId?: string
   goalName?: string
   fundingSourceId?: string
+  linkedIncomeId?: string
 }
 
 export interface SavingAllocation {
@@ -550,7 +551,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         uid: "demo_uid",
         photoURL: ""
       } as any)
-      setIsDemo(false)
+      setIsDemo(true)
       return
     }
     try {
@@ -1207,6 +1208,11 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
       }
 
       if (sip.automationType === "expense") {
+        // Find the last salary
+        const lastSalary = income
+            .filter(i => i.source.trim().toLowerCase() === "salary")
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+
         // Create an Expense record
         const newExpense: Omit<Expense, "id"> = {
           date: today.toISOString().split("T")[0],
@@ -1215,6 +1221,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
           account: sip.account,
           note: `Auto: ${sip.name}`,
           goalId: sip.linkedGoal,
+          linkedIncomeId: lastSalary?.id,
         }
         await addExpense(newExpense)
 
