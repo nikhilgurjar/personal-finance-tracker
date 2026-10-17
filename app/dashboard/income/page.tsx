@@ -9,6 +9,7 @@ import { Plus, Trash2, Edit2, TrendingUp, Calendar, DollarSign, ArrowUpDown, Che
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, CartesianGrid } from "recharts"
 import { IncomeForm } from "@/components/forms/income-form"
 import { useFinanceData, Income } from "@/hooks/use-finance-data"
+import { Progress } from "@/components/ui/progress"
 import { useState } from "react"
 import { safeNumber, formatCurrency } from "@/lib/utils"
 import { INCOME_SOURCES, INCOME_FREQUENCY } from "@/constants/finance"
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function IncomePage() {
-  const { income, deleteIncome, accounts, isDemo } = useFinanceData()
+  const { income, deleteIncome, accounts, expenses, savings, isDemo } = useFinanceData()
   const [editingIncome, setEditingIncome] = useState<Income | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
@@ -98,6 +99,35 @@ export default function IncomePage() {
   })
 
   const COLORS = ["#3b82f6", "#0ea5e9", "#6366f1", "#06b6d4", "#14b8a6", "#a855f7", "#ec4899"]
+
+  // --- Salary Spend Tracker Calculations ---
+  // Default to current month for the tracker
+  const currentYearMonth = new Date().toISOString().substring(0, 7)
+  const [trackerMonth, setTrackerMonth] = useState(currentYearMonth)
+
+  const monthIncomeTotal = income
+    .filter(i => i.date.startsWith(trackerMonth))
+    .reduce((s, i) => s + safeNumber(i.amount), 0)
+
+  const monthExpensesTotal = expenses
+    .filter(e => e.date.startsWith(trackerMonth))
+    .reduce((s, e) => s + safeNumber(e.amount), 0)
+
+  // Filter savings created this month (using the 'date' field)
+  // or assuming new monthly savings allocations
+  const monthSavingsTotal = savings.reduce((sum, sav) => {
+    // Ideally we track saving transactions, but we can aggregate static savings amounts
+    // where they match active and monthly frequency or were created this month.
+    // For simplicity, we just look at total active savings if they are monthly.
+    if (sav.active && sav.frequency === "monthly") {
+      return sum + safeNumber(sav.amount)
+    }
+    return sum
+  }, 0)
+
+  const remainingBalance = monthIncomeTotal - monthExpensesTotal - monthSavingsTotal
+  const spendPercent = monthIncomeTotal > 0 ? (monthExpensesTotal / monthIncomeTotal) * 100 : 0
+  const savingsPercent = monthIncomeTotal > 0 ? (monthSavingsTotal / monthIncomeTotal) * 100 : 0
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -198,6 +228,13 @@ export default function IncomePage() {
           >
             <span>📝</span>
             <span>Income Ledger</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="tracker"
+            className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
+          >
+            <span>📊</span>
+            <span>Salary Spend Tracker</span>
           </TabsTrigger>
         </TabsList>
           
@@ -470,6 +507,49 @@ export default function IncomePage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Salary Spend Tracker */}
+          <TabsContent value="tracker" className="mt-4 focus-visible:outline-none">
+            <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
+              <CardHeader className="pb-4 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-xl font-bold">Salary Spend Tracker</CardTitle>
+                <Input
+                  type="month"
+                  value={trackerMonth}
+                  onChange={(e) => setTrackerMonth(e.target.value)}
+                  className="w-40 h-8 text-xs font-bold"
+                />
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-center text-sm font-semibold">
+                    <span>Total Income</span>
+                    <span className="text-primary">{formatCurrency(monthIncomeTotal)}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between items-center text-sm font-semibold">
+                    <span>Total Expenses Spent</span>
+                    <span className="text-destructive">{formatCurrency(monthExpensesTotal)} ({spendPercent.toFixed(1)}%)</span>
+                  </div>
+                  <Progress value={spendPercent} className="h-2 bg-muted/50 [&>div]:bg-destructive" />
+
+                  <div className="flex justify-between items-center text-sm font-semibold mt-2">
+                    <span>Total Savings Logged</span>
+                    <span className="text-emerald-500">{formatCurrency(monthSavingsTotal)} ({savingsPercent.toFixed(1)}%)</span>
+                  </div>
+                  <Progress value={savingsPercent} className="h-2 bg-muted/50 [&>div]:bg-emerald-500" />
+                </div>
+
+                <div className="pt-4 border-t flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Remaining Balance (Unallocated)</span>
+                  <span className={`text-3xl font-black ${remainingBalance < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-500"}`}>
+                    {formatCurrency(remainingBalance)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
       </Tabs>
     </div>
   )

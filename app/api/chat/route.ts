@@ -283,6 +283,7 @@ export async function POST(req: NextRequest) {
       cached: false,
       confidence: structured.confidence,
       highlights: structured.highlights,
+      action: structured.action,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal server error"

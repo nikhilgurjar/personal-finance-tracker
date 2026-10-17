@@ -214,6 +214,7 @@ export default function AIPlanPage() {
   const [savedPlanOpen, setSavedPlanOpen] = useState(false)
   const [pendingHandoffPrompt, setPendingHandoffPrompt] = useState<string | null>(null)
   const [quickAddOpen, setQuickAddOpen] = useState<QuickAddType>(null)
+  const [quickAddData, setQuickAddData] = useState<any>(null)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [activePanelTab, setActivePanelTab] = useState<"chat" | "plan">("chat")
   const [maximizedPanel, setMaximizedPanel] = useState<"chat" | "plan" | null>(null)
@@ -506,6 +507,13 @@ export default function AIPlanPage() {
         }
 
         setMessages((prev) => [...prev, assistantMsg])
+
+        if (result.action && result.action.type) {
+          if (result.action.type === "add_expense") {
+             setQuickAddData(result.action.payload)
+             setQuickAddOpen("expense")
+          }
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown error"
         let traceNotice = ""
@@ -1194,7 +1202,11 @@ export default function AIPlanPage() {
       {/* ── Form dialogs ── */}
       <ExpenseForm
         open={quickAddOpen === "expense"}
-        onOpenChange={(open) => setQuickAddOpen(open ? "expense" : null)}
+        onOpenChange={(open) => {
+          setQuickAddOpen(open ? "expense" : null)
+          if (!open) setQuickAddData(null)
+        }}
+        initialData={quickAddData}
       />
       <SavingsForm
         open={quickAddOpen === "saving"}
