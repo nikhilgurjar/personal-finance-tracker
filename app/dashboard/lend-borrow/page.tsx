@@ -560,11 +560,11 @@ export default function LendBorrowPage() {
                               <p className="text-xs font-bold text-foreground">{m.label}</p>
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${m.badge}`}>{m.badgeLabel}</span>
                             </div>
-                            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 flex items-center gap-1">
-                              <Calendar className="h-2.5 w-2.5 shrink-0" />
+                            <p className="text-[10px] text-muted-foreground font-medium mt-0.5 flex items-start gap-1 flex-wrap">
+                              <Calendar className="h-2.5 w-2.5 shrink-0 mt-[1px]" />
                               <span>{tx.date}</span>
                               {tx.note && (
-                                <><span>·</span><span className="italic truncate max-w-[100px] text-foreground/60">{tx.note}</span></>
+                                <><span>·</span><span className="italic break-words line-clamp-3 text-foreground/60 max-w-full">{tx.note}</span></>
                               )}
                             </p>
                           </div>
