@@ -44,10 +44,6 @@ async function check() {
       console.log(`Running collection group query for '${col}'...`);
       const snap = await db.collectionGroup(col).get();
       console.log(`Found ${snap.size} documents in group '${col}'.`);
-      snap.forEach(doc => {
-        console.log(` - Path: ${doc.ref.path}`);
-        console.log(`   Data:`, doc.data());
-      });
     }
   } catch (err) {
     console.error("Collection group query failed:", err);
