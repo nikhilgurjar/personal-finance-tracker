@@ -11,13 +11,20 @@ import "../globals.css"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const { user, loading } = useFinanceData()
+  const { user, loading, triggerMonthSIPs } = useFinanceData()
 
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login")
     }
   }, [user, loading, router])
+
+  // Automatically process automations once the data is loaded
+  useEffect(() => {
+    if (!loading && user) {
+      triggerMonthSIPs()
+    }
+  }, [loading, user])
 
   if (loading) {
     return (

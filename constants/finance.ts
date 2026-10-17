@@ -160,6 +160,11 @@ export const INCOME_FREQUENCY = [
   { value: "one-time",  label: "One-time" },
 ]
 
+export const AUTOMATION_TYPES = [
+  { value: "expense", label: "Recurring Expense" },
+  { value: "investment", label: "Recurring Investment" },
+]
+
 export const SIP_TYPES = [
   { value: "mf",        label: "📈 Mutual Fund (MF)" },
   { value: "stocks",    label: "📉 Stocks" },

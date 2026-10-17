@@ -430,7 +430,7 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
     }
   }
 
-  const activeSips = sips.filter((s) => String(s.sipStatus ?? "").toLowerCase() === "active")
+  const activeSips = sips.filter((s) => String(s.sipStatus ?? "").toLowerCase() === "active" && String(s.automationType ?? "") !== "expense")
   const activeSipAmount = activeSips.reduce((s, sip) => s + num(sip.amount), 0)
 
   const lent = debts.filter((d) => d.type === "lent").reduce((s, d) => s + num(d.amount), 0)
