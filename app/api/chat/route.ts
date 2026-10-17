@@ -170,7 +170,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Question is too long (max 500 characters)." }, { status: 400 })
     }
 
-    const rateLimitKey = uid ?? req.headers.get("x-forwarded-for") ?? "anonymous"
+    const forwardedFor = req.headers.get("x-forwarded-for")
+    const parsedForwardedFor = forwardedFor ? forwardedFor.split(",").at(-1)?.trim() : null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const clientIp = (req as any).ip ?? req.headers.get("x-real-ip") ?? parsedForwardedFor ?? "anonymous"
+
+    const rateLimitKey = uid ?? clientIp
 
     const rateCheck = checkRateLimit(rateLimitKey)
     if (!rateCheck.allowed) {
