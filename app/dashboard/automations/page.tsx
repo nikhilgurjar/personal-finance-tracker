@@ -34,9 +34,10 @@ export default function AutomationsPage() {
   const pausedSIPs = sips.filter(s => s.sipStatus === "paused")
   const completedSIPs = sips.filter(s => s.sipStatus === "completed")
 
-  const totalMonthlySIP = activeSIPs.filter(s => s.automationType !== "expense").reduce((s, sip) => s + safeNumber(sip.amount), 0)
+  const totalMonthlySIP = activeSIPs.filter(s => s.automationType === "investment" || !s.automationType).reduce((s, sip) => s + safeNumber(sip.amount), 0)
   const totalMonthlyExpense = activeSIPs.filter(s => s.automationType === "expense").reduce((s, sip) => s + safeNumber(sip.amount), 0)
-  const totalInvested = sips.filter(s => s.automationType !== "expense").reduce((s, sip) => s + safeNumber(sip.totalInvested || 0), 0)
+  const totalMonthlyIncome = activeSIPs.filter(s => s.automationType === "income").reduce((s, sip) => s + safeNumber(sip.amount), 0)
+  const totalInvested = sips.filter(s => s.automationType === "investment" || !s.automationType).reduce((s, sip) => s + safeNumber(sip.totalInvested || 0), 0)
 
   // Dynamic SIP Growth Projection
   const getSIPProjection = () => {
@@ -191,7 +192,7 @@ export default function AutomationsPage() {
           <CardContent>
             <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalMonthlySIP)}</p>
             <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border-emerald-500/20">
-              {activeSIPs.filter(s => s.automationType !== "expense").length} active
+              {activeSIPs.filter(s => s.automationType === "investment" || !s.automationType).length} active
             </Badge>
           </CardContent>
         </Card>
@@ -205,6 +206,19 @@ export default function AutomationsPage() {
             <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalMonthlyExpense)}</p>
             <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-rose-600 bg-rose-500/10 border-rose-500/20">
               {activeSIPs.filter(s => s.automationType === "expense").length} active
+            </Badge>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 shadow-sm bg-background/50 backdrop-blur-xs">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-semibold text-muted-foreground">Monthly Recurring Income</CardTitle>
+            <TrendingUp className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-extrabold text-foreground tracking-tight">₹{formatCurrency(totalMonthlyIncome)}</p>
+            <Badge variant="secondary" className="mt-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border-emerald-500/20">
+              {activeSIPs.filter(s => s.automationType === "income").length} active
             </Badge>
           </CardContent>
         </Card>
@@ -270,11 +284,15 @@ export default function AutomationsPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <h3 className="font-semibold text-lg">{sip.name}</h3>
-                            <Badge variant={sip.automationType === "expense" ? "destructive" : "default"}>{sip.automationType === "expense" ? "Expense" : "Investment"}</Badge>
+                            <Badge variant={sip.automationType === "expense" ? "destructive" : sip.automationType === "income" ? "secondary" : "default"}>
+                              {sip.automationType === "expense" ? "Expense" : sip.automationType === "income" ? "Income" : "Investment"}
+                            </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">
                             {sip.automationType === "expense"
                               ? (EXPENSE_CATEGORIES.find(c => c.value === sip.expenseCategory)?.label || sip.expenseCategory || "Expense")
+                              : sip.automationType === "income"
+                              ? (sip.incomeSource || "Income")
                               : (TYPE_MAP[sip.investmentType] || sip.investmentType)}
                           </p>
                           <div className="flex gap-2 mt-2 flex-wrap">
@@ -286,9 +304,9 @@ export default function AutomationsPage() {
                         </div>
                         <div className="text-right">
                           <p className={`text-2xl font-bold ${sip.automationType === "expense" ? "text-rose-500" : "text-emerald-600"}`}>
-                            ₹{formatCurrency(sip.automationType === "expense" ? sip.amount : (sip.totalInvested || 0))}
+                            ₹{formatCurrency(sip.automationType === "investment" || !sip.automationType ? (sip.totalInvested || 0) : sip.amount)}
                           </p>
-                          <p className="text-xs text-muted-foreground">{sip.automationType === "expense" ? "Per trigger" : "Invested"}</p>
+                          <p className="text-xs text-muted-foreground">{sip.automationType === "investment" || !sip.automationType ? "Invested" : "Per trigger"}</p>
                           <div className="flex gap-1 mt-3">
                             <Button
                               variant="ghost"
@@ -366,10 +384,12 @@ export default function AutomationsPage() {
                     {sips.map((sip) => (
                       <div key={sip.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                         <div className="flex-1">
-                          <p className="font-semibold text-sm">{sip.name} <Badge variant={sip.automationType === "expense" ? "destructive" : "default"} className="ml-2 scale-75">{sip.automationType === "expense" ? "Expense" : "Investment"}</Badge></p>
+                          <p className="font-semibold text-sm">{sip.name} <Badge variant={sip.automationType === "expense" ? "destructive" : sip.automationType === "income" ? "secondary" : "default"} className="ml-2 scale-75">{sip.automationType === "expense" ? "Expense" : sip.automationType === "income" ? "Income" : "Investment"}</Badge></p>
                           <p className="text-xs text-muted-foreground">
                             {sip.automationType === "expense"
                               ? (EXPENSE_CATEGORIES.find(c => c.value === sip.expenseCategory)?.label || sip.expenseCategory || "Expense")
+                              : sip.automationType === "income"
+                              ? (sip.incomeSource || "Income")
                               : (TYPE_MAP[sip.investmentType] || sip.investmentType)} • {sip.frequency} • Day {sip.triggerDay || 1}
                           </p>
                         </div>
