@@ -86,8 +86,8 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.LANGSMITH_API_KEY
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Set LANGSMITH_API_KEY on the server to enable LangSmith traces." },
-      { status: 503 }
+      { recorded: false, reason: "LANGSMITH_API_KEY not configured." },
+      { status: 200 }
     )
   }
 

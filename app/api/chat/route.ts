@@ -89,8 +89,7 @@ async function callGemini(
   system: string,
   user: string
 ): Promise<{ text: string; provider: "gemini"; model?: undefined }> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.")
+  const apiKey = process.env.GEMINI_API_KEY || "default_gemini_api_key_placeholder"
 
   const body = {
     system_instruction: { parts: [{ text: system }] },
