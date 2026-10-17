@@ -380,9 +380,18 @@ function buildAnalyticsSummary(dataSlice: Record<string, any[]>): string {
   const sips = dataSlice.sips ?? []
   const debts = dataSlice.debts ?? []
 
-  const monthlyIncome = income
-    .filter((i) => String(i.frequency ?? "").toLowerCase() === "monthly")
-    .reduce((s, i) => s + num(i.amount), 0)
+  const uniqueIncome = new Map()
+  const sortedIncome = [...income].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+  sortedIncome.forEach((row) => {
+    if (String(row.frequency || "").toLowerCase() === "monthly") {
+      const source = String(row.source || "").trim().toLowerCase()
+      if (source && !uniqueIncome.has(source)) {
+        uniqueIncome.set(source, num(row.amount))
+      }
+    }
+  })
+
+  const monthlyIncome = Array.from(uniqueIncome.values()).reduce((sum, val) => sum + val, 0)
 
   const otherIncome = income
     .filter((i) => String(i.frequency ?? "").toLowerCase() !== "monthly")

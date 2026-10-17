@@ -114,11 +114,33 @@ function deriveBudgetFacts(dataSlice: Record<string, any[]>) {
   const debts = dataSlice.debts ?? []
   const goals = dataSlice.goals ?? []
 
-  const monthlyIncome = income
-    .filter((row) => String(row.frequency ?? "").toLowerCase() === "monthly")
-    .reduce((sum, row) => sum + num(row.amount), 0)
+  const uniqueIncome = new Map()
+  const sortedIncome = [...income].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+  sortedIncome.forEach((row) => {
+    if (String(row.frequency || "").toLowerCase() === "monthly") {
+      const source = String(row.source || "").trim().toLowerCase()
+      if (source && !uniqueIncome.has(source)) {
+        uniqueIncome.set(source, num(row.amount))
+      }
+    }
+  })
 
-  const trackedExpenses = expenses.reduce((sum, row) => sum + num(row.amount), 0)
+  const monthlyIncome = Array.from(uniqueIncome.values()).reduce((sum, val) => sum + val, 0)
+
+  const now = new Date()
+  let tMonth = now.getMonth()
+  let tYear = now.getFullYear()
+  if (now.getDate() <= 10) {
+    tMonth -= 1
+    if (tMonth < 0) { tMonth = 11; tYear -= 1 }
+  }
+  const currentMonthExpenses = expenses.filter((e) => {
+    const dateStr = typeof e.date === "string" ? e.date : e.date?.seconds ? new Date(e.date.seconds * 1000).toISOString().slice(0, 10) : ""
+    if (!dateStr) return false
+    const d = new Date(dateStr)
+    return d.getFullYear() === tYear && d.getMonth() === tMonth
+  })
+  const trackedExpenses = currentMonthExpenses.reduce((sum, row) => sum + num(row.amount), 0)
   const activeSips = (sips.filter((row) => String(row.sipStatus ?? "").toLowerCase() === "active" && String(row.automationType ?? "") !== "expense").reduce((sum, row) => sum + num(row.amount), 0))
   const monthlySurplus = monthlyIncome - trackedExpenses - activeSips
   const payable = debts.reduce((sum, row) => sum + num(row.amount), 0)

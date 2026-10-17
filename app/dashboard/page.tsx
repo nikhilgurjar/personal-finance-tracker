@@ -34,11 +34,32 @@ export default function OverviewPage() {
     .filter(a => a.type === "Credit Card")
     .reduce((sum, a) => sum + safeNumber(a.balance), 0)
 
-  const monthlySpend = expenses.reduce((sum, e) => sum + safeNumber(e.amount), 0)
+  const now = new Date()
+  let tMonth = now.getMonth()
+  let tYear = now.getFullYear()
+  if (now.getDate() <= 10) {
+    tMonth -= 1
+    if (tMonth < 0) { tMonth = 11; tYear -= 1 }
+  }
+  const currentMonthExpenses = expenses.filter((e) => {
+    const dateStr = typeof e.date === "string" ? e.date : ""
+    if (!dateStr) return false
+    const d = new Date(dateStr)
+    return d.getFullYear() === tYear && d.getMonth() === tMonth
+  })
+  const monthlySpend = currentMonthExpenses.reduce((sum, e) => sum + safeNumber(e.amount), 0)
   const totalSavingsVal = savings.reduce((sum, s) => sum + safeNumber(s.amount), 0)
-  const monthlyIncome = income
-    .filter(i => i.frequency === "monthly")
-    .reduce((sum, i) => sum + safeNumber(i.amount), 0)
+  const uniqueIncome = new Map()
+  const sortedIncome = [...income].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+  sortedIncome.forEach((row) => {
+    if (String(row.frequency || "").toLowerCase() === "monthly") {
+      const source = String(row.source || "").trim().toLowerCase()
+      if (source && !uniqueIncome.has(source)) {
+        uniqueIncome.set(source, safeNumber(row.amount))
+      }
+    }
+  })
+  const monthlyIncome = Array.from(uniqueIncome.values()).reduce((sum, val) => sum + val, 0)
   const monthlySIP = sips
     .filter(s => s.sipStatus === "active")
     .reduce((sum, s) => sum + safeNumber(s.amount), 0)

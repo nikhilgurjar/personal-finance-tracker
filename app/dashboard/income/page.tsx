@@ -30,9 +30,17 @@ export default function IncomePage() {
   const [currentPage, setCurrentPage] = useState(1)
   const rowsPerPage = 5
 
-  const totalMonthlyIncome = income
-    .filter(i => i.frequency === "monthly")
-    .reduce((s, i) => s + safeNumber(i.amount), 0)
+  const uniqueIncome = new Map()
+  const sortedIncome = [...income].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+  sortedIncome.forEach((row) => {
+    if (String(row.frequency || "").toLowerCase() === "monthly") {
+      const source = String(row.source || "").trim().toLowerCase()
+      if (source && !uniqueIncome.has(source)) {
+        uniqueIncome.set(source, safeNumber(row.amount))
+      }
+    }
+  })
+  const totalMonthlyIncome = Array.from(uniqueIncome.values()).reduce((sum, val) => sum + val, 0)
 
   const totalIncome = income.reduce((s, i) => s + safeNumber(i.amount), 0)
 
