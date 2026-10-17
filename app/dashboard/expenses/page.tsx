@@ -65,7 +65,20 @@ export default function ExpensesPage() {
   }, [])
 
   // Dynamic calculations
-  const totalExpenses = expenses.reduce((s, e) => s + safeNumber(e.amount), 0)
+  const now = new Date()
+  let tMonth = now.getMonth()
+  let tYear = now.getFullYear()
+  if (now.getDate() <= 10) {
+    tMonth -= 1
+    if (tMonth < 0) { tMonth = 11; tYear -= 1 }
+  }
+  const currentMonthExpenses = expenses.filter((e) => {
+    const dateStr = typeof e.date === "string" ? e.date : ""
+    if (!dateStr) return false
+    const d = new Date(dateStr)
+    return d.getFullYear() === tYear && d.getMonth() === tMonth
+  })
+  const totalExpenses = currentMonthExpenses.reduce((s, e) => s + safeNumber(e.amount), 0)
 
   // Find Label/Icon from Constants
   const EXPENSE_MAP = EXPENSE_CATEGORIES.reduce((acc, item) => {
@@ -80,7 +93,7 @@ export default function ExpensesPage() {
   })
 
   // Dynamic Category-wise Aggregation computed from current active expenses
-  const categoryTotals = expenses.reduce((acc, curr) => {
+  const categoryTotals = currentMonthExpenses.reduce((acc, curr) => {
     acc[curr.category] = (acc[curr.category] || 0) + safeNumber(curr.amount)
     return acc
   }, {} as Record<string, number>)
