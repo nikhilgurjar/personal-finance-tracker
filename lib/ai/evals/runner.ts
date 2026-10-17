@@ -5,11 +5,11 @@ import { buildPrompt } from "../promptBuilder";
 import { evaluateWithGemini } from "./evalGrading";
 
 async function runEvaluations() {
-  console.log("Starting AI Decision Loop & LLM-as-a-Judge Evaluations...\n");
+  console.log("Starting AI Decision Loop Evaluations...\n");
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.warn("\x1b[33m[WARN]\x1b[0m GEMINI_API_KEY is missing. Falling back to deterministic tests only.");
+    console.warn("\x1b[33m[WARN]\x1b[0m GEMINI_API_KEY is missing. Running internal deterministic tests with verbose output.");
     console.warn("To run the multi-layer LLM evaluation: GEMINI_API_KEY=your_key pnpm run eval\n");
     runDeterministicTests();
     return;
@@ -23,20 +23,15 @@ async function runEvaluations() {
     console.log(`\nEvaluating Test ${tc.id} (${tc.difficulty}): ${tc.description}`);
 
     try {
-      // 1. Build the prompt using our main logic
       const built = buildPrompt({
         intent: "GENERAL",
         dataSlice: tc.input.dataSlice,
         question: tc.input.question,
       });
 
-      // Combine System and User prompt for the actual request
       const fullPrompt = `${built.system}\n\n${built.user}`;
-
-      // 2. Generate the answer using Gemini
       const aiResponse = await generateAIResponse(fullPrompt, "gemini", apiKey, "gemini-2.5-flash");
 
-      // 3. Grade the answer using Gemini as a judge
       const grade = await evaluateWithGemini(
         apiKey,
         tc.input.question,
@@ -46,8 +41,6 @@ async function runEvaluations() {
       );
 
       totalScore += grade.score;
-
-      // Color coding score
       const color = grade.score >= 80 ? "\x1b[32m" : grade.score >= 50 ? "\x1b[33m" : "\x1b[31m";
       console.log(`   ${color}Score: ${grade.score}/100\x1b[0m`);
       console.log(`   Reasoning: ${grade.reasoning}`);
@@ -97,12 +90,24 @@ function runDeterministicTests() {
 
       if (isPass) {
         passed++;
-        console.log(`\x1b[32m[PASS]\x1b[0m Test ${tc.id} (${tc.difficulty}): ${tc.description}`);
+        console.log(`\n\x1b[32m[PASS]\x1b[0m Test ${tc.id} (${tc.difficulty}): ${tc.description}`);
       } else {
         failed++;
-        console.log(`\x1b[31m[FAIL]\x1b[0m Test ${tc.id} (${tc.difficulty}): ${tc.description}`);
+        console.log(`\n\x1b[31m[FAIL]\x1b[0m Test ${tc.id} (${tc.difficulty}): ${tc.description}`);
         console.log(`       Reasons: ${failReasons.join(" | ")}`);
       }
+
+      // Print Verbose Outputs
+      console.log(`  --> Question: "${tc.input.question}"`);
+      console.log(`  --> AI Mode: ${result.mode}`);
+      if (result.questions.length > 0) {
+        console.log(`  --> AI Clarification Questions:`, result.questions);
+      }
+      if (result.constraints.length > 0) {
+        console.log(`  --> AI Detected Constraints:`, result.constraints);
+      }
+      console.log(`  --> AI Recommendation/Response:\n      "${result.recommendation}"`);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       failed++;
