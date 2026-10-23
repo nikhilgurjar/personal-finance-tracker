@@ -1,6 +1,6 @@
+"use client"
 import { generateId } from "@/lib/utils/id-generator"
 // hooks/use-finance-data.tsx
-"use client"
 
 import React, { createContext, useContext, useState, useEffect } from "react"
 import { auth, db, isConfigured } from "@/lib/firebase"
