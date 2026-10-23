@@ -763,7 +763,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Expenses
   const addExpense = async (exp: Omit<Expense, "id">) => {
-    const id = `exp_${Math.random().toString(36).substr(2, 9)}`
+    const id = `exp_${Date.now().toString(36)}${Math.random().toString(36).substr(2, 5)}` // eslint-disable-line react-hooks/purity
     const newExp = { id, ...exp }
     const updated = [...expenses, newExp]
     setExpenses(updated)
@@ -952,7 +952,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Savings
   const addSaving = async (sav: Omit<Saving, "id" | "linkedGoals"> & { linkedGoals?: string[] }) => {
-    const id = `sav_${Math.random().toString(36).substr(2, 9)}`
+    const id = `sav_${Date.now().toString(36)}${Math.random().toString(36).substr(2, 5)}` // eslint-disable-line react-hooks/purity
     const newSav = { id, linkedGoals: [], active: true, ...sav }
     const updated = [...savings, newSav]
     setSavings(updated)
