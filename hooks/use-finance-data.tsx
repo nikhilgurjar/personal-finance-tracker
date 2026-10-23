@@ -1003,7 +1003,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             savingId: id,
             date: new Date().toISOString(),
             type: "TRANSFERRED",
-            amount: oldSav.amount,
+            amount: 0,
             balanceAfter: sav.amount ?? oldSav.amount,
             metadata: JSON.stringify({ direction: "out", fromGoalId: gid }),
           })
@@ -1015,7 +1015,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             savingId: id,
             date: new Date().toISOString(),
             type: "TRANSFERRED",
-            amount: oldSav.amount,
+            amount: 0,
             balanceAfter: sav.amount ?? oldSav.amount,
             metadata: JSON.stringify({ direction: "in", toGoalId: gid }),
           })
