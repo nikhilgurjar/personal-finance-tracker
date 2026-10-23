@@ -1,7 +1,7 @@
 // app/dashboard/layout.tsx
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useFinanceData } from "@/hooks/use-finance-data"
 import { SidebarProvider } from "@/components/ui/sidebar"
@@ -12,7 +12,6 @@ import "../globals.css"
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, loading, triggerMonthSIPs } = useFinanceData()
-  const hasTriggered = useRef(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -22,8 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Automatically process automations once the data is loaded
   useEffect(() => {
-    if (!loading && user && !hasTriggered.current) {
-      hasTriggered.current = true
+    if (!loading && user) {
       triggerMonthSIPs()
     }
   }, [loading, user])
