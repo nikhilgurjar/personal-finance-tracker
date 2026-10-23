@@ -1,3 +1,4 @@
+import { generateId } from "@/lib/utils/id-generator"
 // hooks/use-finance-data.tsx
 "use client"
 
@@ -651,7 +652,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Account Transactions
   const addAccountTransaction = async (at: Omit<AccountTransaction, "id">) => {
-    const id = `at_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("at")
     const newAt = { id, ...at }
     const updated = [...accountTransactions, newAt]
     setAccountTransactions(updated)
@@ -664,7 +665,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Accounts
   const addAccount = async (acc: Omit<Account, "id">) => {
-    const id = `acc_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("acc")
     const newAcc = { id, ...acc }
     const updated = [...accounts, newAcc]
     setAccounts(updated)
@@ -777,7 +778,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Expenses
   const addExpense = async (exp: Omit<Expense, "id">) => {
-    const id = `exp_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("exp")
     const newExp = { id, ...exp }
     const updated = [...expenses, newExp]
     setExpenses(updated)
@@ -928,7 +929,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Goals
   const addGoal = async (goal: Omit<Goal, "id">) => {
-    const id = `goal_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("goal")
     const newGoal = {
       id,
       savings_ids: goal.savings_ids || [],
@@ -966,7 +967,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Savings
   const addSaving = async (sav: Omit<Saving, "id" | "linkedGoals"> & { linkedGoals?: string[] }) => {
-    const id = `sav_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("sav")
     const newSav = { id, linkedGoals: [], active: true, ...sav }
     const updated = [...savings, newSav]
     setSavings(updated)
@@ -1049,7 +1050,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   }
 
   const addSavingTransaction = async (st: Omit<SavingTransaction, "id">) => {
-    const id = `st_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("st")
     const newSt = { id, ...st }
     const updated = [...savingTransactions, newSt]
     setSavingTransactions(updated)
@@ -1101,7 +1102,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Debts
   const addDebtTransaction = async (debt: Omit<DebtTransaction, "id">) => {
-    const id = `debt_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("debt")
     const newDebt = { id, ...debt }
     const updated = [...debts, newDebt]
     setDebts(updated)
@@ -1160,7 +1161,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Income
   const addIncome = async (inc: Omit<Income, "id">) => {
-    const id = `inc_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("inc")
     const newInc = { id, ...inc }
     const updated = [...income, newInc]
     setIncome(updated)
@@ -1193,7 +1194,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Plan Notes
   const addPlanNote = async (note: Omit<PlanNote, "id" | "createdAt" | "updatedAt">): Promise<string> => {
-    const id = `pn_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("pn")
     const now = new Date().toISOString()
     const newNote: PlanNote = { id, ...note, createdAt: now, updatedAt: now }
     const updated = [...planNotes, newNote]
@@ -1230,7 +1231,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // SIPs
   const addSIP = async (sip: Omit<SIPSchedule, "id">) => {
-    const id = `sip_${crypto.randomUUID().split("-")[0]}`
+    const id = generateId("sip")
     const newSIP = { id, ...sip }
     const updated = [...sips, newSIP]
     setSIPs(updated)
@@ -1383,7 +1384,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     // Create trigger history entry if any SIPs were triggered
     if (triggeredSIPsList.length > 0) {
       const newTriggerRecord: TriggerHistory = {
-        id: `trigger_${crypto.randomUUID().split("-")[0]}`,
+        id: generateId("trigger"),
         date: today.toISOString(),
         month: currentMonth,
         triggeredSIPs: triggeredSIPsList,
@@ -1424,7 +1425,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         
         // Save trigger history
         if (triggeredSIPsList.length > 0) {
-          const historyId = `trigger_${crypto.randomUUID().split("-")[0]}`
+          const historyId = generateId("trigger")
           await setDoc(
             doc(db, "users", user.uid, "trigger_history", historyId),
             {
