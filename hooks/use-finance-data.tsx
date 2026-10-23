@@ -778,6 +778,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Expenses
   const addExpense = async (exp: Omit<Expense, "id">) => {
+
     const id = generateId("exp")
     const newExp = { id, ...exp }
     const updated = [...expenses, newExp]
