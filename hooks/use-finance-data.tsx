@@ -1064,14 +1064,18 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const plan = buildLiquidationPlan(suggestion, suggestion.requestGoalId)
     if (!plan || !suggestion.primary) return null
 
+    if (suggestion.primary.goalId && suggestion.primary.goalId !== suggestion.requestGoalId) {
+      const sourceGoalId = suggestion.primary.goalId
+      const primaryNewGoals = [...new Set([...(suggestion.primary.saving.linkedGoals ?? []).filter(id => id !== sourceGoalId), suggestion.requestGoalId])]
+      await updateSaving(suggestion.primary.saving.id, { linkedGoals: primaryNewGoals })
+    }
+
     if (suggestion.swap && suggestion.primary.goalId !== suggestion.requestGoalId) {
       const { highYieldSaving } = suggestion.swap
       const sourceGoalId = suggestion.primary.goalId
       const highYieldNewGoals = [...new Set([...(highYieldSaving.linkedGoals ?? []).filter(id => id !== suggestion.requestGoalId), sourceGoalId])]
-      const primaryNewGoals = [...new Set([...(suggestion.primary.saving.linkedGoals ?? []).filter(id => id !== sourceGoalId), suggestion.requestGoalId])]
 
       await updateSaving(highYieldSaving.id, { linkedGoals: highYieldNewGoals })
-      await updateSaving(suggestion.primary.saving.id, { linkedGoals: primaryNewGoals })
       await addSavingTransaction({
         savingId: highYieldSaving.id,
         date: new Date().toISOString(),
