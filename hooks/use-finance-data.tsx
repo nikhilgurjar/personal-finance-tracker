@@ -1461,6 +1461,9 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const updatedExpenses = [...expenses]
     const updatedIncome = [...income]
 
+    // We will collect document deletion promises and await them concurrently
+    const deletePromises: Promise<void>[] = [];
+
     // Reverse the changes
     for (const triggeredSIP of lastTrigger.triggeredSIPs) {
       // Remove the triggered month from SIP
@@ -1484,7 +1487,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             const expIdToDelete = updatedExpenses[matchIndex].id;
             updatedExpenses.splice(matchIndex, 1);
             if (!isDemo && user) {
-                await deleteDoc(doc(db, "users", user.uid, "expenses", expIdToDelete));
+                deletePromises.push(deleteDoc(doc(db, "users", user.uid, "expenses", expIdToDelete)));
             }
         }
       } else if (triggeredSIP.type === "income") {
@@ -1493,7 +1496,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             const incIdToDelete = updatedIncome[matchIndex].id;
             updatedIncome.splice(matchIndex, 1);
             if (!isDemo && user) {
-                await deleteDoc(doc(db, "users", user.uid, "income", incIdToDelete));
+                deletePromises.push(deleteDoc(doc(db, "users", user.uid, "income", incIdToDelete)));
             }
         }
       } else {
@@ -1506,6 +1509,11 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
           }
         }
       }
+    }
+
+    // Await all deletions concurrently
+    if (deletePromises.length > 0) {
+      await Promise.all(deletePromises);
     }
 
     // Remove from trigger history
