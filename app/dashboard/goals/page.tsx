@@ -38,7 +38,7 @@ import Link from "next/link"
 
 export default function GoalsPage() {
   const router = useRouter()
-  const { goals, updateGoal, deleteGoal, savings, apps, providers, expenses, executeSmartLiquidation } = useFinanceData()
+  const { goals, updateGoal, deleteGoal, savings, apps, providers, expenses, executeSmartLiquidation, addExpense } = useFinanceData()
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [formOpen, setFormOpen] = useState(false)
 
@@ -393,18 +393,20 @@ export default function GoalsPage() {
               try {
                 const plan = await executeSmartLiquidation(smartSuggestion)
                 if (plan) {
-                  sessionStorage.setItem(
-                    "finio_expense_prefill",
-                    JSON.stringify({
-                      goalId: plan.goalId,
-                      fundingSourceId: plan.fundingSourceId,
-                      amount: plan.amount,
-                      note: `Smart Fund: ${smartSuggestion.primary?.saving.name ?? "asset"}`,
-                    })
-                  )
-                  setDetailsOpen(false)
+                  // Internal addition of expense, avoid taking user to expense page
+                  await addExpense({
+                    date: new Date().toISOString().split("T")[0],
+                    category: "other",
+                    amount: plan.amount,
+                    account: "",
+                    note: `Smart Fund: ${smartSuggestion.primary?.saving.name ?? "asset"}`,
+                    goalId: plan.goalId,
+                    fundingSourceId: plan.fundingSourceId,
+                  })
+
+                  setSmartFundAmount("")
+                  setSmartSuggestion(null)
                   setSmartFundOpen(false)
-                  router.push("/dashboard/expenses")
                 }
               } finally {
                 setSmartFundLoading(false)

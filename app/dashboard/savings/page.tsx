@@ -1236,7 +1236,9 @@ export default function SavingsPage() {
                       <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
                         {txs.map((tx) => {
                           const style = TX_TYPE_STYLES[tx.type] ?? { color: "text-muted-foreground", bg: "bg-muted/40 border-border/30", label: tx.type }
-                          const isDeduction = tx.type === "EXPENSE_DEDUCTION" || tx.type === "SWAPPED_OUT"
+                          const isDeduction = tx.type === "EXPENSE_DEDUCTION"
+                          const isNeutral = tx.type === "TRANSFERRED" || tx.type === "SWAPPED_IN" || tx.type === "SWAPPED_OUT"
+
                           return (
                             <div key={tx.id} className="flex items-start justify-between p-2.5 rounded-lg border bg-background/50 text-xs gap-2">
                               <div className="flex items-start gap-2 min-w-0">
@@ -1250,16 +1252,39 @@ export default function SavingsPage() {
                                   {tx.metadata && (() => {
                                     try {
                                       const meta = JSON.parse(tx.metadata)
-                                      if (meta.expenseId) return <p className="text-[9px] text-muted-foreground/70 font-medium">Expense ref: {meta.expenseId}</p>
-                                      if (meta.direction) return <p className="text-[9px] text-muted-foreground/70 font-medium">{meta.direction === "in" ? "Linked to" : "Unlinked from"} goal</p>
+                                      if (meta.expenseId) {
+                                        const expense = expenses.find(e => e.id === meta.expenseId)
+                                        return (
+                                          <p className="text-[9px] text-muted-foreground/70 font-medium">
+                                            {expense ? `${expense.category}${expense.note ? ` - ${expense.note}` : ""}` : `Expense ref: ${meta.expenseId}`}
+                                          </p>
+                                        )
+                                      }
+                                      if (meta.direction) {
+                                        const goalId = meta.direction === "in" ? meta.toGoalId : meta.fromGoalId
+                                        const goal = goals.find(g => g.id === goalId)
+                                        const verb = meta.direction === "in" ? "Linked to" : "Unlinked from"
+                                        return <p className="text-[9px] text-muted-foreground/70 font-medium">{verb}: {goal?.name ?? goalId}</p>
+                                      }
+                                      if (meta.pairedSavingId) {
+                                        const pairedSaving = savings.find(s => s.id === meta.pairedSavingId)
+                                        const fromGoal = goals.find(g => g.id === meta.fromGoalId)
+                                        const toGoal = goals.find(g => g.id === meta.toGoalId)
+                                        if (tx.type === "SWAPPED_OUT") {
+                                          return <p className="text-[9px] text-muted-foreground/70 font-medium">Yield swap on {fromGoal?.name ?? "goal"}. Moved via {pairedSaving?.name ?? "asset"}.</p>
+                                        }
+                                        if (tx.type === "SWAPPED_IN") {
+                                          return <p className="text-[9px] text-muted-foreground/70 font-medium">Funding swap for {toGoal?.name ?? "goal"}. Paired with {pairedSaving?.name ?? "asset"}.</p>
+                                        }
+                                      }
                                       return null
                                     } catch { return <p className="text-[9px] text-muted-foreground/70">{String(tx.metadata).slice(0, 40)}</p> }
                                   })()}
                                 </div>
                               </div>
                               <div className="text-right shrink-0">
-                                <p className={`font-black text-xs ${isDeduction ? "text-rose-500" : "text-emerald-500"}`}>
-                                  {isDeduction ? "-" : "+"}₹{formatCurrency(tx.amount)}
+                                <p className={`font-black text-xs ${isNeutral ? "text-muted-foreground" : isDeduction ? "text-rose-500" : "text-emerald-500"}`}>
+                                  {isNeutral ? "" : isDeduction ? "-" : "+"}₹{formatCurrency(tx.amount)}
                                 </p>
                                 <p className="text-[9px] text-muted-foreground font-medium mt-0.5">Bal: ₹{formatCurrency(tx.balanceAfter)}</p>
                               </div>

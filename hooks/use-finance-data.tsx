@@ -271,6 +271,20 @@ const INITIAL_EXPENSES: Expense[] = [
   { id: "exp_4", date: "2026-05-24", category: "other", amount: 3000, account: "acc_1", note: "ATM Cash Withdrawal" },
   { id: "exp_5", date: "2026-05-20", category: "utilities", amount: 3800, account: "acc_1", note: "Electricity Bill" },
   { id: "exp_6", date: "2026-05-18", category: "groceries", amount: 1540, account: "acc_2", note: "Weekly Groceries" },
+  { id: "exp_7", date: "2026-05-15", category: "entertainment", amount: 1200, account: "acc_1", note: "Movie Tickets" },
+  { id: "exp_8", date: "2026-05-12", category: "transport", amount: 800, account: "acc_1", note: "Uber ride" },
+  { id: "exp_9", date: "2026-05-08", category: "health", amount: 2500, account: "acc_2", note: "Pharmacy" },
+  { id: "exp_10", date: "2026-05-05", category: "shopping", amount: 4500, account: "acc_1", note: "Clothes" },
+  { id: "exp_11", date: "2026-04-28", category: "food_dining", amount: 950, account: "acc_2", note: "Dinner" },
+  { id: "exp_12", date: "2026-04-22", category: "utilities", amount: 1500, account: "acc_1", note: "Phone Bill" },
+  { id: "exp_13", date: "2026-04-18", category: "groceries", amount: 2200, account: "acc_1", note: "Supermarket" },
+  { id: "exp_14", date: "2026-04-10", category: "other", amount: 500, account: "acc_3", note: "Misc" },
+  { id: "exp_15", date: "2026-04-05", category: "transport", amount: 300, account: "acc_1", note: "Metro card recharge" },
+  { id: "exp_16", date: "2026-03-25", category: "shopping", amount: 3200, account: "acc_2", note: "Shoes" },
+  { id: "exp_17", date: "2026-03-20", category: "food_dining", amount: 1800, account: "acc_1", note: "Lunch with team" },
+  { id: "exp_18", date: "2026-03-15", category: "health", amount: 1200, account: "acc_1", note: "Dentist" },
+  { id: "exp_19", date: "2026-03-10", category: "utilities", amount: 2800, account: "acc_1", note: "Water & Gas" },
+  { id: "exp_20", date: "2026-03-05", category: "entertainment", amount: 600, account: "acc_2", note: "Concert tickets" }
 ]
 
 const INITIAL_GOALS: Goal[] = GOALS.map((g, index) => ({
@@ -637,7 +651,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Account Transactions
   const addAccountTransaction = async (at: Omit<AccountTransaction, "id">) => {
-    const id = `at_${Math.random().toString(36).substr(2, 9)}`
+    const id = `at_${crypto.randomUUID().split("-")[0]}`
     const newAt = { id, ...at }
     const updated = [...accountTransactions, newAt]
     setAccountTransactions(updated)
@@ -650,7 +664,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Accounts
   const addAccount = async (acc: Omit<Account, "id">) => {
-    const id = `acc_${Math.random().toString(36).substr(2, 9)}`
+    const id = `acc_${crypto.randomUUID().split("-")[0]}`
     const newAcc = { id, ...acc }
     const updated = [...accounts, newAcc]
     setAccounts(updated)
@@ -763,7 +777,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Expenses
   const addExpense = async (exp: Omit<Expense, "id">) => {
-    const id = `exp_${Date.now().toString(36)}${Math.random().toString(36).substr(2, 5)}` // eslint-disable-line react-hooks/purity
+    const id = `exp_${crypto.randomUUID().split("-")[0]}`
     const newExp = { id, ...exp }
     const updated = [...expenses, newExp]
     setExpenses(updated)
@@ -914,7 +928,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Goals
   const addGoal = async (goal: Omit<Goal, "id">) => {
-    const id = `goal_${Math.random().toString(36).substr(2, 9)}`
+    const id = `goal_${crypto.randomUUID().split("-")[0]}`
     const newGoal = {
       id,
       savings_ids: goal.savings_ids || [],
@@ -952,7 +966,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Savings
   const addSaving = async (sav: Omit<Saving, "id" | "linkedGoals"> & { linkedGoals?: string[] }) => {
-    const id = `sav_${Date.now().toString(36)}${Math.random().toString(36).substr(2, 5)}` // eslint-disable-line react-hooks/purity
+    const id = `sav_${crypto.randomUUID().split("-")[0]}`
     const newSav = { id, linkedGoals: [], active: true, ...sav }
     const updated = [...savings, newSav]
     setSavings(updated)
@@ -1003,7 +1017,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             savingId: id,
             date: new Date().toISOString(),
             type: "TRANSFERRED",
-            amount: oldSav.amount,
+            amount: 0,
             balanceAfter: sav.amount ?? oldSav.amount,
             metadata: JSON.stringify({ direction: "out", fromGoalId: gid }),
           })
@@ -1015,7 +1029,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
             savingId: id,
             date: new Date().toISOString(),
             type: "TRANSFERRED",
-            amount: oldSav.amount,
+            amount: 0,
             balanceAfter: sav.amount ?? oldSav.amount,
             metadata: JSON.stringify({ direction: "in", toGoalId: gid }),
           })
@@ -1035,7 +1049,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   }
 
   const addSavingTransaction = async (st: Omit<SavingTransaction, "id">) => {
-    const id = `st_${Math.random().toString(36).substr(2, 9)}`
+    const id = `st_${crypto.randomUUID().split("-")[0]}`
     const newSt = { id, ...st }
     const updated = [...savingTransactions, newSt]
     setSavingTransactions(updated)
@@ -1050,12 +1064,18 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const plan = buildLiquidationPlan(suggestion, suggestion.requestGoalId)
     if (!plan || !suggestion.primary) return null
 
+    if (suggestion.primary.goalId && suggestion.primary.goalId !== suggestion.requestGoalId) {
+      const sourceGoalId = suggestion.primary.goalId
+      const primaryNewGoals = [...new Set([...(suggestion.primary.saving.linkedGoals ?? []).filter(id => id !== sourceGoalId), suggestion.requestGoalId])]
+      await updateSaving(suggestion.primary.saving.id, { linkedGoals: primaryNewGoals })
+    }
+
     if (suggestion.swap && suggestion.primary.goalId !== suggestion.requestGoalId) {
       const { highYieldSaving } = suggestion.swap
       const sourceGoalId = suggestion.primary.goalId
-      const newLinkedGoals = [...new Set([...(highYieldSaving.linkedGoals ?? []), sourceGoalId])]
+      const highYieldNewGoals = [...new Set([...(highYieldSaving.linkedGoals ?? []).filter(id => id !== suggestion.requestGoalId), sourceGoalId])]
 
-      await updateSaving(highYieldSaving.id, { linkedGoals: newLinkedGoals })
+      await updateSaving(highYieldSaving.id, { linkedGoals: highYieldNewGoals })
       await addSavingTransaction({
         savingId: highYieldSaving.id,
         date: new Date().toISOString(),
@@ -1087,7 +1107,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Debts
   const addDebtTransaction = async (debt: Omit<DebtTransaction, "id">) => {
-    const id = `debt_${Math.random().toString(36).substr(2, 9)}`
+    const id = `debt_${crypto.randomUUID().split("-")[0]}`
     const newDebt = { id, ...debt }
     const updated = [...debts, newDebt]
     setDebts(updated)
@@ -1146,7 +1166,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Income
   const addIncome = async (inc: Omit<Income, "id">) => {
-    const id = `inc_${Math.random().toString(36).substr(2, 9)}`
+    const id = `inc_${crypto.randomUUID().split("-")[0]}`
     const newInc = { id, ...inc }
     const updated = [...income, newInc]
     setIncome(updated)
@@ -1179,7 +1199,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // Plan Notes
   const addPlanNote = async (note: Omit<PlanNote, "id" | "createdAt" | "updatedAt">): Promise<string> => {
-    const id = `pn_${Math.random().toString(36).substr(2, 9)}`
+    const id = `pn_${crypto.randomUUID().split("-")[0]}`
     const now = new Date().toISOString()
     const newNote: PlanNote = { id, ...note, createdAt: now, updatedAt: now }
     const updated = [...planNotes, newNote]
@@ -1216,7 +1236,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
 
   // SIPs
   const addSIP = async (sip: Omit<SIPSchedule, "id">) => {
-    const id = `sip_${Math.random().toString(36).substr(2, 9)}`
+    const id = `sip_${crypto.randomUUID().split("-")[0]}`
     const newSIP = { id, ...sip }
     const updated = [...sips, newSIP]
     setSIPs(updated)
@@ -1369,7 +1389,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     // Create trigger history entry if any SIPs were triggered
     if (triggeredSIPsList.length > 0) {
       const newTriggerRecord: TriggerHistory = {
-        id: `trigger_${Math.random().toString(36).substr(2, 9)}`,
+        id: `trigger_${crypto.randomUUID().split("-")[0]}`,
         date: today.toISOString(),
         month: currentMonth,
         triggeredSIPs: triggeredSIPsList,
@@ -1410,7 +1430,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         
         // Save trigger history
         if (triggeredSIPsList.length > 0) {
-          const historyId = `trigger_${Math.random().toString(36).substr(2, 9)}`
+          const historyId = `trigger_${crypto.randomUUID().split("-")[0]}`
           await setDoc(
             doc(db, "users", user.uid, "trigger_history", historyId),
             {

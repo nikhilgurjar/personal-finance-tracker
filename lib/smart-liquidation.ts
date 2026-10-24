@@ -97,9 +97,16 @@ function scoreAsset(
 
   const primaryGoalId = getPrimaryGoalId(saving)
   const goal = goals.find((g) => g.id === primaryGoalId)
+
   if (primaryGoalId === requestGoalId) {
-    score += 80
+    score += 800
     reasons.push("Already linked to this goal")
+  } else if (!primaryGoalId) {
+    score += 200
+    reasons.push("Unallocated asset (free to use)")
+  } else {
+    score -= 1000
+    reasons.push("Linked to another goal (swap required)")
   }
 
   return {
