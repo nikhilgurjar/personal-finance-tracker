@@ -538,33 +538,27 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         return list
       }
 
-      const [accs, exps, gls, savs, dbts, incs, sipsData, pn, aps, provs, savTrans, accTrans] = await Promise.all([
-        fetchCol<Account>(`users/${uid}/accounts`),
-        fetchCol<Expense>(`users/${uid}/expenses`),
-        fetchCol<Goal>(`users/${uid}/goals`, normalizeGoal),
-        fetchCol<Saving>(`users/${uid}/savings`),
-        fetchCol<DebtTransaction>(`users/${uid}/debts`),
-        fetchCol<Income>(`users/${uid}/income`),
-        fetchCol<SIPSchedule>(`users/${uid}/sips`),
-        fetchCol<PlanNote>(`users/${uid}/planNotes`),
-        fetchCol<any>(`users/${uid}/apps`),
-        fetchCol<any>(`users/${uid}/providers`),
-        fetchCol<SavingTransaction>(`users/${uid}/saving_transactions`),
-        fetchCol<AccountTransaction>(`users/${uid}/account_transactions`),
-      ])
+      const collections = [
+        { path: `users/${uid}/accounts`, setter: setAccounts },
+        { path: `users/${uid}/expenses`, setter: setExpenses },
+        { path: `users/${uid}/goals`, setter: setGoals, normalize: normalizeGoal },
+        { path: `users/${uid}/savings`, setter: setSavings },
+        { path: `users/${uid}/debts`, setter: setDebts },
+        { path: `users/${uid}/income`, setter: setIncome },
+        { path: `users/${uid}/sips`, setter: setSIPs },
+        { path: `users/${uid}/planNotes`, setter: setPlanNotes },
+        { path: `users/${uid}/apps`, setter: setApps },
+        { path: `users/${uid}/providers`, setter: setProviders },
+        { path: `users/${uid}/saving_transactions`, setter: setSavingTransactions },
+        { path: `users/${uid}/account_transactions`, setter: setAccountTransactions },
+      ]
 
-      setAccounts(accs)
-      setExpenses(exps)
-      setGoals(gls)
-      setSavings(savs)
-      setDebts(dbts)
-      setIncome(incs)
-      setSIPs(sipsData)
-      setPlanNotes(pn)
-      setSavingTransactions(savTrans)
-      setAccountTransactions(accTrans)
-      setApps(aps)
-      setProviders(provs)
+      await Promise.all(
+        collections.map(async ({ path, setter, normalize }) => {
+          const data = await fetchCol(path, normalize)
+          setter(data as any)
+        })
+      )
     } catch (error) {
       console.error("Failed to load Firestore data, falling back to demo mode:", error)
       setIsDemo(true)
