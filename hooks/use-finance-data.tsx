@@ -1413,20 +1413,14 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       // Persist to Firestore
       try {
-        for (const sip of updatedSIPs) {
-          await setDoc(
-            doc(db, "users", user.uid, "sips", sip.id),
-            cleanUndefined(sip),
-            { merge: true }
-          )
-        }
-        for (const saving of updatedSavings) {
-          await setDoc(
-            doc(db, "users", user.uid, "savings", saving.id),
-            cleanUndefined(saving),
-            { merge: true }
-          )
-        }
+        await Promise.all([
+          ...updatedSIPs.map((sip) =>
+            setDoc(doc(db, "users", user.uid, "sips", sip.id), cleanUndefined(sip), { merge: true })
+          ),
+          ...updatedSavings.map((saving) =>
+            setDoc(doc(db, "users", user.uid, "savings", saving.id), cleanUndefined(saving), { merge: true })
+          ),
+        ])
         
         // Save trigger history
         if (triggeredSIPsList.length > 0) {
@@ -1526,20 +1520,14 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     } else {
       // Persist to Firestore
       try {
-        for (const sip of updatedSIPs) {
-          await setDoc(
-            doc(db, "users", user.uid, "sips", sip.id),
-            cleanUndefined(sip),
-            { merge: true }
-          )
-        }
-        for (const saving of updatedSavings) {
-          await setDoc(
-            doc(db, "users", user.uid, "savings", saving.id),
-            cleanUndefined(saving),
-            { merge: true }
-          )
-        }
+        await Promise.all([
+          ...updatedSIPs.map((sip) =>
+            setDoc(doc(db, "users", user.uid, "sips", sip.id), cleanUndefined(sip), { merge: true })
+          ),
+          ...updatedSavings.map((saving) =>
+            setDoc(doc(db, "users", user.uid, "savings", saving.id), cleanUndefined(saving), { merge: true })
+          ),
+        ])
         // Delete trigger history entry
         await deleteDoc(doc(db, "users", user.uid, "trigger_history", lastTrigger.id))
       } catch (error) {
