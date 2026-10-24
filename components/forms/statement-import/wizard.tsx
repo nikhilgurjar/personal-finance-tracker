@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 
 export function StatementImportWizard() {
-  const { accounts, expenses, addExpense } = useFinanceData();
+  const { accounts, expenses, addExpenses } = useFinanceData();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -169,15 +169,13 @@ export function StatementImportWizard() {
     setLoading(true);
     try {
       const toAdd = transactions.filter(t => !t.excluded);
-      for (const t of toAdd) {
-        await addExpense({
-          date: t.date,
-          amount: t.amount,
-          category: t.category || "other",
-          account: effectiveAccountId,
-          note: `${t.userLabel || t.merchantName} - ${t.userDescription || ""}`.trim(),
-        });
-      }
+      await addExpenses(toAdd.map(t => ({
+        date: t.date,
+        amount: t.amount,
+        category: t.category || "other",
+        account: effectiveAccountId,
+        note: `${t.userLabel || t.merchantName} - ${t.userDescription || ""}`.trim(),
+      })));
       setStep(6);
     } catch (err: unknown) {
       setError("Failed to import expenses: " + (err instanceof Error ? err.message : String(err)));

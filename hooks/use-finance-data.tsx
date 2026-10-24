@@ -19,7 +19,8 @@ import {
   doc,
   setDoc,
   deleteDoc,
-  getDocs
+  getDocs,
+  writeBatch
 } from "firebase/firestore"
 import {
   ACCOUNTS,
@@ -209,6 +210,7 @@ interface FinanceDataContextType {
   
   // Expenses CRUD
   addExpense: (exp: Omit<Expense, "id">) => Promise<void>
+  addExpenses: (exps: Omit<Expense, "id">[]) => Promise<void>
   updateExpense: (id: string, exp: Partial<Expense>) => Promise<void>
   deleteExpense: (id: string) => Promise<void>
   
@@ -804,6 +806,72 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         if (goal) {
           await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - exp.amount) })
         }
+      }
+    }
+  }
+
+  const addExpenses = async (exps: Omit<Expense, "id">[]) => {
+    if (exps.length === 0) return;
+
+    const newExps = exps.map(exp => ({
+      id: `exp_${crypto.randomUUID().split("-")[0]}`,
+      ...exp
+    }));
+
+    const updated = [...expenses, ...newExps];
+    setExpenses(updated);
+
+    if (isDemo || !user) {
+      localStorage.setItem("finio_expenses", JSON.stringify(updated));
+    } else {
+      const batch = writeBatch(db);
+      newExps.forEach(exp => {
+        const docRef = doc(db, "users", user.uid, "expenses", exp.id);
+        batch.set(docRef, cleanUndefined(exp));
+      });
+      await batch.commit();
+    }
+
+    // Adjust linked goals or savings using a map to prevent stale state bugs
+    const accumulatedSavingDeductions = new Map<string, number>();
+    const accumulatedGoalDeductions = new Map<string, number>();
+
+    for (const exp of newExps) {
+      if (exp.goalId) {
+        if (exp.fundingSourceId && exp.fundingSourceId !== "base_cash") {
+          accumulatedSavingDeductions.set(
+            exp.fundingSourceId,
+            (accumulatedSavingDeductions.get(exp.fundingSourceId) || 0) + exp.amount
+          );
+        } else {
+          accumulatedGoalDeductions.set(
+            exp.goalId,
+            (accumulatedGoalDeductions.get(exp.goalId) || 0) + exp.amount
+          );
+        }
+      }
+    }
+
+    for (const [savingId, totalDeduction] of accumulatedSavingDeductions.entries()) {
+      const saving = savings.find((s) => s.id === savingId);
+      if (saving) {
+        const newAmount = Math.max(0, saving.amount - totalDeduction);
+        await updateSaving(saving.id, { amount: newAmount });
+        await addSavingTransaction({
+          savingId: saving.id,
+          date: new Date().toISOString(),
+          type: "EXPENSE_DEDUCTION",
+          amount: totalDeduction,
+          balanceAfter: newAmount,
+          metadata: JSON.stringify({ note: "Bulk expense deduction" }),
+        });
+      }
+    }
+
+    for (const [goalId, totalDeduction] of accumulatedGoalDeductions.entries()) {
+      const goal = goals.find((g) => g.id === goalId);
+      if (goal) {
+        await updateGoal(goal.id, { current: Math.max(0, (goal.current || 0) - totalDeduction) });
       }
     }
   }
@@ -1573,6 +1641,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         deleteAccount,
         addAccountTransaction,
         addExpense,
+        addExpenses,
         updateExpense,
         deleteExpense,
         addGoal,
