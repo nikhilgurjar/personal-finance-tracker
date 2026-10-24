@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 export interface StructuredFinanceResponse {
   answer: string
   highlights: string[]
@@ -7,6 +9,19 @@ export interface StructuredFinanceResponse {
     payload?: any
   }
 }
+
+const ActionSchema = z.object({
+  type: z.string(),
+  payload: z.any().optional(),
+})
+
+const ResponseSchema = z.object({
+  answer: z.string().optional(),
+  summary: z.string().optional(),
+  highlights: z.array(z.unknown()).optional(),
+  confidence: z.unknown().optional(),
+  action: ActionSchema.optional(),
+})
 
 const JSON_BLOCK_RE = /```(?:json)?\s*([\s\S]*?)\s*```/i
 
@@ -29,8 +44,9 @@ export function parseStructuredFinanceResponse(rawText: string): StructuredFinan
   const payload = match ? match[1] : cleaned
 
   try {
-    const parsed = JSON.parse(payload)
-    if (parsed && typeof parsed === "object") {
+    const rawParsed = JSON.parse(payload)
+    if (rawParsed && typeof rawParsed === "object") {
+      const parsed = ResponseSchema.parse(rawParsed)
       const answer = typeof parsed.answer === "string" && parsed.answer.trim()
         ? parsed.answer.trim()
         : typeof parsed.summary === "string" && parsed.summary.trim()
@@ -45,7 +61,7 @@ export function parseStructuredFinanceResponse(rawText: string): StructuredFinan
       }
     }
   } catch {
-    // ignore invalid JSON; fall back to plain text
+    // ignore invalid JSON or validation errors; fall back to plain text
   }
 
   return {
