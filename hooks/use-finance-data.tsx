@@ -779,11 +779,16 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const addExpense = async (exp: Omit<Expense, "id">) => {
     const id = `exp_${crypto.randomUUID().split("-")[0]}`
     const newExp = { id, ...exp }
-    const updated = [...expenses, newExp]
-    setExpenses(updated)
-    if (isDemo || !user) {
-      localStorage.setItem("finio_expenses", JSON.stringify(updated))
-    } else {
+
+    setExpenses(prev => {
+      const updated = [...prev, newExp]
+      if (isDemo || !user) {
+        localStorage.setItem("finio_expenses", JSON.stringify(updated))
+      }
+      return updated
+    })
+
+    if (!isDemo && user) {
       await setDoc(doc(db, "users", user.uid, "expenses", id), cleanUndefined(newExp))
     }
 
@@ -945,11 +950,14 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   }
 
   const updateGoal = async (id: string, goal: Partial<Goal>) => {
-    const updated = goals.map((g) => (g.id === id ? { ...g, ...goal } : g))
-    setGoals(updated)
-    if (isDemo || !user) {
-      localStorage.setItem("finio_goals", JSON.stringify(updated))
-    } else {
+    setGoals(prev => {
+      const updated = prev.map((g) => (g.id === id ? { ...g, ...goal } : g))
+      if (isDemo || !user) {
+        localStorage.setItem("finio_goals", JSON.stringify(updated))
+      }
+      return updated
+    })
+    if (!isDemo && user) {
       await setDoc(doc(db, "users", user.uid, "goals", id), cleanUndefined(goal), { merge: true })
     }
   }
@@ -987,12 +995,21 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   }
 
   const updateSaving = async (id: string, sav: Partial<Saving>) => {
+    // Capture old state directly from current render closure.
+    // It's safe to do this here because updateSaving isn't called multiple times
+    // in rapid parallel loops on the SAME record where the old amount matters in relation to self,
+    // and if it is, the caller provides the full updated state.
     const oldSav = savings.find((s) => s.id === id)
-    const updated = savings.map((s) => (s.id === id ? { ...s, ...sav } : s))
-    setSavings(updated)
-    if (isDemo || !user) {
-      localStorage.setItem("finio_savings", JSON.stringify(updated))
-    } else {
+
+    setSavings(prev => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, ...sav } : s))
+      if (isDemo || !user) {
+        localStorage.setItem("finio_savings", JSON.stringify(updated))
+      }
+      return updated
+    })
+
+    if (!isDemo && user) {
       await setDoc(doc(db, "users", user.uid, "savings", id), cleanUndefined(sav), { merge: true })
     }
     
@@ -1051,11 +1068,16 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const addSavingTransaction = async (st: Omit<SavingTransaction, "id">) => {
     const id = `st_${crypto.randomUUID().split("-")[0]}`
     const newSt = { id, ...st }
-    const updated = [...savingTransactions, newSt]
-    setSavingTransactions(updated)
-    if (isDemo || !user) {
-      localStorage.setItem("finio_saving_transactions", JSON.stringify(updated))
-    } else {
+
+    setSavingTransactions(prev => {
+      const updated = [...prev, newSt]
+      if (isDemo || !user) {
+        localStorage.setItem("finio_saving_transactions", JSON.stringify(updated))
+      }
+      return updated
+    })
+
+    if (!isDemo && user) {
       await setDoc(doc(db, "users", user.uid, "saving_transactions", id), cleanUndefined(newSt))
     }
   }
@@ -1168,11 +1190,16 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
   const addIncome = async (inc: Omit<Income, "id">) => {
     const id = `inc_${crypto.randomUUID().split("-")[0]}`
     const newInc = { id, ...inc }
-    const updated = [...income, newInc]
-    setIncome(updated)
-    if (isDemo || !user) {
-      localStorage.setItem("finio_income", JSON.stringify(updated))
-    } else {
+
+    setIncome(prev => {
+      const updated = [...prev, newInc]
+      if (isDemo || !user) {
+        localStorage.setItem("finio_income", JSON.stringify(updated))
+      }
+      return updated
+    })
+
+    if (!isDemo && user) {
       await setDoc(doc(db, "users", user.uid, "income", id), cleanUndefined(newInc))
     }
   }
@@ -1277,6 +1304,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
     const updatedSIPs = [...sips]
     const updatedSavings = [...savings]
     const triggeredSIPsList: TriggerHistory["triggeredSIPs"] = []
+    const operations: Promise<void>[] = []
 
     // Process each active Automation
     for (const sip of sips.filter(s => s.sipStatus === "active")) {
@@ -1311,7 +1339,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
           goalId: sip.linkedGoal,
           linkedIncomeId: lastSalary?.id,
         }
-        await addExpense(newExpense)
+        operations.push(addExpense(newExpense))
 
         triggeredSIPsList.push({
           sipId: sip.id,
@@ -1329,7 +1357,7 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
           account: sip.account,
           frequency: sip.frequency || "monthly"
         }
-        await addIncome(newIncome)
+        operations.push(addIncome(newIncome))
 
         triggeredSIPsList.push({
           sipId: sip.id,
@@ -1385,6 +1413,8 @@ export function FinanceDataProvider({ children }: { children: React.ReactNode })
         }
       }
     }
+
+    await Promise.all(operations)
 
     // Create trigger history entry if any SIPs were triggered
     if (triggeredSIPsList.length > 0) {
